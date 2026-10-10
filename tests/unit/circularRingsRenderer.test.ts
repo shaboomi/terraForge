@@ -51,6 +51,23 @@ describe("generateCircularRingsPath", () => {
     expect(black).not.toBe(white);
   });
 
+  it("never emits a coordinate outside a non-square image's bounds", () => {
+    // Wider than tall: rings sized to reach the farthest corner would bleed
+    // past the top/bottom edges without the clip-to-rect safety net.
+    const width = 80;
+    const height = 40;
+    const path = generateCircularRingsPath(
+      ctx({ width, height, values: new Uint8Array(width * height).fill(64) }, { ...circularRingsDefaults, spacingMM: 4, toothWidthMM: 3, amplitudeMM: 3 }, 1),
+    );
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    for (let i = 0; i + 1 < numbers.length; i += 2) {
+      expect(numbers[i]).toBeGreaterThanOrEqual(0);
+      expect(numbers[i]).toBeLessThanOrEqual(width);
+      expect(numbers[i + 1]).toBeGreaterThanOrEqual(0);
+      expect(numbers[i + 1]).toBeLessThanOrEqual(height);
+    }
+  });
+
   it("shifts the ring centre when the origin settings move", () => {
     const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(64) };
     const centred = generateCircularRingsPath(ctx(source, circularRingsDefaults));

@@ -81,4 +81,39 @@ describe("generateDotHalftonePath", () => {
     const large = generateDotHalftonePath(ctx(source, { ...dotHalftoneDefaults, dotScale: 1.5 }));
     expect(small).not.toBe(large);
   });
+
+  it("offsets alternate rows for hex/triangular packing, not a plain square grid", () => {
+    const source = { width: 60, height: 60, values: new Uint8Array(3600).fill(64) };
+    const path = generateDotHalftonePath(ctx(source, dotHalftoneDefaults, 25.4 / 96));
+
+    // Each dot's centre is the mean of its own vertices — the same
+    // centroid technique `materializeBitmapLayers` uses to find a dot's
+    // pointTap — grouped into rows by rounded y (angleDeg is 0, so rows
+    // are axis-aligned).
+    const subpaths = path.split(/(?=M)/).map((s) => s.trim()).filter(Boolean);
+    const rows = new Map<number, number[]>();
+    for (const subpath of subpaths) {
+      const nums = (subpath.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        sumX += nums[i];
+        sumY += nums[i + 1];
+        count++;
+      }
+      const rowKey = Math.round((sumY / count) * 10);
+      const columnX = Math.round((sumX / count) * 10);
+      if (!rows.has(rowKey)) rows.set(rowKey, []);
+      rows.get(rowKey)!.push(columnX);
+    }
+
+    const rowColumnSets = [...rows.values()];
+    expect(rowColumnSets.length).toBeGreaterThan(1);
+    // A plain square grid would repeat the same x positions on every row; a
+    // hex-offset grid's adjacent rows share none of them.
+    const [firstRow, secondRow] = rowColumnSets;
+    const overlap = firstRow.filter((x) => secondRow.includes(x));
+    expect(overlap).toHaveLength(0);
+  });
 });

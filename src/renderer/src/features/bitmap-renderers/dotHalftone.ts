@@ -6,6 +6,10 @@ import type { BitmapRendererDefinition, RendererContext } from "./types";
 export const DOT_HALFTONE_RENDERER_ID = "dot-halftone";
 const DEFAULT_DOT_SCALE = 1;
 const DOT_SEGMENTS = 20;
+/** Hex/triangular packing: rows spaced at `spacing * ROW_SPACING_RATIO`
+ * with alternate rows offset by half a cell gives every dot six equidistant
+ * neighbours (all at `spacing`), packing more evenly than a square grid. */
+const ROW_SPACING_RATIO = Math.sqrt(3) / 2;
 /** Below this fraction of the cell's max radius a dot is invisible enough to
  * skip outright, rather than emitting a near-zero-radius closed loop. */
 const MIN_DOT_FRACTION = 0.05;
@@ -49,6 +53,7 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
   const pixelsPerMM = 1 / Math.max(scale, 0.001);
   const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 20));
   const spacing = Math.max(spacingMM * pixelsPerMM, 0.1);
+  const rowSpacing = spacing * ROW_SPACING_RATIO;
   const dotScale = Math.max(0.5, Math.min(Number(settings.dotScale ?? DEFAULT_DOT_SCALE), 1.5));
   const maxRadius = (spacing / 2) * dotScale;
   const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
@@ -66,16 +71,22 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
   ];
   const uCoords = corners.map((c) => (c.x - originX) * u.x + (c.y - originY) * u.y);
   const vCoords = corners.map((c) => (c.x - originX) * v.x + (c.y - originY) * v.y);
-  const iMin = Math.ceil(Math.min(...uCoords) / spacing);
-  const iMax = Math.floor(Math.max(...uCoords) / spacing);
-  const jMin = Math.ceil(Math.min(...vCoords) / spacing);
-  const jMax = Math.floor(Math.max(...vCoords) / spacing);
+  // Padded by one column/row: the hex offset shifts alternate rows by half a
+  // cell, so a loop range sized only for the unoffset grid can clip them
+  // short — a cell that lands outside the image samples as white and is
+  // skipped below anyway, so the padding costs nothing but a few wasted
+  // lookups.
+  const iMin = Math.ceil(Math.min(...uCoords) / spacing) - 1;
+  const iMax = Math.floor(Math.max(...uCoords) / spacing) + 1;
+  const jMin = Math.ceil(Math.min(...vCoords) / rowSpacing) - 1;
+  const jMax = Math.floor(Math.max(...vCoords) / rowSpacing) + 1;
 
   const dots: string[] = [];
-  for (let i = iMin; i <= iMax; i++) {
-    for (let j = jMin; j <= jMax; j++) {
-      const cx = originX + i * spacing * u.x + j * spacing * v.x;
-      const cy = originY + i * spacing * u.y + j * spacing * v.y;
+  for (let j = jMin; j <= jMax; j++) {
+    const rowOffset = (((j % 2) + 2) % 2) * 0.5;
+    for (let i = iMin; i <= iMax; i++) {
+      const cx = originX + (i + rowOffset) * spacing * u.x + j * rowSpacing * v.x;
+      const cy = originY + (i + rowOffset) * spacing * u.y + j * rowSpacing * v.y;
       const toneDark = 1 - luminanceAt(source, cx, cy) / 255;
       const radius = maxRadius * toneDark;
       if (radius < maxRadius * MIN_DOT_FRACTION) continue;

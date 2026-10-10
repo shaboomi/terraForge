@@ -83,6 +83,23 @@ describe("generateSpiralAmplitudePath", () => {
     expect(path).not.toContain("Infinity");
   });
 
+  it("never emits a coordinate outside a non-square image's bounds", () => {
+    // Wider than tall: the spiral's farthest-corner reach would bleed past
+    // the top/bottom edges without the clip-to-rect safety net.
+    const width = 80;
+    const height = 40;
+    const path = generateSpiralAmplitudePath(
+      ctx({ width, height, values: new Uint8Array(width * height).fill(64) }, { spacingMM: 3, toothWidthMM: 2, amplitude: 4 }, 1),
+    );
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    for (let i = 0; i + 1 < numbers.length; i += 2) {
+      expect(numbers[i]).toBeGreaterThanOrEqual(0);
+      expect(numbers[i]).toBeLessThanOrEqual(width);
+      expect(numbers[i + 1]).toBeGreaterThanOrEqual(0);
+      expect(numbers[i + 1]).toBeLessThanOrEqual(height);
+    }
+  });
+
   it("keeps waveform sampling dense at the outer spiral", () => {
     const path = generateSpiralAmplitudePath(ctx({ width: 200, height: 200, values: new Uint8Array(40_000).fill(0) }, { spacingMM: 10, toothWidthMM: 0.1, amplitude: 2 }, 1));
 

@@ -62,7 +62,9 @@ describe("modulateStrand waveform shape", () => {
     return points;
   }
 
-  const straightLine = Array.from({ length: 21 }, (_, i) => ({ x: i * 2, y: 0, nx: 0, ny: 1 }));
+  // y is centred in the 40-tall image, clear of both edges, so the full
+  // ±amplitude swing stays unclipped by the clip-to-rect safety clamp.
+  const straightLine = Array.from({ length: 21 }, (_, i) => ({ x: i * 2, y: 20, nx: 0, ny: 1 }));
   const black: RendererSource = { width: 40, height: 40, values: new Uint8Array(1600).fill(0) };
 
   it("renders square's edges as a near-vertical jump rather than a diagonal spread across many samples", () => {
@@ -83,6 +85,38 @@ describe("modulateStrand waveform shape", () => {
     const sinePath = modulateStrand(straightLine, { toothWidth: 10, amplitude: 5, waveform: "sine", image: black });
     const trianglePath = modulateStrand(straightLine, { toothWidth: 10, amplitude: 5, waveform: "triangle", image: black });
     expect(pathPoints(sinePath).length).toBeGreaterThan(pathPoints(trianglePath).length * 2);
+  });
+});
+
+describe("modulateStrand clip-to-rect", () => {
+  it("breaks the path into a new M when the base point leaves the image bounds", () => {
+    // A strand that runs from inside the 10x10 image out past its right edge.
+    const strand = [
+      { x: 5, y: 5, nx: 0, ny: 1 },
+      { x: 15, y: 5, nx: 0, ny: 1 },
+    ];
+    const path = modulateStrand(strand, { toothWidth: 1, amplitude: 1, waveform: "sine", image });
+    // Every coordinate pair stays within the image, and there's at least one
+    // M after the initial one — the path was broken rather than continuing
+    // straight through the boundary.
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    for (let i = 0; i + 1 < numbers.length; i += 2) {
+      expect(numbers[i]).toBeGreaterThanOrEqual(0);
+      expect(numbers[i]).toBeLessThanOrEqual(10);
+    }
+    expect((path.match(/M/g) ?? []).length).toBeLessThanOrEqual(1);
+  });
+
+  it("clamps a near-edge wobbled point back into bounds instead of emitting it outside", () => {
+    // Sitting right on the top edge with a normal pointing outward (-y): an
+    // unclamped negative-going wobble would go to y < 0.
+    const strand = Array.from({ length: 21 }, (_, i) => ({ x: i * 0.5, y: 0, nx: 0, ny: -1 }));
+    const black: RendererSource = { width: 10, height: 10, values: new Uint8Array(100).fill(0) };
+    const path = modulateStrand(strand, { toothWidth: 1, amplitude: 5, waveform: "square", image: black });
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    for (let i = 1; i < numbers.length; i += 2) {
+      expect(numbers[i]).toBeGreaterThanOrEqual(0);
+    }
   });
 });
 
