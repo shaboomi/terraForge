@@ -1,7 +1,20 @@
 import type { BitmapRendererSettings } from "../../../../types";
 import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
 import { luminanceAt } from "./toneSpine/sampling";
-import { angleField, DEFAULT_ANGLE_DEG, DEFAULT_ORIGIN_PCT, originFields } from "./sharedFields";
+import {
+  angleField,
+  autoLevelsField,
+  clipToImageField,
+  contrastField,
+  DEFAULT_ANGLE_DEG,
+  DEFAULT_AUTO_LEVELS,
+  DEFAULT_CLIP_TO_IMAGE,
+  DEFAULT_CONTRAST,
+  DEFAULT_ORIGIN_PCT,
+  DEFAULT_PEAK_CLIP_PCT,
+  originFields,
+  peakClipField,
+} from "./sharedFields";
 import { waveformField } from "./toneSpine/fields";
 import { bipolarToothPulse, DEFAULT_WAVEFORM, type WaveformId } from "./toneSpine/waveforms";
 import type { RendererContext, RendererSource, BitmapRendererDefinition } from "./types";
@@ -16,6 +29,10 @@ export const spiralAmplitudeDefaults: BitmapRendererSettings = {
   angleDeg: DEFAULT_ANGLE_DEG,
   originXPct: DEFAULT_ORIGIN_PCT,
   originYPct: DEFAULT_ORIGIN_PCT,
+  clipToImage: DEFAULT_CLIP_TO_IMAGE,
+  peakClipPct: DEFAULT_PEAK_CLIP_PCT,
+  autoLevels: DEFAULT_AUTO_LEVELS,
+  contrast: DEFAULT_CONTRAST,
 };
 
 export type { RendererSource, RendererContext, BitmapRendererDefinition };
@@ -97,11 +114,15 @@ export function generateSpiralAmplitudePath({
   }
 
   const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 20));
+  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
   const spacing = spacingMM * pixelsPerMM;
-  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 20)) * pixelsPerMM;
-  const amplitude = Math.max(0, Math.min(Number(settings.amplitude), 10)) * pixelsPerMM;
+  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 50)) * pixelsPerMM;
+  const amplitude = Math.max(0, Math.min(Number(settings.amplitude), 50)) * pixelsPerMM;
   const waveform = (settings.waveform as WaveformId) ?? DEFAULT_WAVEFORM;
+  const clipToImage = (settings.clipToImage as boolean | undefined) ?? DEFAULT_CLIP_TO_IMAGE;
+  const peakClipPct = Number(settings.peakClipPct ?? DEFAULT_PEAK_CLIP_PCT);
+  const autoLevels = (settings.autoLevels as boolean | undefined) ?? DEFAULT_AUTO_LEVELS;
+  const contrast = Number(settings.contrast ?? DEFAULT_CONTRAST);
   const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
   const centreX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
   const centreY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
@@ -120,7 +141,16 @@ export function generateSpiralAmplitudePath({
     targetSegmentLength,
   });
 
-  return renderToneSpine([strand], { toothWidth, amplitude, waveform, image: source });
+  return renderToneSpine([strand], {
+    toothWidth,
+    amplitude,
+    waveform,
+    image: source,
+    clipToImage,
+    peakClipPct,
+    autoLevels,
+    contrast,
+  });
 }
 
 export const spiralAmplitudeRenderer: BitmapRendererDefinition = {
@@ -128,12 +158,16 @@ export const spiralAmplitudeRenderer: BitmapRendererDefinition = {
   label: "Spiral amplitude",
   defaults: spiralAmplitudeDefaults,
   fields: [
-    { type: "number", key: "spacingMM", label: "Spacing (mm)", ariaLabel: "Spiral spacing", min: 0.1, max: 20, step: 0.1 },
-    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", ariaLabel: "Sawtooth width", min: 0.1, max: 20, step: 0.1 },
-    { type: "number", key: "amplitude", label: "Amplitude (mm)", ariaLabel: "Bitmap amplitude", min: 0, max: 10, step: 0.1 },
+    { type: "number", key: "spacingMM", label: "Spacing (mm)", ariaLabel: "Spiral spacing", min: 0.1, max: 50, step: 0.1 },
+    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", ariaLabel: "Sawtooth width", min: 0.1, max: 50, step: 0.1 },
+    { type: "number", key: "amplitude", label: "Amplitude (mm)", ariaLabel: "Bitmap amplitude", min: 0, max: 50, step: 0.1 },
     waveformField(),
     angleField(),
     ...originFields(),
+    clipToImageField(),
+    peakClipField(),
+    autoLevelsField(),
+    contrastField(),
   ],
   render: generateSpiralAmplitudePath,
 };

@@ -1,6 +1,19 @@
 import type { BitmapRendererSettings } from "../../../../types";
 import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
-import { angleField, DEFAULT_ANGLE_DEG, DEFAULT_ORIGIN_PCT, originFields } from "./sharedFields";
+import {
+  angleField,
+  autoLevelsField,
+  clipToImageField,
+  contrastField,
+  DEFAULT_ANGLE_DEG,
+  DEFAULT_AUTO_LEVELS,
+  DEFAULT_CLIP_TO_IMAGE,
+  DEFAULT_CONTRAST,
+  DEFAULT_ORIGIN_PCT,
+  DEFAULT_PEAK_CLIP_PCT,
+  originFields,
+  peakClipField,
+} from "./sharedFields";
 import { waveformField } from "./toneSpine/fields";
 import { DEFAULT_WAVEFORM, type WaveformId } from "./toneSpine/waveforms";
 import type { BitmapRendererDefinition, RendererContext } from "./types";
@@ -15,6 +28,10 @@ export const concentricBoxesDefaults: BitmapRendererSettings = {
   angleDeg: DEFAULT_ANGLE_DEG,
   originXPct: DEFAULT_ORIGIN_PCT,
   originYPct: DEFAULT_ORIGIN_PCT,
+  clipToImage: DEFAULT_CLIP_TO_IMAGE,
+  peakClipPct: DEFAULT_PEAK_CLIP_PCT,
+  autoLevels: DEFAULT_AUTO_LEVELS,
+  contrast: DEFAULT_CONTRAST,
 };
 
 function rotate(x: number, y: number, angleRad: number): { x: number; y: number } {
@@ -71,11 +88,15 @@ export function generateConcentricBoxesPath({ source, settings, scale, width, he
   if (!source || width < 1 || height < 1 || source.values.length === 0) return "";
 
   const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 20));
+  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
   const spacing = Math.max(spacingMM * pixelsPerMM, 0.1);
-  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 20)) * pixelsPerMM;
-  const amplitude = Math.max(0, Math.min(Number(settings.amplitudeMM), 10)) * pixelsPerMM;
+  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 50)) * pixelsPerMM;
+  const amplitude = Math.max(0, Math.min(Number(settings.amplitudeMM), 50)) * pixelsPerMM;
   const waveform = (settings.waveform as WaveformId) ?? DEFAULT_WAVEFORM;
+  const clipToImage = (settings.clipToImage as boolean | undefined) ?? DEFAULT_CLIP_TO_IMAGE;
+  const peakClipPct = Number(settings.peakClipPct ?? DEFAULT_PEAK_CLIP_PCT);
+  const autoLevels = (settings.autoLevels as boolean | undefined) ?? DEFAULT_AUTO_LEVELS;
+  const contrast = Number(settings.contrast ?? DEFAULT_CONTRAST);
   const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
   const centreX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
   const centreY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
@@ -97,7 +118,16 @@ export function generateConcentricBoxesPath({ source, settings, scale, width, he
     strands.push(generateBoxStrand(centreX, centreY, halfWidth, halfHeight, angleRad, targetSegmentLength));
   }
 
-  return renderToneSpine(strands, { toothWidth, amplitude, waveform, image: source });
+  return renderToneSpine(strands, {
+    toothWidth,
+    amplitude,
+    waveform,
+    image: source,
+    clipToImage,
+    peakClipPct,
+    autoLevels,
+    contrast,
+  });
 }
 
 export const concentricBoxesRenderer: BitmapRendererDefinition = {
@@ -105,12 +135,16 @@ export const concentricBoxesRenderer: BitmapRendererDefinition = {
   label: "Concentric boxes",
   defaults: concentricBoxesDefaults,
   fields: [
-    { type: "number", key: "spacingMM", label: "Box spacing (mm)", min: 0.1, max: 20, step: 0.1 },
-    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", min: 0.1, max: 20, step: 0.1 },
-    { type: "number", key: "amplitudeMM", label: "Amplitude (mm)", min: 0, max: 10, step: 0.1 },
+    { type: "number", key: "spacingMM", label: "Box spacing (mm)", min: 0.1, max: 50, step: 0.1 },
+    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", min: 0.1, max: 50, step: 0.1 },
+    { type: "number", key: "amplitudeMM", label: "Amplitude (mm)", min: 0, max: 50, step: 0.1 },
     waveformField(),
     angleField(),
     ...originFields(),
+    clipToImageField(),
+    peakClipField(),
+    autoLevelsField(),
+    contrastField(),
   ],
   render: generateConcentricBoxesPath,
 };

@@ -1,5 +1,5 @@
 import type { RendererSource } from "../../../../../types";
-import { luminanceAt } from "./sampling";
+import { luminanceAt, toneRangeOf } from "./sampling";
 import { waveformAt, type WaveformId } from "./waveforms";
 
 /** A point on a spine's unmodulated base curve, plus the outward unit normal
@@ -22,6 +22,47 @@ export interface ToneModulationOptions {
   amplitude: number;
   waveform: WaveformId;
   image: RendererSource;
+  /**
+   * When true (the default when omitted), a base point outside the image
+   * breaks the path rather than drawing through it, and a displaced point
+   * is clamped back into bounds. When false, neither happens: the wobble
+   * can push geometry past the image edge by (at most) the amplitude
+   * setting. There's a real trade-off either way — clamping can flatten a
+   * sharp waveform peak (most visible on sawtooth) into a flat edge right
+   * where the render reaches the image boundary, which every circular/
+   * spiral renderer's outer edge does by design — so this is exposed as a
+   * user setting rather than picked once for every renderer.
+   */
+  clipToImage?: boolean;
+  /**
+   * Waveform peak clipping, as a percentage (1–100; 100 — the default when
+   * omitted — is unclipped). A different feature from `clipToImage`: this
+   * shapes the waveform itself, independent of the image boundary, the way
+   * audio clipping/distortion does — below 100 the peak reaches full height
+   * sooner (the ramp gets proportionally steeper) and then holds flat there
+   * instead of coming to a point, so e.g. a sawtooth's tip reads as chopped
+   * rather than sharp. Applied as `clamp(value / (pct / 100), -1, 1)` to the
+   * waveform's bipolar (-1..1) value before it's scaled by tone and
+   * amplitude, so at 100% `value / 1` is already in range and clamping is a
+   * no-op — today's exact shape.
+   */
+  peakClipPct?: number;
+  /**
+   * When true (default `false` — preserves today's output for existing
+   * saved renders), tone is rescaled to this image's own actual darkest/
+   * lightest sampled pixel rather than the flat 0–255 assumption: a photo
+   * whose darkest pixel isn't true black otherwise never reaches full tone-
+   * darkness anywhere, so `amplitude` silently never reaches its own dial
+   * regardless of how high it's set. A perfectly flat image (no range to
+   * stretch) is left unscaled rather than painted fully dark or fully light.
+   */
+  autoLevels?: boolean;
+  /**
+   * Multiplier pushing tone-darkness away from (above 1) or toward (below 1,
+   * down to 0) mid-grey, applied after `autoLevels` if that's also on.
+   * Default `1` is neutral — today's exact output.
+   */
+  contrast?: number;
 }
 
 function format(value: number): string {
@@ -29,32 +70,106 @@ function format(value: number): string {
 }
 
 /**
- * Baseline waveform samples per tone-width cycle. Multiplied by
- * `1 + FREQUENCY_GAIN` below to stay adequate even where local darkness is
- * pushing the phase rate to its fastest.
+ * How many samples per cycle sine — the only genuinely curved waveform —
+ * needs to look smooth rather than faceted. Nothing else uses this: see
+ * `BREAKPOINT_PHASES` below for why every other waveform needs no regular
+ * sampling at all.
  */
-const SAMPLES_PER_CYCLE: Record<WaveformId, number> = {
-  triangle: 4,
-  square: 4,
-  sawtooth: 4,
-  sine: 24,
-};
+const SINE_SAMPLES_PER_CYCLE = 24;
 
 /**
- * Phases within a cycle where a waveform jumps rather than varies smoothly.
- * `waveformAt` is right-continuous at each of these (see its square/sawtooth
- * cases), so sampling it exactly at the phase gives the value just *after*
- * the jump, and sampling an instant earlier gives the value just *before* —
- * emitting both, at (as near as makes no visual difference) the same
- * position, renders a sharp vertical edge instead of a diagonal blurred
- * across however many regular samples happen to span it.
+ * Phases within a cycle where a waveform's *value* jumps rather than
+ * varying smoothly. `waveformAt` is right-continuous at each of these (see
+ * its square/sawtooth cases), so sampling it exactly at the phase gives the
+ * value just *after* the jump, and sampling an instant earlier gives the
+ * value just *before* — emitting both, at (as near as makes no visual
+ * difference) the same position, renders a sharp vertical edge instead of a
+ * diagonal.
  */
-const DISCONTINUITY_PHASES: Record<WaveformId, number[]> = {
+const JUMP_PHASES: Record<WaveformId, number[]> = {
   triangle: [],
   sine: [],
   sawtooth: [0],
   square: [0, 0.5],
 };
+
+/**
+ * Phases within a cycle where a waveform's *slope* changes but its value
+ * stays continuous — triangle's corners. Together with `JUMP_PHASES`, these
+ * are the points where every piecewise-linear waveform (everything except
+ * sine) needs an exact drawn point; between consecutive points of either
+ * kind the waveform is perfectly linear, so the engine draws one straight
+ * line connecting them instead of following however many points the base
+ * spine happens to produce along the way (see the `isPiecewiseLinear`
+ * branch in `modulateStrand`) — without that, a long straight-seeming ramp
+ * (sawtooth's especially, since its one ramp spans a full cycle) gets drawn
+ * as several intermediate points, each displaced along its own
+ * locally-rotating normal, visibly bowing what should read as one straight
+ * tooth wherever the base spine curves tightly (a spiral's centre, a small
+ * circular ring). Both empty for sine: it has no breakpoints at all, so it
+ * always falls through to regular dense sampling instead.
+ */
+const SLOPE_PHASES: Record<WaveformId, number[]> = {
+  triangle: [0, 0.25, 0.5, 0.75],
+  sine: [],
+  sawtooth: [],
+  square: [],
+};
+
+/**
+ * Each piecewise-linear waveform's breakpoints as `{ phase, value }` pairs
+ * spanning exactly one cycle (0 to 1) — used only to derive the *extra*
+ * breakpoints peak-clipping needs (see `peakClipBreakpointPhases` below).
+ * Square is omitted: its value never leaves ±1, so there's no intermediate
+ * value for peak-clipping to ever saturate — it was already a no-op for
+ * square before piecewise-linear drawing, and stays one now.
+ */
+const BREAKPOINT_VALUES: Partial<Record<WaveformId, { phase: number; value: number }[]>> = {
+  triangle: [
+    { phase: 0, value: 0 },
+    { phase: 0.25, value: 1 },
+    { phase: 0.5, value: 0 },
+    { phase: 0.75, value: -1 },
+    { phase: 1, value: 0 },
+  ],
+  sawtooth: [
+    { phase: 0, value: -1 },
+    { phase: 1, value: 1 },
+  ],
+};
+
+/**
+ * The exact phases, within one cycle, where peak-clipping (`drive < 1`)
+ * makes a piecewise-linear waveform's ramp first reach ±1 and flatten.
+ * Without these as real breakpoints, peak-clipping would have nothing left
+ * to visibly affect: it only ever changed *intermediate* waveform values,
+ * and piecewise-linear waveforms now draw only at their own breakpoints —
+ * which for triangle are exactly 0 and ±1 already, and for sawtooth are a
+ * single value jump — so peak-clipping needs to introduce new breakpoints
+ * of its own to have anywhere left to act. Each is a slope change, not a
+ * value jump: the clipped shape is still continuous there, just bends.
+ * Found by linear interpolation within each known breakpoint-to-breakpoint
+ * segment, since every segment here is a straight line between two known
+ * values. Returns `[]` at `drive >= 1` (unclipped) or for a waveform with
+ * no entry in `BREAKPOINT_VALUES` (square, sine).
+ */
+function peakClipBreakpointPhases(waveform: WaveformId, drive: number): number[] {
+  if (drive >= 1) return [];
+  const segments = BREAKPOINT_VALUES[waveform];
+  if (!segments) return [];
+  const phases: number[] = [];
+  for (let i = 0; i < segments.length - 1; i++) {
+    const a = segments[i];
+    const b = segments[i + 1];
+    for (const threshold of [drive, -drive]) {
+      if ((threshold - a.value) * (threshold - b.value) < 0) {
+        const t = (threshold - a.value) / (b.value - a.value);
+        phases.push(a.phase + (b.phase - a.phase) * t);
+      }
+    }
+  }
+  return phases;
+}
 
 /**
  * How much faster the waveform cycles in fully-dark areas than fully-light
@@ -65,6 +180,18 @@ const DISCONTINUITY_PHASES: Record<WaveformId, number[]> = {
  * configuration surface.
  */
 const FREQUENCY_GAIN = 2;
+
+/**
+ * How much weight each new tone sample gets against the running average
+ * (0–1; lower is smoother). Tone is now sampled continuously at every
+ * sub-step rather than once per cycle, which also means fine per-pixel
+ * noise in the source — water texture, grain, compression artifacts — now
+ * feeds straight into displacement and phase rate instead of being damped
+ * out by the old once-per-cycle bucketing. This exponential moving average
+ * restores that damping without reintroducing the bucketing itself, so a
+ * genuine tonal gradient is still tracked, just not single-pixel jitter.
+ */
+const TONE_SMOOTHING = 0.2;
 
 /** A safety net mirroring the original spiral renderer's own point cap, now
  * shared by every spine — sub-sampling for a smooth waveform multiplies a
@@ -89,15 +216,14 @@ function isInsideBounds(x: number, y: number, width: number, height: number): bo
   return x >= 0 && x <= width && y >= 0 && y <= height;
 }
 
-/** Discontinuity phase boundaries (`n + offset` for integer `n`) strictly
- * after `phaseBefore` and at or before `phaseAfter` — a waveform with a jump
- * at one of these needs a doubled point inserted there. Phase now advances
- * at a tone-dependent, path-history-dependent rate rather than a closed-form
- * function of arc length, so crossings are found reactively per sub-step
- * instead of precomputed in advance. */
-function discontinuityCrossings(phaseBefore: number, phaseAfter: number, offsets: number[]): number[] {
+/** Breakpoint phases (`n + offset` for integer `n`, for each `offset` in
+ * `phases`) strictly after `phaseBefore` and at or before `phaseAfter`.
+ * Phase advances at a tone-dependent, path-history-dependent rate rather
+ * than a closed-form function of arc length, so crossings are found
+ * reactively per visit instead of precomputed in advance. */
+function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: number[]): number[] {
   const crossings: number[] = [];
-  for (const offset of offsets) {
+  for (const offset of phases) {
     let n = Math.floor(phaseBefore - offset) + 1;
     let boundary = n + offset;
     while (boundary <= phaseAfter) {
@@ -110,72 +236,160 @@ function discontinuityCrossings(phaseBefore: number, phaseAfter: number, offsets
 }
 
 /**
- * Walks one strand's base points, sub-sampling between them densely enough
- * for the chosen waveform, and continuously samples source tone at every
- * sub-sample — rather than once per cycle — so tone can drive the
+ * Walks one strand's base points and continuously samples source tone at
+ * every visited point — rather than once per cycle — so tone can drive the
  * waveform's phase rate as well as its amplitude: a darker point both
  * displaces more and oscillates faster, the "busier where it's darker" look
- * a fixed-frequency wobble can't produce. A point outside the image's own
- * bounds is skipped (phase stays frozen while invisible, so the wobble
- * resumes smoothly on re-entry) and breaks the path into a new `M`, rather
- * than ever displacing geometry past the image edge; a point that is inside
- * has its displaced position clamped back into bounds as a cheap safety net
- * against the wobble itself pushing it back out. Returns one
- * `M...L L L...` path substring (with possible internal `M` breaks), or ""
- * for a strand too short to draw.
+ * a fixed-frequency wobble can't produce. When `options.clipToImage` is
+ * true, a point outside the image's own bounds is skipped (phase stays
+ * frozen while invisible, so the wobble resumes smoothly on re-entry) and
+ * breaks the path into a new `M`, rather than ever displacing geometry past
+ * the image edge; a point that is inside has its displaced position clamped
+ * back into bounds as a cheap safety net against the wobble itself pushing
+ * it back out. When false, neither applies — see
+ * `ToneModulationOptions.clipToImage`.
+ *
+ * For a piecewise-linear waveform (triangle/square/sawtooth —
+ * `JUMP_PHASES`/`SLOPE_PHASES`, plus any extra phases peak-clipping adds),
+ * only breakpoints and the strand's final point are ever drawn: every base
+ * point in between is still visited (so tone/phase tracking stays
+ * continuous), just not drawn, so consecutive breakpoints are connected by
+ * one straight line rather than however many points the base spine happens
+ * to produce along the way. Sine (no breakpoints) keeps the dense regular
+ * sub-sampling below instead, since it's the one waveform that's genuinely
+ * curved rather than straight between fixed points.
+ *
+ * Returns one `M...L L L...` path substring (with possible internal `M`
+ * breaks), or "" for a strand too short to draw.
  */
 export function modulateStrand(points: SpineStrand, options: ToneModulationOptions): string {
   if (points.length === 0) return "";
-  const { toothWidth, amplitude, waveform, image } = options;
+  const {
+    toothWidth,
+    amplitude,
+    waveform,
+    image,
+    clipToImage = true,
+    peakClipPct = 100,
+    autoLevels = false,
+    contrast = 1,
+  } = options;
+  const toneRange = autoLevels ? toneRangeOf(image) : null;
+  const hasToneRange = !!toneRange && toneRange.max > toneRange.min;
+  // 1–100%: dividing by a smaller drive pushes the raw -1..1 waveform value
+  // past ±1 sooner, so the subsequent clamp flattens it there instead of
+  // letting it reach a point — the audio-clipping-style shaping described
+  // on `ToneModulationOptions.peakClipPct`.
+  const peakClipDrive = Math.max(0.01, Math.min(1, peakClipPct / 100));
   const safeToothWidth = Math.max(toothWidth, 1e-6);
-  // Sized for the fastest phase rate darkness can produce, not just the
-  // baseline rate — otherwise the densest (darkest) regions would be
-  // under-sampled relative to how fast their phase is actually moving.
-  const maxSubStep = safeToothWidth / ((SAMPLES_PER_CYCLE[waveform] ?? 4) * (1 + FREQUENCY_GAIN));
-  const discontinuityOffsets = DISCONTINUITY_PHASES[waveform];
+  const jumpPhases = JUMP_PHASES[waveform] ?? [];
+  // Peak-clipping's own breakpoints are always slope changes (the shape
+  // stays continuous there, just bends), merged alongside the waveform's
+  // own slope breakpoints — never the jump list, regardless of waveform.
+  const slopePhases = [...(SLOPE_PHASES[waveform] ?? []), ...peakClipBreakpointPhases(waveform, peakClipDrive)];
+  const isPiecewiseLinear = jumpPhases.length > 0 || slopePhases.length > 0;
+  // Only relevant for sine: every other waveform draws solely at its own
+  // breakpoints (see the doc comment above), so this sub-stepping is never
+  // reached for them.
+  const maxSubStep = safeToothWidth / SINE_SAMPLES_PER_CYCLE;
 
   const commands: string[] = [];
   let broken = true;
   let phase = 0;
+  let smoothedToneDark: number | null = null;
 
   const pushPoint = (base: SpineSample, toneDark: number, atPhase: number) => {
-    const displacement = amplitude * toneDark * waveformAt(waveform, atPhase);
-    const x = Math.min(image.width, Math.max(0, base.x + displacement * base.nx));
-    const y = Math.min(image.height, Math.max(0, base.y + displacement * base.ny));
+    const shapedValue = Math.max(-1, Math.min(1, waveformAt(waveform, atPhase) / peakClipDrive));
+    const displacement = amplitude * toneDark * shapedValue;
+    const rawX = base.x + displacement * base.nx;
+    const rawY = base.y + displacement * base.ny;
+    const x = clipToImage ? Math.min(image.width, Math.max(0, rawX)) : rawX;
+    const y = clipToImage ? Math.min(image.height, Math.max(0, rawY)) : rawY;
     commands.push(`${broken ? "M" : "L"}${format(x)} ${format(y)}`);
     broken = false;
   };
 
-  /** Visits one base sample; returns false once the strand's point budget is spent. */
-  const visit = (base: SpineSample, subArcLength: number): boolean => {
-    if (!isInsideBounds(base.x, base.y, image.width, image.height)) {
+  /**
+   * Visits one base sample; returns false once the strand's point budget is
+   * spent. `segmentStart` is the previous base point a piecewise-linear
+   * segment is walking from, used to place each breakpoint crossing at its
+   * actual fractional position along the segment (by phase, which advances
+   * linearly across it) rather than at `base` itself — without that, a
+   * segment spanning several waveform cycles (coarse spine spacing relative
+   * to `toothWidth`, e.g. a grid renderer's cell edges) would draw every one
+   * of those cycles' breakpoints on top of `base`, fanning them out into a
+   * zigzag star instead of tracing separate teeth along the segment. `null`
+   * for the strand's very first sample, which has no preceding point.
+   */
+  const visit = (
+    segmentStart: SpineSample | null,
+    base: SpineSample,
+    subArcLength: number,
+    isFinal: boolean,
+  ): boolean => {
+    if (clipToImage && !isInsideBounds(base.x, base.y, image.width, image.height)) {
       broken = true;
       return true;
     }
-    const toneDark = 1 - luminanceAt(image, base.x, base.y) / 255;
+    const sampledLuminance = luminanceAt(image, base.x, base.y);
+    const scaledLuminance =
+      hasToneRange && toneRange
+        ? Math.max(0, Math.min(255, ((sampledLuminance - toneRange.min) / (toneRange.max - toneRange.min)) * 255))
+        : sampledLuminance;
+    const levelsToneDark = 1 - scaledLuminance / 255;
+    const rawToneDark = Math.max(0, Math.min(1, (levelsToneDark - 0.5) * contrast + 0.5));
+    smoothedToneDark =
+      smoothedToneDark === null
+        ? rawToneDark
+        : smoothedToneDark + (rawToneDark - smoothedToneDark) * TONE_SMOOTHING;
+    const toneDark = smoothedToneDark;
     const phaseBefore = phase;
     phase += (subArcLength / safeToothWidth) * (1 + FREQUENCY_GAIN * toneDark);
-    for (const boundary of discontinuityCrossings(phaseBefore, phase, discontinuityOffsets)) {
-      pushPoint(base, toneDark, boundary - DISCONTINUITY_EPSILON);
+    const phaseSpan = phase - phaseBefore;
+    const crossings = [
+      ...breakpointCrossings(phaseBefore, phase, jumpPhases).map((boundary) => ({ boundary, isJump: true })),
+      ...breakpointCrossings(phaseBefore, phase, slopePhases).map((boundary) => ({ boundary, isJump: false })),
+    ].sort((a, b) => a.boundary - b.boundary);
+    for (const crossing of crossings) {
+      const t = phaseSpan > 0 ? Math.max(0, Math.min(1, (crossing.boundary - phaseBefore) / phaseSpan)) : 1;
+      const position = segmentStart ? interpolateSample(segmentStart, base, t) : base;
+      if (crossing.isJump) {
+        pushPoint(position, toneDark, crossing.boundary - DISCONTINUITY_EPSILON);
+        if (commands.length >= MAX_STRAND_POINTS) return false;
+      }
+      pushPoint(position, toneDark, crossing.boundary);
       if (commands.length >= MAX_STRAND_POINTS) return false;
     }
-    pushPoint(base, toneDark, phase);
+    if (!isPiecewiseLinear || isFinal) {
+      pushPoint(base, toneDark, phase);
+    }
     return commands.length < MAX_STRAND_POINTS;
   };
 
-  if (!visit(points[0], 0)) return commands.join(" ");
+  if (!visit(null, points[0], 0, points.length === 1)) return commands.join(" ");
 
   outer: for (let index = 1; index < points.length; index++) {
     const previous = points[index - 1];
     const point = points[index];
     const segmentLength = Math.hypot(point.x - previous.x, point.y - previous.y);
     if (segmentLength === 0) continue;
+    const isLastSegment = index === points.length - 1;
 
-    const subStepCount = Math.max(1, Math.ceil(segmentLength / maxSubStep));
-    const subArcLength = segmentLength / subStepCount;
-    for (let step = 1; step <= subStepCount; step++) {
-      const sample = interpolateSample(previous, point, step / subStepCount);
-      if (!visit(sample, subArcLength)) break outer;
+    if (isPiecewiseLinear) {
+      // One visit per base segment is enough: a breakpoint crossing is
+      // placed at its exact fractional position along this segment (see
+      // `visit`'s `segmentStart` param) regardless of how coarse this outer
+      // step is — only the *drawn* resolution depends on sub-stepping, and a
+      // piecewise-linear waveform draws nothing extra between breakpoints
+      // anyway.
+      if (!visit(previous, point, segmentLength, isLastSegment)) break outer;
+    } else {
+      const subStepCount = Math.max(1, Math.ceil(segmentLength / maxSubStep));
+      const subArcLength = segmentLength / subStepCount;
+      for (let step = 1; step <= subStepCount; step++) {
+        const sample = interpolateSample(previous, point, step / subStepCount);
+        if (!visit(null, sample, subArcLength, isLastSegment && step === subStepCount)) break outer;
+      }
     }
   }
 

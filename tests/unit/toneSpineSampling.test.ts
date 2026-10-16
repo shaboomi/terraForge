@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { luminanceAt } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/sampling";
+import { luminanceAt, toneRangeOf } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/sampling";
 import type { RendererSource } from "../../src/types";
 
 describe("luminanceAt", () => {
@@ -39,5 +39,35 @@ describe("luminanceAt", () => {
     // Halfway across the last pixel, the bilinear tap to the right reaches
     // one unit past the image edge — that neighbour is white, not black.
     expect(luminanceAt(image, 1.5, 0)).toBeCloseTo(127.5, 5);
+  });
+});
+
+describe("toneRangeOf", () => {
+  it("finds the darkest and lightest raw bytes actually present", () => {
+    const image: RendererSource = { width: 4, height: 1, values: new Uint8Array([60, 200, 90, 150]) };
+    expect(toneRangeOf(image)).toEqual({ min: 60, max: 200 });
+  });
+
+  it("returns the full range for an image that already spans it", () => {
+    const image: RendererSource = { width: 2, height: 1, values: new Uint8Array([0, 255]) };
+    expect(toneRangeOf(image)).toEqual({ min: 0, max: 255 });
+  });
+
+  it("falls back to the full range for an empty image", () => {
+    const image: RendererSource = { width: 0, height: 0, values: new Uint8Array() };
+    expect(toneRangeOf(image)).toEqual({ min: 0, max: 255 });
+  });
+
+  it("memoizes per source buffer instead of rescanning", () => {
+    const values = new Uint8Array([60, 200]);
+    const image: RendererSource = { width: 2, height: 1, values };
+    expect(toneRangeOf(image)).toEqual({ min: 60, max: 200 });
+
+    // Mutating the same buffer after the first call must not affect the
+    // cached result — a real render never mutates its decoded pixels after
+    // the fact, so returning the stale cache here is exactly the point:
+    // proof the second call didn't rescan.
+    values[0] = 10;
+    expect(toneRangeOf(image)).toEqual({ min: 60, max: 200 });
   });
 });

@@ -35,6 +35,10 @@ describe("generateSpiralAmplitudePath", () => {
       angleDeg: 0,
       originXPct: 50,
       originYPct: 50,
+      clipToImage: true,
+      peakClipPct: 100,
+      autoLevels: false,
+      contrast: 1,
     });
   });
 
@@ -98,6 +102,49 @@ describe("generateSpiralAmplitudePath", () => {
       expect(numbers[i + 1]).toBeGreaterThanOrEqual(0);
       expect(numbers[i + 1]).toBeLessThanOrEqual(height);
     }
+  });
+
+  it("overflows a non-square image's bounds when clipToImage is turned off", () => {
+    const width = 80;
+    const height = 40;
+    const path = generateSpiralAmplitudePath(
+      ctx(
+        { width, height, values: new Uint8Array(width * height).fill(64) },
+        { spacingMM: 3, toothWidthMM: 2, amplitude: 4, clipToImage: false },
+        1,
+      ),
+    );
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    const outside = numbers.some((_, i) => {
+      if (i % 2 !== 0) return false;
+      return numbers[i] < 0 || numbers[i] > width || numbers[i + 1] < 0 || numbers[i + 1] > height;
+    });
+    expect(outside).toBe(true);
+  });
+
+  it("changes the render when peakClipPct is lowered from its 100% default", () => {
+    const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(0) };
+    const unclipped = generateSpiralAmplitudePath(ctx(source, { spacingMM: 3, toothWidthMM: 2, amplitude: 4 }, 1));
+    const clipped = generateSpiralAmplitudePath(
+      ctx(source, { spacingMM: 3, toothWidthMM: 2, amplitude: 4, peakClipPct: 20 }, 1),
+    );
+    expect(clipped).not.toBe(unclipped);
+  });
+
+  it("changes the render when autoLevels or contrast are turned on", () => {
+    // Mostly mid-dark grey with one far corner at full white, so the image
+    // has real range to auto-scale against.
+    const values = new Uint8Array(1600).fill(90);
+    values[39 * 40 + 39] = 255;
+    const source = { width: 40, height: 40, values };
+    const settings = { spacingMM: 3, toothWidthMM: 2, amplitude: 4 };
+
+    const baseline = generateSpiralAmplitudePath(ctx(source, settings, 1));
+    const withAutoLevels = generateSpiralAmplitudePath(ctx(source, { ...settings, autoLevels: true }, 1));
+    const withContrast = generateSpiralAmplitudePath(ctx(source, { ...settings, contrast: 2 }, 1));
+
+    expect(withAutoLevels).not.toBe(baseline);
+    expect(withContrast).not.toBe(baseline);
   });
 
   it("keeps waveform sampling dense at the outer spiral", () => {

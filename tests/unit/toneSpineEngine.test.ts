@@ -81,10 +81,63 @@ describe("modulateStrand waveform shape", () => {
     expect(hasSharpEdge).toBe(true);
   });
 
+  it("damps a single-pixel tone spike instead of letting it jitter the wave", () => {
+    const width = 40;
+    const height = 40;
+    const uniform = new Uint8Array(width * height).fill(128);
+    const spiky = uniform.slice();
+    for (let y = 0; y < height; y++) spiky[y * width + 20] = 0; // one noisy black column
+
+    // A coarse toothWidth keeps substeps aligned one-per-pixel-column here,
+    // so the spike is sampled by exactly one substep — an isolated noisy
+    // reading, not a feature spread across many samples by sub-pixel
+    // substep density.
+    const strand = Array.from({ length: 41 }, (_, i) => ({ x: i, y: 20, nx: 0, ny: 1 }));
+    const options = (values: Uint8Array): Parameters<typeof modulateStrand>[1] => ({
+      toothWidth: 40,
+      amplitude: 10,
+      waveform: "sine",
+      image: { width, height, values },
+    });
+
+    const baseline = pathPoints(modulateStrand(strand, options(uniform))).map(([, y]) => y);
+    const withSpike = pathPoints(modulateStrand(strand, options(spiky))).map(([, y]) => y);
+    expect(withSpike).toHaveLength(baseline.length);
+
+    const maxDelta = Math.max(...baseline.map((y, i) => Math.abs(y - withSpike[i])));
+    // Un-smoothed, hitting pure black for one sample could swing the
+    // displacement by close to the full amplitude (10); damped, one noisy
+    // sample should only nudge the running average a small fraction of that.
+    expect(maxDelta).toBeLessThan(2);
+  });
+
   it("samples sine far more densely than triangle so its curve doesn't look faceted", () => {
     const sinePath = modulateStrand(straightLine, { toothWidth: 10, amplitude: 5, waveform: "sine", image: black });
     const trianglePath = modulateStrand(straightLine, { toothWidth: 10, amplitude: 5, waveform: "triangle", image: black });
     expect(pathPoints(sinePath).length).toBeGreaterThan(pathPoints(trianglePath).length * 2);
+  });
+});
+
+describe("modulateStrand point budget", () => {
+  it("reaches as far along a long strand for sine as for other waveforms", () => {
+    // Sine needs far more samples per cycle than square to look smooth
+    // (SAMPLES_PER_CYCLE), so for the same shared MAX_STRAND_POINTS budget
+    // it must not run out of points — and so stop drawing — far short of
+    // where a less sample-hungry waveform reaches on the exact same strand.
+    const width = 40_000;
+    const height = 40;
+    const black: RendererSource = { width, height, values: new Uint8Array(width * height).fill(0) };
+    const longStrand = Array.from({ length: 4001 }, (_, i) => ({ x: i * 10, y: 20, nx: 0, ny: 1 }));
+    const lastX = (path: string) => {
+      const nums = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      return nums[nums.length - 2];
+    };
+
+    const sinePath = modulateStrand(longStrand, { toothWidth: 10, amplitude: 5, waveform: "sine", image: black });
+    const squarePath = modulateStrand(longStrand, { toothWidth: 10, amplitude: 5, waveform: "square", image: black });
+
+    expect(lastX(sinePath)).toBeGreaterThan(width * 0.9);
+    expect(lastX(squarePath)).toBeGreaterThan(width * 0.9);
   });
 });
 
@@ -117,6 +170,113 @@ describe("modulateStrand clip-to-rect", () => {
     for (let i = 1; i < numbers.length; i += 2) {
       expect(numbers[i]).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe("modulateStrand peak clip", () => {
+  // A huge toothWidth relative to the single 1-unit segment guarantees
+  // exactly one sub-step, landing at a fully predictable phase: starting
+  // from 0, one sub-step on a fully black (toneDark = 1) image advances it
+  // by (1 / 100) * (1 + 2 * 1) = 0.03 — just inside triangle's rising edge,
+  // nowhere near its natural peak at phase 0.25.
+  const points = [
+    { x: 0, y: 20, nx: 0, ny: 1 },
+    { x: 1, y: 20, nx: 0, ny: 1 },
+  ];
+  const black: RendererSource = { width: 40, height: 40, values: new Uint8Array(1600).fill(0) };
+  const amplitude = 5;
+  const lastY = (path: string) => {
+    const nums = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    return nums[nums.length - 1];
+  };
+
+  it("leaves the waveform unchanged at 100% (the default)", () => {
+    const withDefault = modulateStrand(points, { toothWidth: 100, amplitude, waveform: "triangle", image: black });
+    const explicit100 = modulateStrand(points, { toothWidth: 100, amplitude, waveform: "triangle", image: black, peakClipPct: 100 });
+    expect(explicit100).toBe(withDefault);
+    // triangleAt(0.03) = 0.03 * 4 = 0.12, unclipped.
+    expect(lastY(withDefault) - 20).toBeCloseTo(amplitude * 0.12, 2);
+  });
+
+  it("drives the peak to full amplitude well before its natural phase when clipped", () => {
+    const path = modulateStrand(points, { toothWidth: 100, amplitude, waveform: "triangle", image: black, peakClipPct: 10 });
+    // drive = 0.1, so 0.12 / 0.1 = 1.2, clamped to 1 — fully saturated this
+    // early in the ramp, instead of the unclipped path's 0.12.
+    expect(lastY(path) - 20).toBeCloseTo(amplitude, 2);
+  });
+});
+
+describe("modulateStrand tone shaping", () => {
+  // Same analytical setup as the peak-clip tests: a toothWidth well above
+  // the single 1-unit segment guarantees exactly one sub-step, landing
+  // precisely at the segment's own endpoint (1, 20) — a position whose
+  // exact pixel value we can control directly, with no bilinear blending to
+  // account for. Large enough to stay within triangle's linear rising edge
+  // (phase stays under 0.25) even at full tone-darkness, but not so large
+  // that the resulting displacement rounds away to nothing at 2dp.
+  const points = [
+    { x: 0, y: 20, nx: 0, ny: 1 },
+    { x: 1, y: 20, nx: 0, ny: 1 },
+  ];
+  const amplitude = 5;
+  const lastY = (path: string) => {
+    const nums = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    return nums[nums.length - 1];
+  };
+
+  describe("autoLevels", () => {
+    // Uniformly a mid-dark grey (60, not true black) everywhere the strand
+    // actually samples, so tone smoothing (an EMA across samples) has no
+    // transient to settle from — every sample along the path agrees, in
+    // both runs. A single far-corner pixel the strand never comes near is
+    // pure white, so 60 is still this image's own darkest sample even
+    // though it's nowhere near a true-black byte value.
+    const values = new Uint8Array(1600).fill(60);
+    values[39 * 40 + 39] = 255;
+    const image: RendererSource = { width: 40, height: 40, values };
+
+    it("reaches further toward full amplitude than without it, for a sample that isn't true black", () => {
+      const withoutAutoLevels = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image });
+      const withAutoLevels = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image, autoLevels: true });
+      // Without: toneDark = 1 - 60/255 ≈ 0.76, the image's own contrast
+      // limits how dark 60 ever reads as. With: 60 is this image's own
+      // darkest pixel, so it rescales to toneDark = 1 — full darkness —
+      // even though it's nowhere near a true-black byte value.
+      expect(Math.abs(lastY(withAutoLevels) - 20)).toBeGreaterThan(Math.abs(lastY(withoutAutoLevels) - 20));
+    });
+
+    it("leaves a perfectly flat image unscaled — no range to stretch", () => {
+      const flat: RendererSource = { width: 40, height: 40, values: new Uint8Array(1600).fill(120) };
+      const withoutAutoLevels = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image: flat });
+      const withAutoLevels = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image: flat, autoLevels: true });
+      expect(withAutoLevels).toBe(withoutAutoLevels);
+    });
+
+    it("defaults to off, matching an explicit false", () => {
+      const omitted = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image });
+      const explicitFalse = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image, autoLevels: false });
+      expect(omitted).toBe(explicitFalse);
+    });
+  });
+
+  describe("contrast", () => {
+    // Uniformly a dark-ish grey (60 → toneDark ≈ 0.76, above the 0.5
+    // midpoint) everywhere the strand samples, so turning contrast up
+    // should push it darker still — and, as in the autoLevels tests above,
+    // a uniform sample avoids any tone-smoothing transient between points.
+    const image: RendererSource = { width: 40, height: 40, values: new Uint8Array(1600).fill(60) };
+
+    it("matches today's exact output at 1 (the default)", () => {
+      const omitted = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image });
+      const explicit1 = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image, contrast: 1 });
+      expect(explicit1).toBe(omitted);
+    });
+
+    it("pushes an already-dark sample darker still, above 1", () => {
+      const neutral = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image, contrast: 1 });
+      const boosted = modulateStrand(points, { toothWidth: 20, amplitude, waveform: "triangle", image, contrast: 2 });
+      expect(Math.abs(lastY(boosted) - 20)).toBeGreaterThan(Math.abs(lastY(neutral) - 20));
+    });
   });
 });
 

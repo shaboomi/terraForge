@@ -51,10 +51,10 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
   if (!source || width < 1 || height < 1 || source.values.length === 0) return "";
 
   const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 20));
+  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
   const spacing = Math.max(spacingMM * pixelsPerMM, 0.1);
   const rowSpacing = spacing * ROW_SPACING_RATIO;
-  const dotScale = Math.max(0.5, Math.min(Number(settings.dotScale ?? DEFAULT_DOT_SCALE), 1.5));
+  const dotScale = Math.max(0.5, Math.min(Number(settings.dotScale ?? DEFAULT_DOT_SCALE), 3));
   const maxRadius = (spacing / 2) * dotScale;
   const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
   const originX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
@@ -103,8 +103,8 @@ export const dotHalftoneRenderer: BitmapRendererDefinition = {
   defaults: dotHalftoneDefaults,
   producesDots: true,
   fields: [
-    { type: "number", key: "spacingMM", label: "Cell spacing (mm)", min: 0.1, max: 20, step: 0.1 },
-    { type: "number", key: "dotScale", label: "Dot scale", min: 0.5, max: 1.5, step: 0.05 },
+    { type: "number", key: "spacingMM", label: "Cell spacing (mm)", min: 0.1, max: 50, step: 0.1 },
+    { type: "number", key: "dotScale", label: "Dot scale", min: 0.5, max: 3, step: 0.05 },
     angleField(),
     ...originFields(),
   ],
