@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import type { BitmapRendererSettings, SvgImport } from "../../../../../types";
 import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
-import { bitmapRenderSignature, materializeBitmapLayers } from "../../bitmap-renderers/bitmapImage";
+import { useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
 import {
   bitmapRenderers,
   findBitmapRenderer,
@@ -11,37 +10,6 @@ import {
 } from "../../bitmap-renderers/registry";
 import { BitmapSeparationSection } from "./BitmapSeparationSection";
 import { RendererFieldControl } from "./RendererFieldControl";
-
-/**
- * How long the settings must stay unchanged before a re-render is worth
- * starting. A render is a round trip into the renderer's sandboxed host, so
- * it should happen once the user has settled on a value rather than for every
- * value they pass through on the way there.
- *
- * This has to outlast the gap between successive presses of a number field's
- * spinner, not just the events of a single slider drag — at 200ms a steadily
- * clicked spinner rendered on every click.
- */
-const RENDER_DEBOUNCE_MS = 400;
-
-const delay = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, ms)));
-
-/**
- * How long the rendering state stays on screen *after* the new preview has
- * been painted. A small bitmap renders in a few milliseconds, so without a
- * floor the state exists for a single frame and is never really seen.
- *
- * Measured from after the paint, not from when the render started, because
- * producing the geometry and painting it both block the main thread — and
- * time the thread spends blocked is not time the user can read anything. An
- * earlier version subtracted the elapsed render time from this budget, which
- * meant a slow render spent its whole allowance frozen and left nothing
- * legible afterwards.
- *
- * The *result* is never delayed by this; only the label lingers.
- */
-const MIN_RENDERING_VISIBLE_MS = 750;
 
 /**
  * What the status line says in each state. Every state is named, including
@@ -56,8 +24,6 @@ const RENDER_STATUS_LABEL = {
   rendering: "Status: Rendering",
   error: "Status: Failed",
 } as const;
-
-type RenderStatus = keyof typeof RENDER_STATUS_LABEL;
 
 export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpdate: (changes: Partial<SvgImport>) => void }) {
   const pluginManifests = useBitmapPluginStore((state) => state.plugins);
@@ -77,89 +43,9 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
     : getBitmapRenderer(undefined, pluginManifests);
   const settings = renderer ? { ...renderer.defaults, ...imp.bitmapRendererSettings } : {};
 
-  /**
-   * "pending" is the gap between a setting changing and the debounce elapsing.
-   * It needs to be distinct from both neighbours: showing nothing there leaves
-   * the user unable to tell the change was registered while the preview still
-   * shows the old result, and showing "Rendering…" claims work that has not
-   * started yet.
-   */
-  const [renderStatus, setRenderStatus] = useState<RenderStatus>("idle");
-  const [renderError, setRenderError] = useState<string | null>(null);
-
-  const renderSignature = bitmapRenderSignature(imp);
-
-  useEffect(() => {
-    // The stored output already came from exactly these inputs, so selecting
-    // this layer again must not re-run the renderer — for a plugin that is a
-    // sandbox round trip, and the write-back would mark the document dirty
-    // without changing anything.
-    if (imp.bitmapRenderSignature === renderSignature) {
-      setRenderStatus("idle");
-      setRenderError(null);
-      return;
-    }
-
-    let cancelled = false;
-    // The settings have changed but nothing is running yet: the debounce below
-    // is waiting to see whether they change again.
-    setRenderStatus("pending");
-    setRenderError(null);
-
-    const timer = setTimeout(async () => {
-      // The input has now been stable for the debounce interval, so a render
-      // really is starting.
-      setRenderStatus("rendering");
-
-      // Yield a turn so "rendering" is committed before a synchronous in-tree
-      // renderer ties up the thread, and so any click already queued behind
-      // this timer is handled first.
-      await delay(0);
-      if (cancelled) return;
-
-      try {
-        const { bitmapRendererPath, paths } = await materializeBitmapLayers(imp);
-        if (cancelled) return;
-
-        // Apply the result the moment it exists — only the label waits.
-        onUpdate({ bitmapRendererPath, paths, bitmapRenderSignature: renderSignature });
-
-        // A zero delay cannot fire until the thread is free, so this resumes
-        // only once the new preview has been committed and painted. Starting
-        // the hold here is what makes it legible rather than spent frozen.
-        await delay(0);
-        if (cancelled) return;
-
-        // Hold the state long enough to be read. This lives here, in the flow
-        // that owns the status, rather than in a wrapper reacting to it:
-        // anything observing the transition after the fact is racing React's
-        // effect flush for a state that existed for a single frame.
-        await delay(MIN_RENDERING_VISIBLE_MS);
-        if (cancelled) return;
-        setRenderStatus("idle");
-      } catch (err: unknown) {
-        if (cancelled) return;
-        // A failure persists on screen, so there is nothing to hold it for.
-        setRenderStatus("error");
-        setRenderError(err instanceof Error ? err.message : String(err));
-      }
-    }, RENDER_DEBOUNCE_MS);
-
-    // Doubles as the debounce cancel *and* the "latest request wins" guard —
-    // a dependency change before the timer fires, or before the async
-    // render settles, marks this run stale so it can't clobber a newer one.
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // renderSignature stands in for every input the render depends on.
-    //
-    // `imp.bitmapRenderSignature` is deliberately *not* a dependency even
-    // though it is read above. This effect writes it on success, so listing it
-    // would make the effect re-run on its own write — cancelling the run that
-    // is still holding the status, and stomping it back to idle before the
-    // user could see it.
-  }, [renderSignature]);
+  // Rendering itself is owned by the bitmap render service, not this panel,
+  // so a change still renders if the import is deselected before it lands.
+  const { status: renderStatus, error: renderError } = useBitmapRenderState(imp.id);
 
   /**
    * Deliberately leaves the existing geometry in place. The stored output is

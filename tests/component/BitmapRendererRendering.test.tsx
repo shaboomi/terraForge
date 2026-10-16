@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { BitmapRendererSection } from "@renderer/features/properties-panel/components/BitmapRendererSection";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
+import { useCanvasStore } from "@renderer/store/canvasStore";
+import { startBitmapRenderService } from "@renderer/features/bitmap-renderers/bitmapRenderService";
 import type { SvgImport } from "@types/index";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
@@ -16,6 +18,36 @@ import {
 } from "@renderer/features/bitmap-renderers/bitmapImage";
 
 const materialize = vi.mocked(materializeBitmapLayers);
+
+let stopService: () => void = () => {};
+
+/** Seeds the document with `imp` and renders the panel against the live store. */
+function renderPanel(imp: SvgImport, onUpdate = vi.fn()) {
+  useCanvasStore.setState({ imports: [imp] });
+  function Panel() {
+    const current = useCanvasStore((state) => state.imports.find((item) => item.id === imp.id))!;
+    return (
+      <BitmapRendererSection
+        imp={current}
+        onUpdate={(changes) => {
+          onUpdate(changes);
+          useCanvasStore.getState().updateImport(imp.id, changes);
+        }}
+      />
+    );
+  }
+  const result = render(<Panel />);
+  return { ...result, onUpdate };
+}
+
+/** Replaces the import in the document, as an edit from anywhere would. */
+function replaceImport(imp: SvgImport) {
+  act(() => {
+    useCanvasStore.setState({ imports: [imp] });
+  });
+}
+
+const storedImport = () => useCanvasStore.getState().imports[0];
 
 function bitmapImport(overrides: Partial<SvgImport> = {}): SvgImport {
   return {
@@ -51,23 +83,19 @@ beforeEach(() => {
   useBitmapPluginStore.setState({ plugins: [], errors: [], scanning: false, actionError: null });
   materialize.mockReset();
   materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [] });
+  useCanvasStore.setState({ imports: [] });
+  stopService = startBitmapRenderService();
 });
 
 afterEach(() => {
+  act(() => stopService());
   vi.useRealTimers();
 });
 
 describe("BitmapRendererSection re-render behaviour", () => {
   it("does not re-render a bitmap whose stored output matches its current settings", async () => {
     const imp = bitmapImport();
-    const onUpdate = vi.fn();
-
-    render(
-      <BitmapRendererSection
-        imp={{ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) }}
-        onUpdate={onUpdate}
-      />,
-    );
+    const { onUpdate } = renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
 
     expect(materialize).not.toHaveBeenCalled();
@@ -76,13 +104,11 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
   it("renders, and records the signature, when the stored output predates the current settings", async () => {
     const imp = bitmapImport({ bitmapRenderSignature: "stale-signature" });
-    const onUpdate = vi.fn();
-
-    render(<BitmapRendererSection imp={imp} onUpdate={onUpdate} />);
+    renderPanel(imp);
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
 
     expect(materialize).toHaveBeenCalledTimes(1);
-    expect(onUpdate).toHaveBeenCalledWith({
+    expect(storedImport()).toMatchObject({
       bitmapRendererPath: "M1 1",
       paths: [],
       bitmapRenderSignature: bitmapRenderSignature(imp),
@@ -90,9 +116,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
   });
 
   it("renders a bitmap that has never recorded a signature", async () => {
-    const onUpdate = vi.fn();
-
-    render(<BitmapRendererSection imp={bitmapImport()} onUpdate={onUpdate} />);
+    renderPanel(bitmapImport());
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
 
     expect(materialize).toHaveBeenCalledTimes(1);
@@ -109,14 +133,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
   it("keeps the existing preview on screen while a settings change re-renders", async () => {
     const imp = bitmapImport();
-    const onUpdate = vi.fn();
-
-    render(
-      <BitmapRendererSection
-        imp={{ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) }}
-        onUpdate={onUpdate}
-      />,
-    );
+    const { onUpdate } = renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
 
     fireEvent.change(screen.getByLabelText("Spiral spacing"), { target: { value: "9" } });
 
@@ -131,14 +148,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
   it("still clears the preview when the renderer itself is switched", () => {
     const imp = bitmapImport();
-    const onUpdate = vi.fn();
-
-    render(
-      <BitmapRendererSection
-        imp={{ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) }}
-        onUpdate={onUpdate}
-      />,
-    );
+    const { onUpdate } = renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
 
     fireEvent.change(screen.getByLabelText("Bitmap renderer"), {
       target: { value: "spiral-amplitude" },
@@ -150,22 +160,16 @@ describe("BitmapRendererSection re-render behaviour", () => {
   });
 
   it("renders once for a run of rapid changes, not once per change", async () => {
-    const onUpdate = vi.fn();
-    const { rerender } = render(
-      <BitmapRendererSection imp={bitmapImport({ bitmapRenderSignature: "stale" })} onUpdate={onUpdate} />,
-    );
+    renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
 
     // Four spinner clicks 250ms apart — comfortably slower than the old 200ms
     // debounce, which rendered on every one of them.
     for (const spacingMM of [9, 10, 11, 12]) {
-      rerender(
-        <BitmapRendererSection
-          imp={bitmapImport({
-            bitmapRenderSignature: "stale",
-            bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
-          })}
-          onUpdate={onUpdate}
-        />,
+      replaceImport(
+        bitmapImport({
+          bitmapRenderSignature: "stale",
+          bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
+        }),
       );
       await act(async () => { await vi.advanceTimersByTimeAsync(250); });
     }
@@ -179,12 +183,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
     materialize.mockReset();
     materialize.mockReturnValue(new Promise(() => {}));
 
-    render(
-      <BitmapRendererSection
-        imp={bitmapImport({ bitmapRenderSignature: "stale" })}
-        onUpdate={vi.fn()}
-      />,
-    );
+    renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
 
     // The change is registered but nothing has started yet.
     expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
@@ -198,13 +197,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
   });
 
   it("holds the rendering label long enough to see, even for an instant render", async () => {
-    const onUpdate = vi.fn();
-    render(
-      <BitmapRendererSection
-        imp={bitmapImport({ bitmapRenderSignature: "stale" })}
-        onUpdate={onUpdate}
-      />,
-    );
+    renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
     expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
 
     // A plain advance, not a stepped one: collapsing the debounce and the
@@ -213,7 +206,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Status: Rendering");
 
     // The result is applied straight away — only the label waits.
-    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(storedImport().bitmapRendererPath).toBe("M1 1");
 
     // Still held well after the render itself finished.
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
@@ -225,13 +218,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
   it("names the resting state rather than leaving it blank", () => {
     const imp = bitmapImport();
-
-    render(
-      <BitmapRendererSection
-        imp={{ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) }}
-        onUpdate={vi.fn()}
-      />,
-    );
+    renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
 
     // A blank label is indistinguishable from "no status available", so a
     // settled renderer has to say so.
@@ -242,12 +229,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
     materialize.mockReset();
     materialize.mockRejectedValue(new Error("boom"));
 
-    render(
-      <BitmapRendererSection
-        imp={bitmapImport({ bitmapRenderSignature: "stale" })}
-        onUpdate={vi.fn()}
-      />,
-    );
+    renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1200); });
 
     expect(screen.getByRole("status")).toHaveTextContent("Status: Failed");
@@ -255,24 +237,33 @@ describe("BitmapRendererSection re-render behaviour", () => {
   });
 
   it("stays pending, never claiming to render, across a run of rapid changes", async () => {
-    const { rerender } = render(
-      <BitmapRendererSection imp={bitmapImport({ bitmapRenderSignature: "stale" })} onUpdate={vi.fn()} />,
-    );
+    renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
 
     for (const spacingMM of [9, 10, 11]) {
-      rerender(
-        <BitmapRendererSection
-          imp={bitmapImport({
-            bitmapRenderSignature: "stale",
-            bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
-          })}
-          onUpdate={vi.fn()}
-        />,
+      replaceImport(
+        bitmapImport({
+          bitmapRenderSignature: "stale",
+          bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
+        }),
       );
       await act(async () => { await vi.advanceTimersByTimeAsync(250); });
       expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
     }
     expect(materialize).not.toHaveBeenCalled();
+  });
+
+  it("still renders a change when the panel closes before the render lands", async () => {
+    const imp = bitmapImport();
+    const { unmount } = renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
+
+    fireEvent.change(screen.getByLabelText("Spiral spacing"), { target: { value: "9" } });
+    // Deselecting the import unmounts the panel inside the debounce window.
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(storedImport().bitmapRendererPath).toBe("M1 1");
+    expect(storedImport().bitmapRenderSignature).toBe(bitmapRenderSignature(storedImport()));
   });
 
   /**
@@ -290,12 +281,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
     it("leaves the controls in the same place whether or not a render is in flight", async () => {
       const imp = bitmapImport();
 
-      const idle = render(
-        <BitmapRendererSection
-          imp={{ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) }}
-          onUpdate={vi.fn()}
-        />,
-      );
+      const idle = renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
       const idlePosition = controlsPosition();
       expect(screen.getByRole("status")).toHaveTextContent("Status: Ready");
       idle.unmount();
@@ -304,12 +290,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
       materialize.mockReset();
       materialize.mockReturnValue(new Promise(() => {}));
 
-      render(
-        <BitmapRendererSection
-          imp={bitmapImport({ bitmapRenderSignature: "stale" })}
-          onUpdate={vi.fn()}
-        />,
-      );
+      renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
       await act(async () => { await vi.advanceTimersByTimeAsync(500); });
 
       expect(screen.getByRole("status")).toHaveTextContent("Status: Rendering");
@@ -320,12 +301,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
       materialize.mockReset();
       materialize.mockRejectedValue(new Error("boom"));
 
-      render(
-        <BitmapRendererSection
-          imp={bitmapImport({ bitmapRenderSignature: "stale" })}
-          onUpdate={vi.fn()}
-        />,
-      );
+      renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
       await act(async () => { await vi.advanceTimersByTimeAsync(500); });
 
       const grid = screen.getByLabelText("Spiral spacing").closest("div.grid")!;

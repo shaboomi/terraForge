@@ -13,6 +13,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { useJobStartHandler } from "./components/JobControls/useJobStartHandler";
 import { useMachineStore } from "./store/machineStore";
 import { useBitmapPluginStore } from "./store/bitmapPluginStore";
+import { startBitmapRenderService } from "./features/bitmap-renderers/bitmapRenderService";
 import { useCanvasStore } from "./store/canvasStore";
 import { selectJobControlsCanvasState } from "./store/canvasSelectors";
 import { useTaskStore } from "./store/taskStore";
@@ -204,6 +205,7 @@ export default function App() {
     // Load machine configs
     window.terraForge.config.getMachineConfigs().then(setConfigs);
     void loadBitmapPlugins();
+    const stopBitmapRenderService = startBitmapRenderService();
     window.terraForge.config
       .getAppConfig()
       .then((cfg) => {
@@ -239,6 +241,7 @@ export default function App() {
       offTask();
       offPing();
       offFirmware();
+      stopBitmapRenderService();
       if (pingTimer) clearTimeout(pingTimer);
     };
   }, [
