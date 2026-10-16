@@ -25,7 +25,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 5. Settings not coerced | Fixed — `coerceSettings`; per-renderer clamp code remains until A1 | `4f48b99` |
 | 6. Clip entry/exit | Fixed — entry in `c36a718`, exit in `3d45296` | `3d45296` |
 | 9. Halftone tone curve | Area fix done; tone controls wait for A3, edge overflow still open | `f5ffab7` |
-| 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | (this commit) |
+| 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | `3c96690` |
 | Everything else | Open | — |
 
 ---
