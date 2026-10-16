@@ -59,6 +59,32 @@ describe("generateDotHalftonePath", () => {
     expect(darkPath.match(/M/g)?.length ?? 0).toBeGreaterThan(0);
   });
 
+  it("sizes each dot so its ink area, not its radius, tracks tone", () => {
+    // spacingMM 3 at 1mm/px with dotScale 1: a full-black dot has radius 1.5px.
+    const maxRadius = 1.5;
+    for (const luminance of [64, 128, 192]) {
+      const tone = 1 - luminance / 255;
+      const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(luminance) };
+      const dots = generateDotHalftonePath(ctx(source, { ...dotHalftoneDefaults, spacingMM: 3 }))
+        .split(" Z")
+        .filter((dot) => dot.trim())
+        .map((dot) => {
+          const numbers = (dot.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+          const xs = numbers.filter((_, i) => i % 2 === 0);
+          const ys = numbers.filter((_, i) => i % 2 === 1);
+          const cx = xs.reduce((a, b) => a + b) / xs.length;
+          const cy = ys.reduce((a, b) => a + b) / ys.length;
+          return { cx, cy, radius: Math.hypot(xs[0] - cx, ys[0] - cy) };
+        });
+      // An interior dot: one on the border samples the white beyond the image.
+      const centre = dots.reduce((best, dot) =>
+        Math.hypot(dot.cx - 20, dot.cy - 20) < Math.hypot(best.cx - 20, best.cy - 20) ? dot : best,
+      );
+
+      expect((centre.radius / maxRadius) ** 2).toBeCloseTo(tone, 1);
+    }
+  });
+
   it("changes the grid pattern when the screen angle changes", () => {
     const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(64) };
     const straight = generateDotHalftonePath(ctx(source, dotHalftoneDefaults));

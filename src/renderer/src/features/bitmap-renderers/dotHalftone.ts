@@ -10,9 +10,10 @@ const DOT_SEGMENTS = 20;
  * with alternate rows offset by half a cell gives every dot six equidistant
  * neighbours (all at `spacing`), packing more evenly than a square grid. */
 const ROW_SPACING_RATIO = Math.sqrt(3) / 2;
-/** Below this fraction of the cell's max radius a dot is invisible enough to
- * skip outright, rather than emitting a near-zero-radius closed loop. */
-const MIN_DOT_FRACTION = 0.05;
+/** Below this tone darkness (0–1) a cell is light enough to leave blank
+ * rather than emit a barely-there closed loop — every dot costs a pen down
+ * and up, so near-white areas must not fill with specks. */
+const MIN_DOT_TONE = 0.05;
 
 export const dotHalftoneDefaults: BitmapRendererSettings = {
   spacingMM: 3,
@@ -41,7 +42,7 @@ function circlePath(cx: number, cy: number, radius: number): string {
 }
 
 /**
- * A rotated, origin-anchored grid of dots, one per cell, radius proportional
+ * A rotated, origin-anchored grid of dots, one per cell, area proportional
  * to the source tone sampled at that cell's centre — classic halftone
  * screening. `angleDeg` is the screen angle; `dotScale` lets 100%-black
  * cells slightly overlap their neighbours (>1) or stay inset (<1), matching
@@ -88,8 +89,11 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
       const cx = originX + (i + rowOffset) * spacing * u.x + j * rowSpacing * v.x;
       const cy = originY + (i + rowOffset) * spacing * u.y + j * rowSpacing * v.y;
       const toneDark = 1 - luminanceAt(source, cx, cy) / 255;
-      const radius = maxRadius * toneDark;
-      if (radius < maxRadius * MIN_DOT_FRACTION) continue;
+      if (toneDark < MIN_DOT_TONE) continue;
+      // Ink is a dot's *area*, so it is the area that must track tone: a
+      // radius proportional to tone gives area ∝ tone², printing a 50% grey
+      // as 25% ink and crushing every midtone toward white.
+      const radius = maxRadius * Math.sqrt(toneDark);
       dots.push(circlePath(cx, cy, radius));
     }
   }
