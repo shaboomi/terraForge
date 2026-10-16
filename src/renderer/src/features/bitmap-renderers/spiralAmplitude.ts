@@ -1,33 +1,17 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
-import { luminanceAt } from "./toneSpine/sampling";
+import type { SpineStrand } from "./toneSpine/engine";
 import {
-  angleField,
-  clipToImageField,
-  DEFAULT_ANGLE_DEG,
-  DEFAULT_CLIP_TO_IMAGE,
-  DEFAULT_ORIGIN_PCT,
-  DEFAULT_PEAK_CLIP_PCT,
-  originFields,
-  peakClipField,
-} from "./sharedFields";
-import { waveformField } from "./toneSpine/fields";
-import { bipolarToothPulse, DEFAULT_WAVEFORM, type WaveformId } from "./toneSpine/waveforms";
+  amplitudeField,
+  defineToneSpineRenderer,
+  spacingField,
+  toothWidthField,
+  type SpineGeometry,
+} from "./toneSpine/defineToneSpineRenderer";
+import { luminanceAt } from "./toneSpine/sampling";
+import { bipolarToothPulse } from "./toneSpine/waveforms";
 import type { RendererContext, RendererSource, BitmapRendererDefinition } from "./types";
 
 export const SPIRAL_AMPLITUDE_RENDERER_ID = "spiral-amplitude";
-
-export const spiralAmplitudeDefaults: BitmapRendererSettings = {
-  spacingMM: 8,
-  toothWidthMM: 9,
-  amplitude: 10,
-  waveform: DEFAULT_WAVEFORM,
-  angleDeg: DEFAULT_ANGLE_DEG,
-  originXPct: DEFAULT_ORIGIN_PCT,
-  originYPct: DEFAULT_ORIGIN_PCT,
-  clipToImage: DEFAULT_CLIP_TO_IMAGE,
-  peakClipPct: DEFAULT_PEAK_CLIP_PCT,
-};
 
 export type { RendererSource, RendererContext, BitmapRendererDefinition };
 
@@ -35,53 +19,30 @@ export type { RendererSource, RendererContext, BitmapRendererDefinition };
 // these directly from this file before they moved into the shared engine.
 export { bipolarToothPulse, luminanceAt };
 
+/** Safety cap on base points, ahead of the engine's own per-strand cap. */
+const MAX_SPIRAL_POINTS = 500_000;
+
 /**
- * Base points of one continuous Archimedean spiral centred at the given
- * origin, with the outward radial direction as each point's normal — this is
- * the unmodulated curve that `renderToneSpine` displaces tone-driven amplitude
- * along. `angleRad` rotates the spiral's start direction; the spiral still
- * begins at radius 0, so this only changes which way it initially unwinds.
+ * Base points of one continuous Archimedean spiral centred at the origin,
+ * with the outward radial direction as each point's normal — the unmodulated
+ * curve the engine displaces tone-driven amplitude along. `angleRad` rotates
+ * the spiral's start direction; the spiral still begins at radius 0, so this
+ * only changes which way it initially unwinds.
+ *
+ * A fixed angular step would make segments grow with radius, visibly
+ * stretching outer waveform periods, so the step is chosen per point to keep
+ * every segment near `targetSegmentLength`.
  */
-function generateSpiralStrand({
-  width,
-  height,
-  centreX,
-  centreY,
-  angleRad,
-  spacing,
-  targetSegmentLength,
-}: {
-  width: number;
-  height: number;
-  centreX: number;
-  centreY: number;
-  angleRad: number;
-  spacing: number;
-  targetSegmentLength: number;
-}): SpineStrand {
-  const maxRadius = Math.max(
-    Math.hypot(centreX, centreY),
-    Math.hypot(width - centreX, centreY),
-    Math.hypot(centreX, height - centreY),
-    Math.hypot(width - centreX, height - centreY),
-  );
-  const turns = maxRadius / Math.max(spacing, 0.1);
-  const maxTheta = turns * Math.PI * 2;
+function spiralStrand({ originX, originY, angleRad, spacing, targetSegmentLength, maxRadius }: SpineGeometry): SpineStrand {
+  const maxTheta = (maxRadius / spacing) * Math.PI * 2;
   const radialRate = spacing / (Math.PI * 2);
-  const maxPoints = 500_000;
   const points: SpineStrand = [];
 
-  for (let theta = 0, index = 0; theta <= maxTheta && index < maxPoints; index++) {
+  for (let theta = 0, index = 0; theta <= maxTheta && index < MAX_SPIRAL_POINTS; index++) {
     const radius = (spacing * theta) / (Math.PI * 2);
-    const effectiveTheta = theta + angleRad;
-    const cos = Math.cos(effectiveTheta);
-    const sin = Math.sin(effectiveTheta);
-    points.push({
-      x: centreX + radius * cos,
-      y: centreY + radius * sin,
-      nx: cos,
-      ny: sin,
-    });
+    const cos = Math.cos(theta + angleRad);
+    const sin = Math.sin(theta + angleRad);
+    points.push({ x: originX + radius * cos, y: originY + radius * sin, nx: cos, ny: sin });
     const arcRate = Math.hypot(radialRate, radius);
     theta += Math.min(0.05, targetSegmentLength / Math.max(arcRate, 0.001));
   }
@@ -89,74 +50,24 @@ function generateSpiralStrand({
   return points;
 }
 
-/**
- * Generates one continuous Archimedean spiral. Each fixed-width cycle crosses
- * the baseline at its sample point, then produces equal positive and negative
- * pulses whose amplitude is determined solely by that luminance sample.
- */
-export function generateSpiralAmplitudePath({
-  source,
-  settings,
-  scale,
-  width,
-  height,
-}: RendererContext): string {
-  // This renderer traces tone, so it has nothing to draw without a source.
-  // Its manifest equivalent would declare `"source": "required"`.
-  if (!source || width < 1 || height < 1 || source.values.length === 0) {
-    return "";
-  }
-
-  const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
-  const spacing = spacingMM * pixelsPerMM;
-  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 50)) * pixelsPerMM;
-  const amplitude = Math.max(0, Math.min(Number(settings.amplitude), 50)) * pixelsPerMM;
-  const waveform = (settings.waveform as WaveformId) ?? DEFAULT_WAVEFORM;
-  const clipToImage = (settings.clipToImage as boolean | undefined) ?? DEFAULT_CLIP_TO_IMAGE;
-  const peakClipPct = Number(settings.peakClipPct ?? DEFAULT_PEAK_CLIP_PCT);
-  const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
-  const centreX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
-  const centreY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
-  // Four segments per waveform period preserves the two peaks and three
-  // baseline crossings at every radius. A fixed angular step makes segments
-  // grow with radius, which visibly stretches outer waveform periods.
-  const targetSegmentLength = toothWidth / 4;
-
-  const strand = generateSpiralStrand({
-    width: source.width,
-    height: source.height,
-    centreX,
-    centreY,
-    angleRad,
-    spacing,
-    targetSegmentLength,
-  });
-
-  return renderToneSpine([strand], {
-    toothWidth,
-    amplitude,
-    waveform,
-    image: source,
-    clipToImage,
-    peakClipPct,
-  });
-}
-
-export const spiralAmplitudeRenderer: BitmapRendererDefinition = {
+export const spiralAmplitudeRenderer = defineToneSpineRenderer({
   id: SPIRAL_AMPLITUDE_RENDERER_ID,
   label: "Spiral amplitude",
-  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
-  defaults: spiralAmplitudeDefaults,
+  revision: 1,
+  // Spiral predates the `amplitudeMM` key every later renderer uses.
+  amplitudeKey: "amplitude",
   fields: [
-    { type: "number", key: "spacingMM", label: "Spacing (mm)", ariaLabel: "Spiral spacing", min: 0.1, max: 50, step: 0.1 },
-    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", ariaLabel: "Sawtooth width", min: 0.1, max: 50, step: 0.1 },
-    { type: "number", key: "amplitude", label: "Amplitude (mm)", ariaLabel: "Bitmap amplitude", min: 0, max: 50, step: 0.1 },
-    waveformField(),
-    angleField(),
-    ...originFields(),
-    clipToImageField(),
-    peakClipField(),
+    spacingField("Spacing (mm)", "Spiral spacing"),
+    toothWidthField("Tooth width"),
+    amplitudeField("amplitude", "Bitmap amplitude"),
   ],
-  render: generateSpiralAmplitudePath,
-};
+  defaults: { spacingMM: 8, toothWidthMM: 9, amplitude: 10 },
+  strands: (geometry) => [spiralStrand(geometry)],
+});
+
+export const spiralAmplitudeDefaults: BitmapRendererSettings = spiralAmplitudeRenderer.defaults;
+
+/** One continuous Archimedean spiral, tone-modulated along its length. */
+export function generateSpiralAmplitudePath(context: RendererContext): string {
+  return spiralAmplitudeRenderer.render(context);
+}

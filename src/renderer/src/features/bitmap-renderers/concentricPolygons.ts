@@ -1,34 +1,15 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
+import type { SpineStrand } from "./toneSpine/engine";
 import {
-  angleField,
-  clipToImageField,
-  DEFAULT_ANGLE_DEG,
-  DEFAULT_CLIP_TO_IMAGE,
-  DEFAULT_ORIGIN_PCT,
-  DEFAULT_PEAK_CLIP_PCT,
-  originFields,
-  peakClipField,
-} from "./sharedFields";
-import { waveformField } from "./toneSpine/fields";
-import { DEFAULT_WAVEFORM, type WaveformId } from "./toneSpine/waveforms";
-import type { BitmapRendererDefinition, RendererContext } from "./types";
+  amplitudeField,
+  defineToneSpineRenderer,
+  spacingField,
+  toothWidthField,
+  type SpineGeometry,
+} from "./toneSpine/defineToneSpineRenderer";
+import type { RendererContext } from "./types";
 
 export const CONCENTRIC_POLYGONS_RENDERER_ID = "concentric-polygons";
-const DEFAULT_SIDES = 6;
-
-export const concentricPolygonsDefaults: BitmapRendererSettings = {
-  spacingMM: 4,
-  toothWidthMM: 6,
-  amplitudeMM: 1.5,
-  sides: DEFAULT_SIDES,
-  waveform: DEFAULT_WAVEFORM,
-  angleDeg: DEFAULT_ANGLE_DEG,
-  originXPct: DEFAULT_ORIGIN_PCT,
-  originYPct: DEFAULT_ORIGIN_PCT,
-  clipToImage: DEFAULT_CLIP_TO_IMAGE,
-  peakClipPct: DEFAULT_PEAK_CLIP_PCT,
-};
 
 /**
  * One closed regular polygon's base points, circumradius `radius`, centred
@@ -36,13 +17,10 @@ export const concentricPolygonsDefaults: BitmapRendererSettings = {
  * to that edge's midpoint — exact for a regular polygon, and the natural
  * generalization of a circle's radial normal to straight edges.
  */
-function generatePolygonStrand(
-  centreX: number,
-  centreY: number,
+function polygonStrand(
   radius: number,
   sides: number,
-  angleRad: number,
-  targetSegmentLength: number,
+  { originX, originY, angleRad, targetSegmentLength }: SpineGeometry,
 ): SpineStrand {
   const vertices = Array.from({ length: sides }, (_, i) => {
     const theta = angleRad + (i / sides) * Math.PI * 2;
@@ -62,8 +40,8 @@ function generatePolygonStrand(
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
       points.push({
-        x: centreX + a.x + t * (b.x - a.x),
-        y: centreY + a.y + t * (b.y - a.y),
+        x: originX + a.x + t * (b.x - a.x),
+        y: originY + a.y + t * (b.y - a.y),
         nx: normal.x,
         ny: normal.y,
       });
@@ -78,60 +56,27 @@ function generatePolygonStrand(
  * from the origin by circumradius, out to the far image corner — each
  * polygon its own strand. `angleDeg` rotates every polygon's vertex phase.
  */
-export function generateConcentricPolygonsPath({ source, settings, scale, width, height }: RendererContext): string {
-  if (!source || width < 1 || height < 1 || source.values.length === 0) return "";
-
-  const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
-  const spacing = Math.max(spacingMM * pixelsPerMM, 0.1);
-  const toothWidth = Math.max(0.1, Math.min(Number(settings.toothWidthMM), 50)) * pixelsPerMM;
-  const amplitude = Math.max(0, Math.min(Number(settings.amplitudeMM), 50)) * pixelsPerMM;
-  const sides = Math.round(Math.max(3, Math.min(Number(settings.sides ?? DEFAULT_SIDES), 12)));
-  const waveform = (settings.waveform as WaveformId) ?? DEFAULT_WAVEFORM;
-  const clipToImage = (settings.clipToImage as boolean | undefined) ?? DEFAULT_CLIP_TO_IMAGE;
-  const peakClipPct = Number(settings.peakClipPct ?? DEFAULT_PEAK_CLIP_PCT);
-  const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
-  const centreX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
-  const centreY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
-  const targetSegmentLength = toothWidth / 4;
-
-  const maxRadius = Math.max(
-    Math.hypot(centreX, centreY),
-    Math.hypot(source.width - centreX, centreY),
-    Math.hypot(centreX, source.height - centreY),
-    Math.hypot(source.width - centreX, source.height - centreY),
-  );
-
-  const strands: SpineStrand[] = [];
-  for (let radius = spacing; radius <= maxRadius; radius += spacing) {
-    strands.push(generatePolygonStrand(centreX, centreY, radius, sides, angleRad, targetSegmentLength));
-  }
-
-  return renderToneSpine(strands, {
-    toothWidth,
-    amplitude,
-    waveform,
-    image: source,
-    clipToImage,
-    peakClipPct,
-  });
-}
-
-export const concentricPolygonsRenderer: BitmapRendererDefinition = {
+export const concentricPolygonsRenderer = defineToneSpineRenderer({
   id: CONCENTRIC_POLYGONS_RENDERER_ID,
   label: "Concentric polygons",
-  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
-  defaults: concentricPolygonsDefaults,
+  revision: 1,
   fields: [
-    { type: "number", key: "spacingMM", label: "Ring spacing (mm)", min: 0.1, max: 50, step: 0.1 },
-    { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", min: 0.1, max: 50, step: 0.1 },
-    { type: "number", key: "amplitudeMM", label: "Amplitude (mm)", min: 0, max: 50, step: 0.1 },
+    spacingField("Ring spacing (mm)"),
+    toothWidthField(),
+    amplitudeField(),
     { type: "number", key: "sides", label: "Sides", min: 3, max: 12, step: 1 },
-    waveformField(),
-    angleField(),
-    ...originFields(),
-    clipToImageField(),
-    peakClipField(),
   ],
-  render: generateConcentricPolygonsPath,
-};
+  defaults: { spacingMM: 4, toothWidthMM: 6, amplitudeMM: 1.5, sides: 6 },
+  *strands(geometry, settings) {
+    const sides = Math.round(settings.sides as number);
+    for (let radius = geometry.spacing; radius <= geometry.maxRadius; radius += geometry.spacing) {
+      yield polygonStrand(radius, sides, geometry);
+    }
+  },
+});
+
+export const concentricPolygonsDefaults: BitmapRendererSettings = concentricPolygonsRenderer.defaults;
+
+export function generateConcentricPolygonsPath(context: RendererContext): string {
+  return concentricPolygonsRenderer.render(context);
+}

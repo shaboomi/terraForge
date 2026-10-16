@@ -20,9 +20,9 @@ export function originFields(): BitmapRendererFieldSchema[] {
   ];
 }
 
-/** Whether a renderer's output stays within the image rectangle (clamping
- * a wobbled point back in, breaking the path around a point that's fully
- * outside) or is left free to overflow by up to the amplitude setting. Both
+/** Whether a renderer's wobble is clamped to stay within the image
+ * rectangle or left free to overflow it by up to the amplitude setting (the
+ * base pattern itself is never drawn outside the image either way). Both
  * have a real visual cost — clamping can flatten a sharp waveform peak
  * (most visible on sawtooth) into a flat edge wherever the render's outer
  * reach meets the image boundary, which every circular/spiral renderer does

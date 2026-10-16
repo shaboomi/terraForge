@@ -22,12 +22,14 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 2. `producesDots` dropped | Fixed | `f37600b` |
 | 3. Strand start / closed shapes | Fixed (sine re-entry too) | `c36a718` |
 | 4. `clipToImage = false` bleed | Fixed | `697bcf3` |
-| 5. Settings not coerced | Fixed — `coerceSettings`; per-renderer clamp code remains until A1 | `4f48b99` |
+| 5. Settings not coerced | Fixed — `coerceSettings` (per-renderer clamp code removed in A1) | `4f48b99` |
 | 6. Clip entry/exit | Fixed — entry in `c36a718`, exit in `3d45296` | `3d45296` |
 | 7. Tone smoothing lag | Fixed by A3 — engine EMA replaced by a symmetric source blur | `6dddf4f` |
 | 9. Halftone tone curve | Area fix done (`f5ffab7`); tone controls via A3; edge overflow still open | `f5ffab7` |
 | 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | `3c96690` |
 | A3. Tone preprocessing | Done — `toneAdjust.ts`; per-import Tone section for every renderer and plugin; auto levels still per ink channel under separation (issue 15) | `6dddf4f` |
+| A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | (A1 commit) |
+| 13. Stale "Sawtooth width" label | Fixed in A1; other items in 13 still open | (A1 commit) |
 | Everything else | Open | — |
 
 ---
