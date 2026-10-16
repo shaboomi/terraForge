@@ -200,6 +200,10 @@ function validateManifestShape(raw: unknown, folder: string): string | null {
     return 'manifest.source must be "required", "optional", or "none"';
   }
 
+  if (m.producesDots !== undefined && typeof m.producesDots !== "boolean") {
+    return "manifest.producesDots must be true or false";
+  }
+
   const defaultsError = validateDefaults(m.fields as BitmapRendererFieldSchema[], m.defaults);
   if (defaultsError) return defaultsError;
 
@@ -263,6 +267,7 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
           // Defaulted here so every consumer can read it without repeating the
           // "absent means required" rule.
           source: raw.source ?? "required",
+          producesDots: raw.producesDots === true ? true : undefined,
         },
         entryPath: resolve(folder, raw.entry as string),
         folder,

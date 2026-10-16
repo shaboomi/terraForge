@@ -75,6 +75,7 @@ and dot-directories are skipped, and symlinks are ignored rather than followed.
 | `entry` | yes | Your entry module, relative to the plugin folder. Must resolve inside it. |
 | `source` | no | `"required"` (default), `"optional"` or `"none"` — see below. |
 | `renderTimeoutMs` | no | Per-render budget. Defaults to 4000, clamped to 500–15000. |
+| `producesDots` | no | `true` if your output is a set of separate dots rather than strokes — see below. |
 | `defaults` | yes | A starting value for **every** field you declare, of the matching type. |
 | `fields` | yes | The controls to show in the properties panel. May be empty. |
 
@@ -87,6 +88,19 @@ without running any of your code.
 - `"none"` — a generator. `context.source` is never present.
 - `"optional"` — a generator that uses an image to modulate itself when given
   one. Check whether `context.source` exists.
+
+### `producesDots`
+
+Set this to `true` when each closed shape you return is an independent dot,
+as in a halftone, rather than part of a continuous stroke. terraForge then
+splits your output into one shape per dot, so each can be filled by hatching
+or plotted as a single pen tap at its centre.
+
+To be split correctly, each dot must be its own subpath: an absolute `M`, then
+absolute `L` commands, closed with `Z` — for example
+`M10 5 L12 7 L10 9 L8 7 Z`. Approximate circles with enough `L` points rather
+than arcs or curves, and write plain decimal numbers. A dot's centre is taken
+as the average of its points.
 
 ### Field types
 

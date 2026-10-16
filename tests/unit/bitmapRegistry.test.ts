@@ -62,6 +62,11 @@ describe("pluginRendererFromManifest", () => {
     expect(renderer.fields).toBe(pluginManifest.fields);
     expect(typeof renderer.render).toBe("function");
   });
+
+  it("carries a plugin's producesDots declaration so its output is split into dots", () => {
+    expect(pluginRendererFromManifest({ ...pluginManifest, producesDots: true }).producesDots).toBe(true);
+    expect(pluginRendererFromManifest(pluginManifest).producesDots).toBeUndefined();
+  });
 });
 
 describe("bitmapRenderers", () => {
