@@ -311,6 +311,35 @@ describe("modulateStrand stroke start", () => {
     });
   }
 
+  /** The [x, y] of the last point of the first subpath in a path. */
+  function firstSubpathEnd(path: string): [number, number] {
+    const firstSubpath = path.split(/ (?=M)/)[0];
+    const points = [...firstSubpath.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)];
+    const last = points[points.length - 1];
+    return [Number(last[1]), Number(last[2])];
+  }
+
+  for (const waveform of waveforms) {
+    it(`finishes a ${waveform} strand exactly at the image edge when it leaves`, () => {
+      // Crosses out of the 100px-wide image midway between two samples.
+      const line = Array.from({ length: 121 }, (_, i) => ({ x: i + 0.5, y: 10, nx: 0, ny: -1 }));
+      const path = modulateStrand(line, { toothWidth: 10, amplitude: 5, waveform, image: dark });
+
+      expect(firstSubpathEnd(path)[0]).toBe(100);
+    });
+  }
+
+  it("draws both edges of a strand that leaves the image and comes back", () => {
+    // Out through the top edge at x = 40, back in at x = 60.
+    const vee = Array.from({ length: 101 }, (_, x) => ({ x, y: 5 - 10 * Math.max(0, 1 - Math.abs(x - 50) / 25), nx: 0, ny: -1 }));
+    const path = modulateStrand(vee, { toothWidth: 10, amplitude: 0, waveform: "sawtooth", image: dark });
+
+    const subpaths = path.split(/ (?=M)/);
+    expect(subpaths).toHaveLength(2);
+    expect(firstSubpathEnd(subpaths[0])).toEqual([37.5, 0]);
+    expect(firstPoint(subpaths[1])).toEqual([62.5, 0]);
+  });
+
   it("closes a ring: the stroke starts where the ring does, with no gap", () => {
     const ring = Array.from({ length: 201 }, (_, i) => {
       const theta = (i / 200) * Math.PI * 2;

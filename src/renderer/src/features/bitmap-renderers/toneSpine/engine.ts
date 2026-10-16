@@ -226,6 +226,13 @@ function entryFraction(outside: SpineSample, inside: SpineSample, width: number,
   return range ? Math.max(0, Math.min(1, range[0])) : 0;
 }
 
+/** Fraction (0–1) of the way from `inside` to `outside` at which the segment
+ * between them leaves the `[0,width] x [0,height]` image rectangle. */
+function exitFraction(inside: SpineSample, outside: SpineSample, width: number, height: number): number {
+  const range = clipLineToRect(inside, { x: outside.x - inside.x, y: outside.y - inside.y }, width, height);
+  return range ? Math.max(0, Math.min(1, range[1])) : 0;
+}
+
 /** Breakpoint phases (`n + offset` for integer `n`, for each `offset` in
  * `phases`) strictly after `phaseBefore` and at or before `phaseAfter`.
  * Phase advances at a tone-dependent, path-history-dependent rate rather
@@ -260,8 +267,8 @@ function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: nu
  *
  * For a piecewise-linear waveform (triangle/square/sawtooth —
  * `JUMP_PHASES`/`SLOPE_PHASES`, plus any extra phases peak-clipping adds),
- * only breakpoints and the points where the stroke starts, re-enters the
- * image, and ends are ever drawn: every base
+ * only breakpoints and the points where the stroke starts, enters or leaves
+ * the image, and ends are ever drawn: every base
  * point in between is still visited (so tone/phase tracking stays
  * continuous), just not drawn, so consecutive breakpoints are connected by
  * one straight line rather than however many points the base spine happens
@@ -342,6 +349,17 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     // The image is the extent of the picture, so a base point outside it is
     // never drawn, whatever `clipToImage` says — see that option.
     if (!isInsideBounds(base.x, base.y, image.width, image.height)) {
+      if (!broken && segmentStart) {
+        // Leaving the image: finish the stroke exactly at the edge rather than
+        // at the last sample inside it, which can fall up to a whole segment
+        // short. Clamped so rounding can never put the exit point outside and
+        // send it back through this branch.
+        const fraction = exitFraction(segmentStart, base, image.width, image.height);
+        const exit = interpolateSample(segmentStart, base, fraction);
+        exit.x = Math.min(image.width, Math.max(0, exit.x));
+        exit.y = Math.min(image.height, Math.max(0, exit.y));
+        if (!visit(segmentStart, exit, subArcLength * fraction, true)) return false;
+      }
       broken = true;
       return true;
     }
