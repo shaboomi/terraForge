@@ -315,6 +315,11 @@ describe("discoverBitmapPlugins", () => {
       expect(message).toMatch(/must be a number/);
     });
 
+    it("requires a number default to lie within that field's min/max", async () => {
+      const outOfRange = { ...validManifest, defaults: { dotSize: 50 } };
+      expect(await errorFor(outOfRange)).toMatch(/defaults\["dotSize"\] must be within/);
+    });
+
     it("requires a select default to be one of its own options", async () => {
       const message = await errorFor({
         ...validManifest,

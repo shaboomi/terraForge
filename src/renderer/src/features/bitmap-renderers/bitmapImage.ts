@@ -1,5 +1,6 @@
 import type { SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
+import { coerceSettings } from "./coerceSettings";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { validateRendererOutput } from "./validatePath";
@@ -241,7 +242,7 @@ export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Pro
     throw new Error(`Bitmap renderer "${bitmap.bitmapRendererId}" is not installed.`);
   }
 
-  const settings = { ...renderer.defaults, ...bitmap.bitmapRendererSettings };
+  const settings = coerceSettings(renderer.fields, renderer.defaults, bitmap.bitmapRendererSettings);
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 

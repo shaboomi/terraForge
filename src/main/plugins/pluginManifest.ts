@@ -155,8 +155,11 @@ function validateDefaults(
       return `manifest.defaults is missing a value for field "${field.key}"`;
     }
     const value = defaults[field.key];
-    if (field.type === "number" && typeof value !== "number") {
-      return `manifest.defaults["${field.key}"] must be a number`;
+    if (field.type === "number") {
+      if (typeof value !== "number") return `manifest.defaults["${field.key}"] must be a number`;
+      if (value < field.min || value > field.max) {
+        return `manifest.defaults["${field.key}"] must be within that field's min/max (${field.min}–${field.max})`;
+      }
     }
     if (field.type === "boolean" && typeof value !== "boolean") {
       return `manifest.defaults["${field.key}"] must be a boolean`;
