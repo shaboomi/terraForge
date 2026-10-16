@@ -272,6 +272,16 @@ describe("BitmapRendererSection re-render behaviour", () => {
     expect(storedImport().bitmapRenderSignature).toBe(bitmapRenderSignature(storedImport()));
   });
 
+  it("shows the renderer's warnings about the current output below the controls", () => {
+    const imp = bitmapImport({ bitmapRenderWarnings: ["Output was cut short at the point limit."] });
+    renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
+
+    const warning = screen.getByText("Output was cut short at the point limit.");
+    const grid = screen.getByLabelText("Spiral spacing").closest("div.grid")!;
+    const children = Array.from(grid.parentElement!.children);
+    expect(children.indexOf(warning)).toBeGreaterThan(children.indexOf(grid));
+  });
+
   describe("tone", () => {
     it("shows tone controls for every renderer, from the shared pipeline", () => {
       const imp = bitmapImport({ bitmapRendererId: "dot-halftone", bitmapRendererSettings: {} });

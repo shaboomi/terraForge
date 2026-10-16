@@ -163,6 +163,7 @@ async function run(importId: string, job: RenderJob): Promise<void> {
     paths: result.paths,
     bitmapRenderSignature: job.signature,
     bitmapRendererVersion: result.rendererVersion,
+    bitmapRenderWarnings: result.warnings?.length ? result.warnings : undefined,
   });
   job.applied = true;
 

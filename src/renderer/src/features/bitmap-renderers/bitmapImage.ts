@@ -1,10 +1,10 @@
-import type { SvgImport, SvgPath } from "../../../../types";
+import type { RendererDot, SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
 import { prepareSource, resolveToneSettings } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
-import { validateRendererOutput } from "./validatePath";
+import { validateRendererOutput, type ValidatedLayer } from "./validatePath";
 import type { BitmapRendererDefinition, RendererSource } from "./types";
 
 export function dataUrlFromBytes(bytes: Uint8Array, mimeType: string): string {
@@ -123,6 +123,8 @@ export interface MaterializedBitmap {
   paths: SvgPath[];
   /** `bitmapRendererStamp` of the renderer that produced this output. */
   rendererVersion?: string;
+  /** Notes the renderer reported about this output. */
+  warnings?: string[];
 }
 
 type MaterializableBitmap = Pick<
@@ -189,69 +191,60 @@ function inkPath(
 }
 
 /**
- * Splits a dot-producing renderer's output into one `SvgPath` per dot, each
- * fillable and plot-tappable at its own centre — see
- * `BitmapRendererDefinition.producesDots`. Splits on subpath boundaries
- * (`M`) rather than parsing the path grammar: valid because a `producesDots`
- * renderer emits only closed `M...L...Z` polylines, never curves or arcs.
- * Each dot's centre is the mean of its own vertices, which is exact for an
- * evenly-sampled circle — the symmetric points average to the true centre —
- * so no separate centroid geometry is needed.
- *
- * `idPrefix` distinguishes one channel's dots from another's when a
- * colour-separated render calls this once per channel (default `"dot"` for
- * the single-channel case); `color`/`label` tag each dot with its ink, the
- * same way `inkPath` tags a whole separated layer.
+ * One `SvgPath` per dot a renderer returned, each fillable and plot-tappable
+ * at the point the renderer gave for it — so the existing hatch-fill and
+ * plot-points features work on dots unmodified. `idPrefix` keeps one ink's
+ * or layer's dots apart from another's; `color`/`label` tag each dot with its
+ * ink, the same way `inkPath` tags a whole layer.
  */
-export function splitDotPaths(
+export function dotPaths(
   importId: string,
-  d: string,
+  dots: RendererDot[],
   options: { idPrefix?: string; color?: string; label?: string } = {},
 ): SvgPath[] {
   const { idPrefix = "dot", color, label } = options;
-  const subpaths = d.split(/(?=M)/).map((s) => s.trim()).filter(Boolean);
-  return subpaths.map((subpath, index) => {
-    const coords = (subpath.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
-    let sumX = 0;
-    let sumY = 0;
-    let count = 0;
-    for (let i = 0; i + 1 < coords.length; i += 2) {
-      sumX += coords[i];
-      sumY += coords[i + 1];
-      count++;
-    }
-    return {
-      id: `${importId}-${idPrefix}-${index}`,
-      d: subpath,
-      svgSource: "",
-      visible: true,
-      hasFill: true,
-      fillColor: color,
-      strokeColor: color,
-      sourceColor: color,
-      sourceOutlineVisible: true,
-      outlineVisible: true,
-      label,
-      pointTap: count > 0 ? { x: sumX / count, y: sumY / count } : undefined,
-    };
-  });
+  return dots.map((dot, index) => ({
+    id: `${importId}-${idPrefix}-${index}`,
+    d: dot.d,
+    svgSource: "",
+    visible: true,
+    hasFill: true,
+    fillColor: color,
+    strokeColor: color,
+    sourceColor: color,
+    sourceOutlineVisible: true,
+    outlineVisible: true,
+    label,
+    pointTap: { x: dot.x, y: dot.y },
+  }));
+}
+
+/** The stroked part and the dots of one validated layer, as document paths.
+ * `ids` names the stroke (`ink-<stroke>`) and prefixes the dots. */
+function layerPaths(
+  importId: string,
+  ids: { stroke: string; dots: string },
+  layer: ValidatedLayer,
+  label: string | undefined,
+  color: string | undefined,
+): SvgPath[] {
+  return [
+    ...(layer.d ? [inkPath(importId, ids.stroke, layer.d, label, color)] : []),
+    ...dotPaths(importId, layer.dots, { idPrefix: ids.dots, color, label }),
+  ];
 }
 
 /**
- * Turns a bitmap import into plottable geometry. Three shapes, depending on
- * the renderer and whether colour separation is active:
- * - Legacy single path: no separation, and the renderer's output is one
- *   continuous stroke (`producesDots` unset) — today's original behaviour.
- * - One `SvgPath` per ink channel: separation active, non-dot renderer —
- *   tagged with that ink's colour so the existing colour-group/layer-group
- *   machinery (built for SVG imports) picks them up unmodified.
- * - One `SvgPath` per dot (optionally further split per ink channel under
- *   separation): a `producesDots` renderer, via `splitDotPaths` — each dot
- *   independently fillable and plot-tappable.
+ * Turns a bitmap import into plottable geometry, in one of two shapes:
+ * - Legacy single path: no separation, and the renderer returned one
+ *   unnamed stroke and no dots — the original, and still the common, case.
+ * - `SvgPath`s otherwise: one per stroked layer (per ink under separation)
+ *   and one per dot, tagged with label and colour so the existing
+ *   colour-group/layer-group machinery built for SVG imports picks them up
+ *   unmodified.
  *
- * The renderer itself never changes between these cases — separation and dot
- * splitting are both a fan-out one level above `render()`, not a different
- * rendering mode.
+ * The renderer itself never changes between these cases — separation is a
+ * fan-out one level above `render()`, not a different rendering mode.
  */
 export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Promise<MaterializedBitmap> {
   if (!bitmap.bitmapDataUrl) return { bitmapRendererPath: "", paths: [] };
@@ -327,85 +320,61 @@ async function renderWith(
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
-  if (mode === "none") {
-    const [{ source }] = await preparedSources(bitmap, dataUrl);
-    const layers = validateRendererOutput(
-      await renderer.render({
-        width: source.width,
-        height: source.height,
-        scale: baseScale,
-        settings,
-        source,
-      }),
+  const render = async (source: RendererSource) =>
+    validateRendererOutput(
+      await renderer.render({ width: source.width, height: source.height, scale: baseScale, settings, source }),
       renderer.id,
     );
 
-    // A renderer that returned one unnamed path keeps the single-path
-    // representation; one that returned named layers is projected the same
-    // way a colour separation is, so multi-pen output needs no special case
-    // anywhere downstream.
-    if (layers.length === 1 && layers[0].label === undefined && layers[0].color === undefined) {
-      if (renderer.producesDots) {
-        return { bitmapRendererPath: "", paths: splitDotPaths(bitmap.id, layers[0].d) };
-      }
-      return { bitmapRendererPath: layers[0].d, paths: [] };
+  if (mode === "none") {
+    const [{ source }] = await preparedSources(bitmap, dataUrl);
+    const { layers, warnings } = await render(source);
+
+    // One unnamed stroke keeps the single-path representation; anything else
+    // is projected the same way a colour separation is, so multi-pen and dot
+    // output need no special case anywhere downstream.
+    const [only] = layers;
+    if (layers.length === 1 && only.label === undefined && only.color === undefined && only.dots.length === 0) {
+      return { bitmapRendererPath: only.d, paths: [], warnings };
     }
     return {
       bitmapRendererPath: "",
-      paths: layers.map((layer, index) => inkPath(bitmap.id, `${index}`, layer.d, layer.label, layer.color)),
+      paths: layers.flatMap((layer, index) =>
+        layerPaths(
+          bitmap.id,
+          { stroke: `${index}`, dots: layers.length === 1 ? "dot" : `dot-${index}` },
+          layer,
+          layer.label,
+          layer.color,
+        ),
+      ),
+      warnings,
     };
   }
 
   const channels = await preparedSources(bitmap, dataUrl);
-
-  const perChannel = await Promise.all(
-    channels.map(async (channel, index) => ({
-      channel,
-      index,
-      layers: validateRendererOutput(
-        await renderer.render({
-          width: channel.source.width,
-          height: channel.source.height,
-          scale: baseScale,
-          settings,
-          source: channel.source,
-        }),
-        renderer.id,
-      ),
-    })),
-  );
-
-  // A dot-producing renderer's per-channel output still needs splitting into
-  // individually fillable/tappable dots, exactly as the non-separated case
-  // does — just tagged with that channel's colour and label, and namespaced
-  // per channel so two channels' dots never collide on id.
-  if (renderer.producesDots) {
-    const dotPaths = perChannel.flatMap(({ channel, index, layers }) =>
-      layers.flatMap((layer, layerIndex) =>
-        splitDotPaths(bitmap.id, layer.d, {
-          idPrefix: layers.length === 1 ? `ink-${index}` : `ink-${index}-${layerIndex}`,
-          color: layer.color ?? channel.color,
-          label: layer.label ? `${channel.label} · ${layer.label}` : channel.label,
-        }),
-      ),
-    );
-    return { bitmapRendererPath: "", paths: dotPaths };
-  }
+  const suffixFor = (layerCount: number, index: number, layerIndex: number) =>
+    layerCount === 1 ? `${index}` : `${index}-${layerIndex}`;
+  const perChannel = await Promise.all(channels.map((channel) => render(channel.source)));
 
   // A renderer may itself split a channel into several layers, so the ink
   // channel and the renderer's own layer both contribute to the name and
   // colour — the channel says which ink, the layer says which part of it.
-  const paths = perChannel.flatMap(({ channel, index, layers }) =>
-    layers.map((layer, layerIndex) =>
-      inkPath(
+  const paths = perChannel.flatMap(({ layers }, index) =>
+    layers.flatMap((layer, layerIndex) =>
+      layerPaths(
         bitmap.id,
-        layers.length === 1 ? `${index}` : `${index}-${layerIndex}`,
-        layer.d,
-        layer.label ? `${channel.label} · ${layer.label}` : channel.label,
-        layer.color ?? channel.color,
+        // Namespaced per ink so two channels' paths never collide on id.
+        { stroke: suffixFor(layers.length, index, layerIndex), dots: `ink-${suffixFor(layers.length, index, layerIndex)}` },
+        layer,
+        layer.label ? `${channels[index].label} · ${layer.label}` : channels[index].label,
+        layer.color ?? channels[index].color,
       ),
     ),
   );
+  const warnings = [
+    ...new Set(perChannel.flatMap(({ warnings }, index) => warnings.map((warning) => `${channels[index].label}: ${warning}`))),
+  ];
 
-  return { bitmapRendererPath: "", paths };
+  return { bitmapRendererPath: "", paths, warnings };
 }

@@ -1,7 +1,8 @@
-import type { BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererFieldSchema, BitmapRendererSettings } from "../../../../types";
+import { coerceSettings } from "./coerceSettings";
 import { angleField, DEFAULT_ANGLE_DEG, DEFAULT_ORIGIN_PCT, originFields } from "./sharedFields";
 import { luminanceAt } from "./toneSpine/sampling";
-import type { BitmapRendererDefinition, RendererContext } from "./types";
+import type { BitmapRendererDefinition, RendererContext, RendererDot } from "./types";
 
 export const DOT_HALFTONE_RENDERER_ID = "dot-halftone";
 const DEFAULT_DOT_SCALE = 1;
@@ -23,13 +24,19 @@ export const dotHalftoneDefaults: BitmapRendererSettings = {
   originYPct: DEFAULT_ORIGIN_PCT,
 };
 
+const HALFTONE_FIELDS: BitmapRendererFieldSchema[] = [
+  { type: "number", key: "spacingMM", label: "Cell spacing (mm)", min: 0.1, max: 50, step: 0.1 },
+  { type: "number", key: "dotScale", label: "Dot scale", min: 0.5, max: 3, step: 0.05 },
+  angleField(),
+  ...originFields(),
+];
+
 function format(value: number): string {
   return Number(value.toFixed(2)).toString();
 }
 
-/** One dot's closed polyline-circle path, `M...L...Z` only — no arcs, so
- * `bitmapImage.ts` can split a renderer's dots back apart with a plain
- * string operation instead of a full path parser. */
+/** One dot's closed polyline-circle outline. Polylines rather than arcs so
+ * every downstream consumer (hatch fill, G-code) handles it as-is. */
 function circlePath(cx: number, cy: number, radius: number): string {
   const points: string[] = [];
   for (let i = 0; i < DOT_SEGMENTS; i++) {
@@ -48,18 +55,17 @@ function circlePath(cx: number, cy: number, radius: number): string {
  * cells slightly overlap their neighbours (>1) or stay inset (<1), matching
  * how a real halftone screen's dot gain is tuned.
  */
-export function generateDotHalftonePath({ source, settings, scale, width, height }: RendererContext): string {
-  if (!source || width < 1 || height < 1 || source.values.length === 0) return "";
+export function generateHalftoneDots({ source, settings: rawSettings, scale, width, height }: RendererContext): RendererDot[] {
+  if (!source || width < 1 || height < 1 || source.values.length === 0) return [];
 
+  const settings = coerceSettings(HALFTONE_FIELDS, dotHalftoneDefaults, rawSettings);
   const pixelsPerMM = 1 / Math.max(scale, 0.001);
-  const spacingMM = Math.max(0.1, Math.min(Number(settings.spacingMM), 50));
-  const spacing = Math.max(spacingMM * pixelsPerMM, 0.1);
+  const spacing = Math.max((settings.spacingMM as number) * pixelsPerMM, 0.1);
   const rowSpacing = spacing * ROW_SPACING_RATIO;
-  const dotScale = Math.max(0.5, Math.min(Number(settings.dotScale ?? DEFAULT_DOT_SCALE), 3));
-  const maxRadius = (spacing / 2) * dotScale;
-  const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
-  const originX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
-  const originY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
+  const maxRadius = (spacing / 2) * (settings.dotScale as number);
+  const angleRad = ((settings.angleDeg as number) * Math.PI) / 180;
+  const originX = ((settings.originXPct as number) / 100) * source.width;
+  const originY = ((settings.originYPct as number) / 100) * source.height;
 
   const u = { x: Math.cos(angleRad), y: Math.sin(angleRad) };
   const v = { x: -Math.sin(angleRad), y: Math.cos(angleRad) };
@@ -82,7 +88,7 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
   const jMin = Math.ceil(Math.min(...vCoords) / rowSpacing) - 1;
   const jMax = Math.floor(Math.max(...vCoords) / rowSpacing) + 1;
 
-  const dots: string[] = [];
+  const dots: RendererDot[] = [];
   for (let j = jMin; j <= jMax; j++) {
     const rowOffset = (((j % 2) + 2) % 2) * 0.5;
     for (let i = iMin; i <= iMax; i++) {
@@ -94,25 +100,21 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
       // radius proportional to tone gives area ∝ tone², printing a 50% grey
       // as 25% ink and crushing every midtone toward white.
       const radius = maxRadius * Math.sqrt(toneDark);
-      dots.push(circlePath(cx, cy, radius));
+      dots.push({ d: circlePath(cx, cy, radius), x: Number(format(cx)), y: Number(format(cy)) });
     }
   }
 
-  return dots.join(" ");
+  return dots;
 }
 
 export const dotHalftoneRenderer: BitmapRendererDefinition = {
   id: DOT_HALFTONE_RENDERER_ID,
   label: "Dot halftone",
   // 2: dot area, rather than radius, proportional to tone.
-  version: "2",
+  // 3: each dot's tap point is its exact centre, not its vertex average.
+  version: "3",
   defaults: dotHalftoneDefaults,
-  producesDots: true,
-  fields: [
-    { type: "number", key: "spacingMM", label: "Cell spacing (mm)", min: 0.1, max: 50, step: 0.1 },
-    { type: "number", key: "dotScale", label: "Dot scale", min: 0.5, max: 3, step: 0.05 },
-    angleField(),
-    ...originFields(),
-  ],
-  render: generateDotHalftonePath,
+  fields: HALFTONE_FIELDS,
+  // Returned as dots, so each is filled or plot-tapped on its own.
+  render: (context) => ({ layers: [{ dots: generateHalftoneDots(context) }] }),
 };

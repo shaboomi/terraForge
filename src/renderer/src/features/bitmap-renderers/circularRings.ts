@@ -47,5 +47,5 @@ export const circularRingsRenderer = defineToneSpineRenderer({
 export const circularRingsDefaults: BitmapRendererSettings = circularRingsRenderer.defaults;
 
 export function generateCircularRingsPath(context: RendererContext): string {
-  return circularRingsRenderer.render(context);
+  return circularRingsRenderer.render(context).layers[0].d;
 }

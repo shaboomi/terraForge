@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   dotHalftoneDefaults,
   dotHalftoneRenderer,
-  generateDotHalftonePath,
+  generateHalftoneDots,
 } from "../../src/renderer/src/features/bitmap-renderers/dotHalftone";
-import type { BitmapRendererSettings, RendererContext, RendererSource } from "../../src/types";
+import type { BitmapRendererSettings, RendererContext, RendererResult, RendererSource } from "../../src/types";
+
+/** Every dot's outline joined into one path, for assertions about the shapes. */
+const generateDotHalftonePath = (context: RendererContext) =>
+  generateHalftoneDots(context).map((dot) => dot.d).join(" ");
 
 const ctx = (source: RendererSource, settings: BitmapRendererSettings, scale = 1): RendererContext => ({
   width: source.width,
@@ -15,8 +19,21 @@ const ctx = (source: RendererSource, settings: BitmapRendererSettings, scale = 1
 });
 
 describe("dotHalftoneRenderer", () => {
-  it("declares itself a dot-producing renderer", () => {
-    expect(dotHalftoneRenderer.producesDots).toBe(true);
+  it("returns its output as dots, each tapped at its own centre", () => {
+    const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(0) };
+    const result = dotHalftoneRenderer.render(ctx(source, dotHalftoneDefaults)) as RendererResult;
+
+    const [layer] = result.layers;
+    expect(layer.d).toBeUndefined();
+    expect(layer.dots!.length).toBeGreaterThan(0);
+    for (const dot of layer.dots!) {
+      const numbers = (dot.d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      const xs = numbers.filter((_, i) => i % 2 === 0);
+      const ys = numbers.filter((_, i) => i % 2 === 1);
+      // Inside the dot's own bounding box, at its middle.
+      expect(dot.x).toBeCloseTo((Math.min(...xs) + Math.max(...xs)) / 2, 1);
+      expect(dot.y).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 1);
+    }
   });
 
   it("uses practical defaults for a legible initial render", () => {
@@ -24,7 +41,7 @@ describe("dotHalftoneRenderer", () => {
   });
 });
 
-describe("generateDotHalftonePath", () => {
+describe("generateHalftoneDots", () => {
   it("returns no path for an empty image", () => {
     const path = generateDotHalftonePath(
       ctx({ width: 0, height: 0, values: new Uint8Array() }, dotHalftoneDefaults),

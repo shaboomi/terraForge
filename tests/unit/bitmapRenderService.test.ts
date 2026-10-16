@@ -182,6 +182,19 @@ describe("rerenderBitmap", () => {
   });
 });
 
+describe("render warnings", () => {
+  it("stores a render's warnings with its output, and clears them once a render has none", async () => {
+    materialize.mockResolvedValueOnce({ bitmapRendererPath: "M1 1", paths: [], warnings: ["Cut short"] });
+    useCanvasStore.setState({ imports: [bitmapImport({ bitmapRenderSignature: "stale" })] });
+
+    await flushBitmapRenders();
+    expect(stored().bitmapRenderWarnings).toEqual(["Cut short"]);
+
+    await rerenderBitmap("bmp-1");
+    expect(stored().bitmapRenderWarnings).toBeUndefined();
+  });
+});
+
 describe("background rendering", () => {
   beforeEach(() => {
     vi.useFakeTimers();

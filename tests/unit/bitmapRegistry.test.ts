@@ -66,11 +66,6 @@ describe("pluginRendererFromManifest", () => {
   it("versions a plugin by its source hash", () => {
     expect(pluginRendererFromManifest({ ...pluginManifest, sourceHash: "abc" }).version).toBe("plugin:abc");
   });
-
-  it("carries a plugin's producesDots declaration so its output is split into dots", () => {
-    expect(pluginRendererFromManifest({ ...pluginManifest, producesDots: true }).producesDots).toBe(true);
-    expect(pluginRendererFromManifest(pluginManifest).producesDots).toBeUndefined();
-  });
 });
 
 describe("bitmapRenderers", () => {

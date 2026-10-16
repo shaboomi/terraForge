@@ -33,5 +33,5 @@ export const isometricGridRenderer = defineToneSpineRenderer({
 export const isometricGridDefaults: BitmapRendererSettings = isometricGridRenderer.defaults;
 
 export function generateIsometricGridPath(context: RendererContext): string {
-  return isometricGridRenderer.render(context);
+  return isometricGridRenderer.render(context).layers[0].d;
 }

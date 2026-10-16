@@ -121,6 +121,46 @@ describe("materializeBitmapLayers output checking", () => {
     expect(result.rendererVersion).toBe("2/acme@plugin:abc123");
   });
 
+  it("turns a plugin's dots into fillable paths tapped where the plugin said", async () => {
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({
+      layers: [{ dots: [{ d: "M0 0 L2 0 L2 2 Z", x: 1.5, y: 0.5 }] }],
+    });
+
+    const result = await materializeBitmapLayers(bitmap);
+
+    expect(result.bitmapRendererPath).toBe("");
+    expect(result.paths).toEqual([
+      expect.objectContaining({ id: "bmp-dot-0", d: "M0 0 L2 0 L2 2 Z", hasFill: true, pointTap: { x: 1.5, y: 0.5 } }),
+    ]);
+  });
+
+  it("keeps a layer's stroke and its dots as separate paths", async () => {
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({
+      layers: [{ d: "M0 0 L5 5", dots: [{ d: "M1 1 L2 1 Z", x: 1, y: 1 }], label: "Ink" }],
+    });
+
+    const { paths } = await materializeBitmapLayers(bitmap);
+
+    expect(paths.map((path) => [path.id, path.hasFill])).toEqual([
+      ["bmp-ink-0", false],
+      ["bmp-dot-0", true],
+    ]);
+  });
+
+  it("passes a renderer's warnings through", async () => {
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+
+    expect((await materializeBitmapLayers(bitmap)).warnings).toEqual(["Cut short"]);
+  });
+
+  it("names the ink a warning came from under colour separation, once per distinct warning", async () => {
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+
+    const { warnings } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb" });
+
+    expect(warnings).toEqual(["Red: Cut short", "Green: Cut short", "Blue: Cut short"]);
+  });
+
   it("checks every ink channel when colour separation is active", async () => {
     (window as any).terraForge.bitmapPlugins.render
       .mockResolvedValueOnce("M0 0 L1 1")
@@ -135,7 +175,10 @@ describe("materializeBitmapLayers output checking", () => {
 
 describe("validateRendererOutput", () => {
   it("treats a bare path string as one unnamed layer", () => {
-    expect(validateRendererOutput("M0 0 L1 1", "acme")).toEqual([{ d: "M0 0 L1 1" }]);
+    expect(validateRendererOutput("M0 0 L1 1", "acme")).toEqual({
+      layers: [{ d: "M0 0 L1 1", dots: [] }],
+      warnings: [],
+    });
   });
 
   it("accepts labelled, coloured layers for a renderer driving several pens", () => {
@@ -143,7 +186,22 @@ describe("validateRendererOutput", () => {
       { d: "M0 0 L1 1", label: "Outline", color: "#ff0000" },
       { d: "M2 2 L3 3", label: "Fill" },
     ];
-    expect(validateRendererOutput(layers, "acme")).toEqual(layers);
+    expect(validateRendererOutput(layers, "acme").layers).toEqual([
+      { d: "M0 0 L1 1", dots: [], label: "Outline", color: "#ff0000" },
+      { d: "M2 2 L3 3", dots: [], label: "Fill", color: undefined },
+    ]);
+  });
+
+  it("accepts the full { layers, warnings } form", () => {
+    const result = validateRendererOutput({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] }, "acme");
+    expect(result).toEqual({ layers: [{ d: "M0 0", dots: [], label: undefined, color: undefined }], warnings: ["Cut short"] });
+  });
+
+  it("accepts a layer of dots only, each with its own tap point", () => {
+    const dot = { d: "M0 0 L1 0 L1 1 Z", x: 0.5, y: 0.5 };
+    expect(validateRendererOutput({ layers: [{ dots: [dot] }] }, "acme").layers).toEqual([
+      { d: "", dots: [dot], label: undefined, color: undefined },
+    ]);
   });
 
   it("checks the path data of every layer, not just the first", () => {
@@ -152,10 +210,18 @@ describe("validateRendererOutput", () => {
     ).toThrow(/invalid path data/);
   });
 
-  it("rejects a layer with no path data", () => {
-    expect(() => validateRendererOutput([{ label: "Outline" }], "acme")).toThrow(
-      /returned undefined instead/,
+  it("checks every dot's outline and position", () => {
+    expect(() => validateRendererOutput({ layers: [{ dots: [{ d: "MNaN 0 Z", x: 0, y: 0 }] }] }, "acme")).toThrow(
+      /invalid path data/,
     );
+    expect(() => validateRendererOutput({ layers: [{ dots: [{ d: "M0 0 Z", x: NaN, y: 0 }] }] }, "acme")).toThrow(
+      /finite numeric x and y/,
+    );
+    expect(() => validateRendererOutput({ layers: [{ dots: "nope" }] }, "acme")).toThrow(/dots that are not an array/);
+  });
+
+  it("rejects a layer with neither path data nor dots", () => {
+    expect(() => validateRendererOutput([{ label: "Outline" }], "acme")).toThrow(/neither a 'd' path nor dots/);
   });
 
   it("rejects layer metadata of the wrong type", () => {
@@ -167,7 +233,14 @@ describe("validateRendererOutput", () => {
     );
   });
 
-  it("rejects anything that is neither a string nor an array", () => {
+  it("rejects warnings that are not strings, and keeps a few short ones", () => {
+    expect(() => validateRendererOutput({ layers: [], warnings: [3] }, "acme")).toThrow(/warnings/);
+    const many = validateRendererOutput({ layers: [], warnings: Array(20).fill("x".repeat(1000)) }, "acme").warnings;
+    expect(many.length).toBeLessThanOrEqual(5);
+    expect(many[0].length).toBeLessThanOrEqual(301);
+  });
+
+  it("rejects anything that is not a string, an array of layers, or { layers }", () => {
     expect(() => validateRendererOutput({ d: "M0 0" }, "acme")).toThrow(/expected a path string/);
     expect(() => validateRendererOutput(null, "acme")).toThrow(/returned null/);
   });

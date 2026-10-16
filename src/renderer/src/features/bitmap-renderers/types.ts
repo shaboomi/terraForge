@@ -16,6 +16,8 @@ export type {
   RendererSource,
   RendererContext,
   RendererLayer,
+  RendererDot,
+  RendererResult,
   RendererOutput,
   BitmapRendererFieldSchema,
   BitmapRendererIconName,
@@ -41,15 +43,6 @@ export interface BitmapRendererDefinition {
   version: string;
   /** Settings fields to render in the properties panel, in display order. */
   fields: BitmapRendererFieldSchema[];
-  /**
-   * Declares that this renderer's closed subpaths are independent shapes —
-   * dots — meant to be filled or plot-tapped individually, not one
-   * continuous stroke. When set, `materializeBitmapLayers` splits the
-   * rendered output into one `SvgPath` per dot (with `hasFill` and a
-   * centroid `pointTap`) instead of keeping it as a single stroked path, so
-   * the existing hatch-fill and plot-points features work on it unmodified.
-   */
-  producesDots?: boolean;
   /**
    * Sync for in-tree renderers; an externally-installed plugin's equivalent
    * runs in an isolated sandbox and is always async, so this must accept

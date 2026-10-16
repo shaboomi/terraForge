@@ -212,22 +212,34 @@ self.onmessage = function (event) {
 };
 
 /**
- * A renderer may return a single path string, or an array of layers when it
- * wants to drive several pens itself. Totals the path data either way so the
- * size ceiling covers both.
+ * A renderer may return a single path string, an array of layers, or
+ * { layers, warnings }; a layer may carry a stroked 'd', dots, or both.
+ * Totals the path data across all of it so the size ceiling covers every
+ * shape. The full structure is validated again outside the sandbox — this is
+ * only about not transporting a runaway result.
  */
 function outputLength(output) {
   if (typeof output === "string") return output.length;
-  if (!Array.isArray(output)) {
-    throw new Error("render() must return a path string or an array of layers, got " + typeof output + ".");
+  var layers = Array.isArray(output) ? output : output && Array.isArray(output.layers) ? output.layers : null;
+  if (!layers) {
+    throw new Error(
+      "render() must return a path string, an array of layers, or { layers, warnings }, got " + typeof output + "."
+    );
   }
   var total = 0;
-  for (var i = 0; i < output.length; i++) {
-    var layer = output[i];
-    if (!layer || typeof layer.d !== "string") {
-      throw new Error("render() layer " + i + " has no 'd' path string.");
+  for (var i = 0; i < layers.length; i++) {
+    var layer = layers[i];
+    if (!layer || (typeof layer.d !== "string" && !Array.isArray(layer.dots))) {
+      throw new Error("render() layer " + i + " has neither a 'd' path string nor a dots array.");
     }
-    total += layer.d.length;
+    if (typeof layer.d === "string") total += layer.d.length;
+    if (Array.isArray(layer.dots)) {
+      for (var j = 0; j < layer.dots.length; j++) {
+        var dot = layer.dots[j];
+        // A dot's position costs about as much to carry as a short path.
+        total += (dot && typeof dot.d === "string" ? dot.d.length : 0) + 16;
+      }
+    }
   }
   return total;
 }

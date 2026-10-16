@@ -78,5 +78,5 @@ export const concentricPolygonsRenderer = defineToneSpineRenderer({
 export const concentricPolygonsDefaults: BitmapRendererSettings = concentricPolygonsRenderer.defaults;
 
 export function generateConcentricPolygonsPath(context: RendererContext): string {
-  return concentricPolygonsRenderer.render(context);
+  return concentricPolygonsRenderer.render(context).layers[0].d;
 }

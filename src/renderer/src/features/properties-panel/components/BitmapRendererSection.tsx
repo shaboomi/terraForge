@@ -148,6 +148,11 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
       {renderer && renderStatus === "error" && (
         <p className="mt-1.5 text-[10px] text-red-400">Render failed: {renderError}</p>
       )}
+      {renderer && renderStatus !== "error" && imp.bitmapRenderWarnings?.map((warning) => (
+        <p key={warning} className="mt-1.5 text-[10px] text-amber-400">
+          {warning}
+        </p>
+      ))}
       {outdated && (
         <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[10px] text-content-muted">
           <span>This renderer has changed since this image was rendered.</span>

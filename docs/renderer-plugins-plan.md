@@ -15,8 +15,11 @@ plugin's source itself and posts it in as data; the plugin never touches disk.
 Settled and shipped:
 
 - **Contract.** `render(context)` taking one object — `width`, `height`,
-  `scale`, `settings`, and an **optional** `source`. Returns a path string, or
-  an array of `{ d, label?, color? }` layers to drive several pens.
+  `scale`, `settings` (already coerced to the manifest's schema), and an
+  **optional** `source` (already tone-shaped). Returns a path string, an
+  array of `{ d?, dots?, label?, color? }` layers to drive several pens, or
+  `{ layers, warnings? }`. Dots (`{ d, x, y }`) are independent fillable,
+  tappable shapes; warnings are shown under the renderer's controls.
 - **Manifests** declare `source` as `"required"` / `"optional"` / `"none"`, so
   the app knows without executing anything which renderers need an image.
 - **Validation** of every manifest field before a plugin loads, and of output

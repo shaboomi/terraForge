@@ -41,7 +41,19 @@ export interface SpineGeometry {
   /** Distance from the origin to the farthest image corner — how far a
    * pattern radiating from the origin must reach to cover the image. */
   maxRadius: number;
+  /** Reports something the user should know about this render — e.g. a
+   * generator stopping at its own size cap. */
+  warn(message: string): void;
 }
+
+/** What a tone-spine renderer returns: always a single stroked layer. */
+export interface ToneSpineResult {
+  layers: [{ d: string }];
+  warnings: string[];
+}
+
+const TRUNCATED_WARNING =
+  "Output was cut short at the point limit. Increase the spacing or tooth width to draw the whole image.";
 
 /** The standard spacing control, with a label naming what is being spaced. */
 export function spacingField(label: string, ariaLabel?: string): BitmapRendererNumberFieldSchema {
@@ -92,7 +104,7 @@ export interface ToneSpineRendererSpec {
  */
 export function defineToneSpineRenderer(
   spec: ToneSpineRendererSpec,
-): BitmapRendererDefinition & { render: (context: RendererContext) => string } {
+): BitmapRendererDefinition & { render: (context: RendererContext) => ToneSpineResult } {
   const amplitudeKey = spec.amplitudeKey ?? "amplitudeMM";
   const fields: BitmapRendererFieldSchema[] = [
     ...spec.fields.map(withoutUndefined),
@@ -112,9 +124,10 @@ export function defineToneSpineRenderer(
     peakClipPct: DEFAULT_PEAK_CLIP_PCT,
   };
 
-  const render = ({ source, settings: rawSettings, scale, width, height }: RendererContext): string => {
+  const render = ({ source, settings: rawSettings, scale, width, height }: RendererContext): ToneSpineResult => {
     // A tone spine traces tone, so it has nothing to draw without a source.
-    if (!source || width < 1 || height < 1 || source.values.length === 0) return "";
+    if (!source || width < 1 || height < 1 || source.values.length === 0) return { layers: [{ d: "" }], warnings: [] };
+    const warnings: string[] = [];
 
     const settings = coerceSettings(fields, defaults, rawSettings);
     const pixelsPerMM = 1 / Math.max(scale, 0.001);
@@ -137,9 +150,10 @@ export function defineToneSpineRenderer(
         Math.hypot(originX, source.height - originY),
         Math.hypot(source.width - originX, source.height - originY),
       ),
+      warn: (message) => warnings.push(message),
     };
 
-    return renderToneSpine(spec.strands(geometry, settings), {
+    const { d, truncated } = renderToneSpine(spec.strands(geometry, settings), {
       toothWidth,
       amplitude: (settings[amplitudeKey] as number) * pixelsPerMM,
       waveform: settings.waveform as WaveformId,
@@ -147,6 +161,8 @@ export function defineToneSpineRenderer(
       clipToImage: settings.clipToImage as boolean,
       peakClipPct: settings.peakClipPct as number,
     });
+    if (truncated) warnings.push(TRUNCATED_WARNING);
+    return { layers: [{ d }], warnings };
   };
 
   return {

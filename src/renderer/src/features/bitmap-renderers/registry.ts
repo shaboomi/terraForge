@@ -29,7 +29,6 @@ export function pluginRendererFromManifest(manifest: BitmapPluginManifest): Bitm
     version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,
-    producesDots: manifest.producesDots,
     render: (context) => window.terraForge.bitmapPlugins.render(manifest.id, context),
   };
 }

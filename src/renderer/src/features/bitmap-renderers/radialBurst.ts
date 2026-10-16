@@ -67,5 +67,5 @@ export const radialBurstRenderer = defineToneSpineRenderer({
 export const radialBurstDefaults: BitmapRendererSettings = radialBurstRenderer.defaults;
 
 export function generateRadialBurstPath(context: RendererContext): string {
-  return radialBurstRenderer.render(context);
+  return radialBurstRenderer.render(context).layers[0].d;
 }

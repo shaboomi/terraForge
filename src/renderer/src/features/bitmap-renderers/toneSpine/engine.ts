@@ -61,8 +61,9 @@ export interface ToneModulationOptions {
  *    draw the spine outside the image.
  * 3: no internal tone smoothing, levels or contrast — the pipeline shapes
  *    the source instead (see `toneAdjust.ts`).
+ * 4: one point budget per render across all strands (`MAX_RENDER_POINTS`).
  */
-export const TONE_SPINE_ENGINE_VERSION = 3;
+export const TONE_SPINE_ENGINE_VERSION = 4;
 
 function format(value: number): string {
   return Number(value.toFixed(2)).toString();
@@ -185,6 +186,21 @@ const FREQUENCY_GAIN = 2;
  * spine's point count, so this bounds the output regardless of shape. */
 const MAX_STRAND_POINTS = 200_000;
 
+/**
+ * The most points one whole render may draw, across all its strands. A
+ * per-strand cap alone leaves a many-strand renderer (fine rings, dense
+ * lines) unbounded until the path-length check rejects the entire render;
+ * this stops it early instead, keeping what was drawn and saying so. At
+ * roughly a dozen characters a point, it sits well inside that check.
+ */
+export const MAX_RENDER_POINTS = 3_000_000;
+
+/** Points still available to a render, shared by all its strands. */
+interface PointBudget {
+  remaining: number;
+  truncated: boolean;
+}
+
 const DISCONTINUITY_EPSILON = 1e-4;
 
 function interpolateSample(a: SpineSample, b: SpineSample, t: number): SpineSample {
@@ -263,8 +279,9 @@ function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: nu
  * Returns one `M...L L L...` path substring (with possible internal `M`
  * breaks), or "" for a strand too short to draw.
  */
-export function modulateStrand(points: SpineStrand, options: ToneModulationOptions): string {
+export function modulateStrand(points: SpineStrand, options: ToneModulationOptions, budget?: PointBudget): string {
   if (points.length === 0) return "";
+  const pointLimit = Math.min(MAX_STRAND_POINTS, budget?.remaining ?? Infinity);
   const {
     toothWidth,
     amplitude,
@@ -362,7 +379,7 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
         walkedLength = subArcLength * (1 - fraction);
       }
       pushPoint(startPoint, toneDark, phase);
-      if (commands.length >= MAX_STRAND_POINTS) return false;
+      if (commands.length >= pointLimit) return false;
     }
     const phaseBefore = phase;
     phase += (walkedLength / safeToothWidth) * (1 + FREQUENCY_GAIN * toneDark);
@@ -376,18 +393,24 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
       const position = walkedFrom ? interpolateSample(walkedFrom, base, t) : base;
       if (crossing.isJump) {
         pushPoint(position, toneDark, crossing.boundary - DISCONTINUITY_EPSILON);
-        if (commands.length >= MAX_STRAND_POINTS) return false;
+        if (commands.length >= pointLimit) return false;
       }
       pushPoint(position, toneDark, crossing.boundary);
-      if (commands.length >= MAX_STRAND_POINTS) return false;
+      if (commands.length >= pointLimit) return false;
     }
     if (!isPiecewiseLinear || isFinal) {
       pushPoint(base, toneDark, phase);
     }
-    return commands.length < MAX_STRAND_POINTS;
+    return commands.length < pointLimit;
   };
 
-  if (!visit(null, points[0], 0, points.length === 1)) return commands.join(" ");
+  if (!visit(null, points[0], 0, points.length === 1)) {
+    if (budget) {
+      budget.remaining -= commands.length;
+      budget.truncated = true;
+    }
+    return commands.join(" ");
+  }
 
   outer: for (let index = 1; index < points.length; index++) {
     const previous = points[index - 1];
@@ -416,15 +439,31 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     }
   }
 
+  if (budget) {
+    budget.remaining -= commands.length;
+    if (commands.length >= pointLimit) budget.truncated = true;
+  }
   return commands.join(" ");
 }
 
-/** Modulates every strand and joins the results into one multi-subpath `d`. */
-export function renderToneSpine(strands: Iterable<SpineStrand>, options: ToneModulationOptions): string {
+export interface ToneSpineOutput {
+  /** Every strand's modulated path, joined into one multi-subpath `d`. */
+  d: string;
+  /** Whether a point limit cut the output short. */
+  truncated: boolean;
+}
+
+/** Modulates every strand within one shared point budget. */
+export function renderToneSpine(strands: Iterable<SpineStrand>, options: ToneModulationOptions): ToneSpineOutput {
+  const budget: PointBudget = { remaining: MAX_RENDER_POINTS, truncated: false };
   const segments: string[] = [];
   for (const strand of strands) {
-    const segment = modulateStrand(strand, options);
+    if (budget.remaining <= 0) {
+      budget.truncated = true;
+      break;
+    }
+    const segment = modulateStrand(strand, options, budget);
     if (segment) segments.push(segment);
   }
-  return segments.join(" ");
+  return { d: segments.join(" "), truncated: budget.truncated };
 }

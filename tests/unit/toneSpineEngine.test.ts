@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { modulateStrand, renderToneSpine } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/engine";
+import {
+  MAX_RENDER_POINTS,
+  modulateStrand,
+  renderToneSpine,
+} from "../../src/renderer/src/features/bitmap-renderers/toneSpine/engine";
 import { waveformAt } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/waveforms";
 import type { RendererSource } from "../../src/types";
 
@@ -286,7 +290,20 @@ describe("modulateStrand stroke start", () => {
 describe("renderToneSpine", () => {
   it("joins multiple strands and skips empty ones", () => {
     const strand = [{ x: 0, y: 0, nx: 1, ny: 0 }, { x: 1, y: 0, nx: 1, ny: 0 }];
-    const path = renderToneSpine([strand, [], strand], { toothWidth: 1, amplitude: 0.5, waveform: "sawtooth", image });
-    expect(path.match(/M/g)).toHaveLength(2);
+    const { d, truncated } = renderToneSpine([strand, [], strand], { toothWidth: 1, amplitude: 0.5, waveform: "sawtooth", image });
+    expect(d.match(/M/g)).toHaveLength(2);
+    expect(truncated).toBe(false);
+  });
+
+  it("stops at one point budget shared by every strand, and says it did", () => {
+    // Many strands, each well under the per-strand cap, that together far
+    // exceed the whole-render budget.
+    const strand = Array.from({ length: 2_001 }, (_, i) => ({ x: (i % 10) * 0.001, y: 5, nx: 0, ny: 1 }));
+    const strands = Array.from({ length: Math.ceil(MAX_RENDER_POINTS / 2_000) + 50 }, () => strand);
+
+    const { d, truncated } = renderToneSpine(strands, { toothWidth: 1, amplitude: 0.5, waveform: "sine", image });
+
+    expect(truncated).toBe(true);
+    expect((d.match(/[ML]/g) ?? []).length).toBeLessThanOrEqual(MAX_RENDER_POINTS);
   });
 });

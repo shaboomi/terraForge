@@ -33,7 +33,7 @@ const MAX_SPIRAL_POINTS = 500_000;
  * stretching outer waveform periods, so the step is chosen per point to keep
  * every segment near `targetSegmentLength`.
  */
-function spiralStrand({ originX, originY, angleRad, spacing, targetSegmentLength, maxRadius }: SpineGeometry): SpineStrand {
+function spiralStrand({ originX, originY, angleRad, spacing, targetSegmentLength, maxRadius, warn }: SpineGeometry): SpineStrand {
   const maxTheta = (maxRadius / spacing) * Math.PI * 2;
   const radialRate = spacing / (Math.PI * 2);
   const points: SpineStrand = [];
@@ -45,6 +45,9 @@ function spiralStrand({ originX, originY, angleRad, spacing, targetSegmentLength
     points.push({ x: originX + radius * cos, y: originY + radius * sin, nx: cos, ny: sin });
     const arcRate = Math.hypot(radialRate, radius);
     theta += Math.min(0.05, targetSegmentLength / Math.max(arcRate, 0.001));
+  }
+  if (points.length >= MAX_SPIRAL_POINTS) {
+    warn("The spiral was cut short before reaching the image edge. Increase the spacing or tooth width.");
   }
 
   return points;
@@ -69,5 +72,5 @@ export const spiralAmplitudeDefaults: BitmapRendererSettings = spiralAmplitudeRe
 
 /** One continuous Archimedean spiral, tone-modulated along its length. */
 export function generateSpiralAmplitudePath(context: RendererContext): string {
-  return spiralAmplitudeRenderer.render(context);
+  return spiralAmplitudeRenderer.render(context).layers[0].d;
 }

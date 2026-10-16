@@ -2,39 +2,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearBitmapDecodeCache,
   materializeBitmapLayers,
-  splitDotPaths,
+  dotPaths,
 } from "@renderer/features/bitmap-renderers/bitmapImage";
 
-describe("splitDotPaths", () => {
-  it("splits a multi-subpath d string into one SvgPath per dot", () => {
-    const d = "M0 0 L2 0 L2 2 L0 2 Z M10 10 L12 10 L12 12 L10 12 Z";
-    const paths = splitDotPaths("imp-1", d);
+describe("dotPaths", () => {
+  const dots = [
+    { d: "M0 0 L2 0 L2 2 L0 2 Z", x: 1, y: 1 },
+    { d: "M10 10 L12 10 L12 12 L10 12 Z", x: 11, y: 11 },
+  ];
 
-    expect(paths).toHaveLength(2);
-    expect(paths[0].d).toBe("M0 0 L2 0 L2 2 L0 2 Z");
-    expect(paths[1].d).toBe("M10 10 L12 10 L12 12 L10 12 Z");
+  it("turns each dot into its own SvgPath, outline unchanged", () => {
+    const paths = dotPaths("imp-1", dots);
+    expect(paths.map((path) => path.d)).toEqual(dots.map((dot) => dot.d));
   });
 
-  it("marks every dot fillable, with a pointTap at its vertex centroid", () => {
-    const d = "M0 0 L4 0 L4 4 L0 4 Z";
-    const [dot] = splitDotPaths("imp-1", d);
-
-    expect(dot.hasFill).toBe(true);
-    expect(dot.sourceOutlineVisible).toBe(true);
-    expect(dot.pointTap).toEqual({ x: 2, y: 2 });
+  it("marks every dot fillable, tapped exactly where the renderer said", () => {
+    const [first, second] = dotPaths("imp-1", dots);
+    expect(first.hasFill).toBe(true);
+    expect(first.sourceOutlineVisible).toBe(true);
+    expect(first.pointTap).toEqual({ x: 1, y: 1 });
+    expect(second.pointTap).toEqual({ x: 11, y: 11 });
   });
 
   it("gives every dot a stable, unique id derived from the import", () => {
-    const paths = splitDotPaths("imp-7", "M0 0 L1 0 Z M2 2 L3 2 Z");
-    expect(paths.map((p) => p.id)).toEqual(["imp-7-dot-0", "imp-7-dot-1"]);
+    expect(dotPaths("imp-7", dots).map((p) => p.id)).toEqual(["imp-7-dot-0", "imp-7-dot-1"]);
+    expect(dotPaths("imp-7", dots, { idPrefix: "ink-2" }).map((p) => p.id)).toEqual(["imp-7-ink-2-0", "imp-7-ink-2-1"]);
   });
 
-  it("returns nothing for an empty path", () => {
-    expect(splitDotPaths("imp-1", "")).toEqual([]);
+  it("returns nothing for no dots", () => {
+    expect(dotPaths("imp-1", [])).toEqual([]);
   });
 });
 
-describe("materializeBitmapLayers with a dot-producing renderer", () => {
+describe("materializeBitmapLayers with a renderer that returns dots", () => {
   const getImageData = vi.fn();
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
 

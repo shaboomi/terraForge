@@ -98,7 +98,7 @@ describe("example plugins", () => {
         source: source(40, 40, (x) => (x < 20 ? 0 : 255)),
       });
 
-      const layers = validateRendererOutput(output, "example.tonal-lines");
+      const { layers } = validateRendererOutput(output, "example.tonal-lines");
       expect(layers).toHaveLength(1);
       expect(layers[0].d).toMatch(/^M/);
     });
@@ -181,7 +181,7 @@ describe("example plugins", () => {
         settings: { petals: 5, ratio: 0.6, twoPens: false },
       });
 
-      const layers = validateRendererOutput(output, "example.spirograph");
+      const { layers } = validateRendererOutput(output, "example.spirograph");
       expect(layers).toHaveLength(1);
       expect(layers[0].d).toMatch(/^M/);
     });
@@ -208,7 +208,7 @@ describe("example plugins", () => {
         settings: { petals: 5, ratio: 0.6, twoPens: true },
       });
 
-      const layers = validateRendererOutput(output, "example.spirograph");
+      const { layers } = validateRendererOutput(output, "example.spirograph");
       expect(layers).toHaveLength(2);
       expect(layers.map((layer) => layer.label)).toEqual(["Outer sweep", "Return sweep"]);
       expect(layers.every((layer) => typeof layer.color === "string")).toBe(true);

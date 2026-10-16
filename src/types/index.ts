@@ -373,22 +373,48 @@ export interface RendererContext {
   source?: RendererSource;
 }
 
+/**
+ * One independent closed shape — a halftone dot, a stipple — meant to be
+ * filled or plotted as a single pen tap on its own, rather than drawn as part
+ * of a continuous stroke.
+ */
+export interface RendererDot {
+  /** The dot's closed outline, in output units. */
+  d: string;
+  /** Where a single pen tap for this dot lands — normally its centre. */
+  x: number;
+  y: number;
+}
+
 /** One named, coloured layer of a renderer's output. */
 export interface RendererLayer {
-  /** Path data, in output units. */
-  d: string;
+  /** Stroked path data, in output units. May be omitted for a layer of dots only. */
+  d?: string;
+  /** Independent dots, each fillable and tappable on its own. */
+  dots?: RendererDot[];
   /** Name for this layer — an ink, a pen, a pass. */
   label?: string;
   /** Suggested stroke colour, as a CSS colour string. */
   color?: string;
 }
 
+/** The full form of a render's result, for when a bare path is not enough. */
+export interface RendererResult {
+  layers: RendererLayer[];
+  /**
+   * Short notes for the user about this render — e.g. that output was cut
+   * short at a size limit — shown under the renderer's controls.
+   */
+  warnings?: string[];
+}
+
 /**
- * What a renderer returns: a single path, or several labelled layers when it
- * wants to drive more than one pen itself. A bare string stays valid because
- * it is the overwhelmingly common case and nothing should have to wrap it.
+ * What a renderer returns: a single path; several labelled layers, when it
+ * wants to drive more than one pen itself; or a full `RendererResult`, to
+ * return dots or warnings. A bare string stays valid because it is the
+ * overwhelmingly common case and nothing should have to wrap it.
  */
-export type RendererOutput = string | RendererLayer[];
+export type RendererOutput = string | RendererLayer[] | RendererResult;
 
 /**
  * Icon identifiers a renderer's field schema can reference. The properties
@@ -487,13 +513,6 @@ export interface BitmapPluginManifest {
    */
   source?: "required" | "optional" | "none";
   /**
-   * Declares that this renderer's closed subpaths are independent dots meant
-   * to be filled or plot-tapped individually rather than one continuous
-   * stroke — see `BitmapRendererDefinition.producesDots` for how the app
-   * uses this.
-   */
-  producesDots?: boolean;
-  /**
    * Set by the app at discovery, never read from manifest.json: a hash of
    * the plugin's source files, so a drawing rendered with an older copy of
    * the plugin can be recognised as such. Absent when the source could not
@@ -539,6 +558,8 @@ export interface SvgImport {
    * older drawing's renderer-level `autoLevels`/`contrast` settings apply.
    */
   bitmapTone?: { autoLevels?: boolean; contrast?: number; smoothingMM?: number };
+  /** Notes the renderer reported about the stored output (see `RendererResult.warnings`). */
+  bitmapRenderWarnings?: string[];
   /** Source scale used to convert renderer controls in mm into bitmap pixels. */
   bitmapBaseScale?: number;
   /** Opacity of the source image below the generated preview. */

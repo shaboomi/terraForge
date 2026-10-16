@@ -446,12 +446,12 @@ export function useImportActions() {
         bitmapRendererSettings,
         bitmapBaseScale: baseScale,
       };
-      const { bitmapRendererPath, rendererVersion } = await materializeBitmapLayers(renderInputs);
+      const { bitmapRendererPath, paths, rendererVersion, warnings } = await materializeBitmapLayers(renderInputs);
       const objW = image.naturalWidth * baseScale;
       const objH = image.naturalHeight * baseScale;
       const origin = activeMachineConfig?.origin ?? "bottom-left";
       const imp: SvgImport = {
-        id: importId, name, kind: "bitmap", paths: [], x: origin.includes("right") ? (activeMachineConfig?.bedWidth ?? 220) - objW : 0,
+        id: importId, name, kind: "bitmap", paths, x: origin.includes("right") ? (activeMachineConfig?.bedWidth ?? 220) - objW : 0,
         y: origin.includes("top") ? -objH : 0, scale: baseScale, rotation: 0, visible: true,
         svgWidth: image.naturalWidth, svgHeight: image.naturalHeight, viewBoxX: 0, viewBoxY: 0,
         bitmapDataUrl, bitmapMimeType: mimeType, bitmapRendererId: defaultRenderer.id,
@@ -460,6 +460,7 @@ export function useImportActions() {
         // re-render geometry that was just produced.
         bitmapRenderSignature: bitmapRenderSignature(renderInputs),
         bitmapRendererVersion: rendererVersion,
+        bitmapRenderWarnings: warnings?.length ? warnings : undefined,
         bitmapSourceVisible: true,
         bitmapPreviewOpacity: 1,
         bitmapPreviewVisible: true,

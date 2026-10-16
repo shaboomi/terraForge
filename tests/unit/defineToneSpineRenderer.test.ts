@@ -62,13 +62,32 @@ describe("defineToneSpineRenderer", () => {
       scale: 1,
       settings: { spacingMM: "garbage", toothWidthMM: NaN, waveform: "nope" } as never,
       source,
-    });
+    }).layers[0].d;
 
     expect(path).toMatch(/^M/);
     expect(path).not.toContain("NaN");
   });
 
   it("draws nothing without a source to trace", () => {
-    expect(lineRenderer().render({ width: 40, height: 20, scale: 1, settings: {} })).toBe("");
+    expect(lineRenderer().render({ width: 40, height: 20, scale: 1, settings: {} })).toEqual({
+      layers: [{ d: "" }],
+      warnings: [],
+    });
+  });
+
+  it("passes on a generator's warnings", () => {
+    const renderer = defineToneSpineRenderer({
+      id: "test-warn",
+      label: "Test warn",
+      revision: 1,
+      fields: [],
+      defaults: { toothWidthMM: 3, amplitudeMM: 1 },
+      strands(geometry) {
+        geometry.warn("Stopped early.");
+        return [];
+      },
+    });
+
+    expect(renderer.render({ width: 40, height: 20, scale: 1, settings: {}, source }).warnings).toEqual(["Stopped early."]);
   });
 });

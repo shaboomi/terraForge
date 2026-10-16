@@ -27,5 +27,5 @@ export const rasterLinesRenderer = defineToneSpineRenderer({
 export const rasterLinesDefaults: BitmapRendererSettings = rasterLinesRenderer.defaults;
 
 export function generateRasterLinesPath(context: RendererContext): string {
-  return rasterLinesRenderer.render(context);
+  return rasterLinesRenderer.render(context).layers[0].d;
 }

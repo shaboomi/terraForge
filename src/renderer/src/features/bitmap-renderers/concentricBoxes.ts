@@ -80,5 +80,5 @@ export const concentricBoxesRenderer = defineToneSpineRenderer({
 export const concentricBoxesDefaults: BitmapRendererSettings = concentricBoxesRenderer.defaults;
 
 export function generateConcentricBoxesPath(context: RendererContext): string {
-  return concentricBoxesRenderer.render(context);
+  return concentricBoxesRenderer.render(context).layers[0].d;
 }

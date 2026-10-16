@@ -19,7 +19,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Item | State | Commit |
 |---|---|---|
 | 1. Stale geometry plotted | Fixed — render service plus G-code flush guard (also delivers A4) | `e2cfd47` |
-| 2. `producesDots` dropped | Fixed | `f37600b` |
+| 2. `producesDots` dropped | Fixed, then superseded: A5 replaced `producesDots` with dots returned as data | `f37600b` |
 | 3. Strand start / closed shapes | Fixed (sine re-entry too) | `c36a718` |
 | 4. `clipToImage = false` bleed | Fixed | `697bcf3` |
 | 5. Settings not coerced | Fixed — `coerceSettings` (per-renderer clamp code removed in A1) | `4f48b99` |
@@ -30,6 +30,10 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | A3. Tone preprocessing | Done — `toneAdjust.ts`; per-import Tone section for every renderer and plugin; auto levels still per ink channel under separation (issue 15) | `6dddf4f` |
 | A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | `0fb3342` |
 | 13. Stale "Sawtooth width" label | Fixed in A1; other items in 13 still open | `0fb3342` |
+| 8. Silent truncation | Fixed in A5 — one point budget per render, truncation reported as a warning; spiral reports its own cap | (A5 commit) |
+| 10. Fragile dot splitting | Fixed in A5 — dots are data (`{ d, x, y }`), nothing is parsed | (A5 commit) |
+| 14. Import ignored `paths` | Fixed in A5; decode limits still open | (A5 commit) |
+| A5. Structured result | Done, kept as API version 1 (unreleased) — `{ layers, warnings }`, dot layers; docs and examples checked | (A5 commit) |
 | Everything else | Open | — |
 
 ---
