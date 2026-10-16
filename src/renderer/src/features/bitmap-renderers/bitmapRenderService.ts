@@ -46,7 +46,11 @@ interface BitmapRenderStatusStore {
   entries: Record<string, BitmapRenderState>;
 }
 
-export const useBitmapRenderStatusStore = create<BitmapRenderStatusStore>(() => ({ entries: {} }));
+// Reused across hot reloads (see the bottom of this file), so a component
+// still holding the previous version of this module reads the same store the
+// running service writes to.
+export const useBitmapRenderStatusStore: ReturnType<typeof create<BitmapRenderStatusStore>> =
+  import.meta.hot?.data?.statusStore ?? create<BitmapRenderStatusStore>(() => ({ entries: {} }));
 
 const IDLE: BitmapRenderState = { status: "idle", error: null };
 
@@ -308,4 +312,27 @@ export function startBitmapRenderService(): () => void {
     stopService = null;
   };
   return stopService;
+}
+
+/**
+ * Dev-only: survive hot reload of this module. By default Vite lets the
+ * importing components accept an update to this file, which never disposes
+ * this module: the previous version's service kept running and rendering
+ * into its own status store while the reloaded panel read a fresh, never-
+ * written one — so the status sat on "Ready" for the rest of the session.
+ *
+ * Accepting its own updates means this module is disposed and replaced
+ * directly: the old service is stopped, the new version started in its place,
+ * and the status store carried over, so components still bound to the
+ * previous version read the same store the running service writes to.
+ */
+if (import.meta.hot) {
+  const wasRunning = import.meta.hot.data?.serviceRunning === true;
+  import.meta.hot.accept();
+  import.meta.hot.dispose((data) => {
+    data.serviceRunning = stopService !== null;
+    data.statusStore = useBitmapRenderStatusStore;
+    stopService?.();
+  });
+  if (wasRunning) startBitmapRenderService();
 }

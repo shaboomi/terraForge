@@ -3,8 +3,8 @@ import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
 import { prepareSource, resolveToneSettings } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
-import { bitmapRenderers, findBitmapRenderer, getBitmapRenderer } from "./registry";
-import { runInTreeRenderer } from "./rendererPool";
+import { findBitmapRenderer, getBitmapRenderer } from "./registry";
+import { runRenderer } from "./rendererPool";
 import { validateRendererOutput, type ValidatedLayer } from "./validatePath";
 import type { BitmapRendererDefinition, RendererSource } from "./types";
 
@@ -325,16 +325,9 @@ async function renderWith(
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
-  // In-tree renderers run in the worker pool; a plugin already runs in its
-  // own sandbox process, so it is called directly.
-  const inTree = bitmapRenderers.includes(renderer);
   const render = async (source: RendererSource) => {
     const context = { width: source.width, height: source.height, scale: baseScale, settings, source };
-    const output = inTree ? await runInTreeRenderer(renderer, context, signal) : await renderer.render(context);
-    // A plugin render cannot be stopped mid-flight, but its result must not
-    // be used once the caller has moved on.
-    if (signal?.aborted) throw new DOMException("Render cancelled.", "AbortError");
-    return validateRendererOutput(output, renderer.id);
+    return validateRendererOutput(await runRenderer(renderer, context, signal), renderer.id);
   };
 
   if (mode === "none") {

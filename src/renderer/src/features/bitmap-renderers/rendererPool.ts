@@ -1,4 +1,5 @@
 import type { RendererContext, RendererOutput } from "../../../../types";
+import { bitmapRenderers } from "./registry";
 import type { RenderReply, RenderRequest } from "./renderRequest";
 import type { BitmapRendererDefinition } from "./types";
 
@@ -117,9 +118,35 @@ export function runInTreeRenderer(
   });
 }
 
+/**
+ * Runs any renderer: in-tree ones in the worker pool, plugins directly (a
+ * plugin already runs in its own sandbox process). A plugin render cannot be
+ * stopped mid-flight, but once `signal` is aborted its result is refused all
+ * the same, so a superseded render never reaches the document.
+ */
+export async function runRenderer(
+  renderer: BitmapRendererDefinition,
+  context: RendererContext,
+  signal?: AbortSignal,
+): Promise<RendererOutput> {
+  if (bitmapRenderers.includes(renderer)) return runInTreeRenderer(renderer, context, signal);
+  const output = await renderer.render(context);
+  if (signal?.aborted) throw abortError();
+  return output;
+}
+
 /** Terminates every worker and forgets queued work. For tests. */
 export function resetRendererPool(): void {
   slots?.forEach((slot) => slot.worker.terminate());
   slots = null;
   queue.length = 0;
+}
+
+// Dev-only: accept hot updates here — this module's own, or any in-tree
+// renderer's, which arrive through the registry import — by stopping the
+// previous version's workers; the replacement module starts fresh ones, on the
+// new renderer code, at its next render.
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose(() => resetRendererPool());
 }
