@@ -24,11 +24,13 @@ export interface ToneModulationOptions {
   waveform: WaveformId;
   image: RendererSource;
   /**
-   * When true (the default when omitted), a base point outside the image
-   * breaks the path rather than drawing through it, and a displaced point
-   * is clamped back into bounds. When false, neither happens: the wobble
-   * can push geometry past the image edge by (at most) the amplitude
-   * setting. There's a real trade-off either way — clamping can flatten a
+   * When true (the default when omitted), a displaced point is clamped back
+   * into the image bounds. When false, the wobble can push geometry past the
+   * image edge by (at most) the amplitude setting. Either way, a base point
+   * outside the image breaks the path rather than drawing through it: the
+   * spine generators deliberately reach the image's farthest corner, so
+   * drawing it outside the image would add whole areas of unmodulated
+   * geometry beyond the picture, not just an amplitude's worth of overflow. There's a real trade-off either way — clamping can flatten a
    * sharp waveform peak (most visible on sawtooth) into a flat edge right
    * where the render reaches the image boundary, which every circular/
    * spiral renderer's outer edge does by design — so this is exposed as a
@@ -248,14 +250,13 @@ function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: nu
  * every visited point — rather than once per cycle — so tone can drive the
  * waveform's phase rate as well as its amplitude: a darker point both
  * displaces more and oscillates faster, the "busier where it's darker" look
- * a fixed-frequency wobble can't produce. When `options.clipToImage` is
- * true, a point outside the image's own bounds is skipped (phase stays
- * frozen while invisible, so the wobble resumes smoothly on re-entry) and
- * breaks the path into a new `M`, rather than ever displacing geometry past
- * the image edge; a point that is inside has its displaced position clamped
- * back into bounds as a cheap safety net against the wobble itself pushing
- * it back out. When false, neither applies — see
- * `ToneModulationOptions.clipToImage`.
+ * a fixed-frequency wobble can't produce. A base point outside the image's
+ * own bounds is skipped (phase stays frozen while invisible, so the wobble
+ * resumes smoothly on re-entry) and breaks the path into a new `M`. When
+ * `options.clipToImage` is true, a point that is inside also has its
+ * displaced position clamped back into bounds, so the wobble itself never
+ * pushes geometry past the image edge; when false, it may overflow by up to
+ * the amplitude — see `ToneModulationOptions.clipToImage`.
  *
  * For a piecewise-linear waveform (triangle/square/sawtooth —
  * `JUMP_PHASES`/`SLOPE_PHASES`, plus any extra phases peak-clipping adds),
@@ -338,7 +339,9 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     subArcLength: number,
     isFinal: boolean,
   ): boolean => {
-    if (clipToImage && !isInsideBounds(base.x, base.y, image.width, image.height)) {
+    // The image is the extent of the picture, so a base point outside it is
+    // never drawn, whatever `clipToImage` says — see that option.
+    if (!isInsideBounds(base.x, base.y, image.width, image.height)) {
       broken = true;
       return true;
     }

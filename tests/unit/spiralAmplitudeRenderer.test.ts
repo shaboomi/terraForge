@@ -122,6 +122,29 @@ describe("generateSpiralAmplitudePath", () => {
     expect(outside).toBe(true);
   });
 
+  it("overflows by no more than the amplitude when clipToImage is turned off", () => {
+    // A wide image: the spiral reaches its far corners, so most of each turn
+    // lies outside the picture. Only the wobble may cross the edge.
+    const width = 160;
+    const height = 40;
+    const amplitude = 4;
+    const path = generateSpiralAmplitudePath(
+      ctx(
+        { width, height, values: new Uint8Array(width * height).fill(0) },
+        { spacingMM: 3, toothWidthMM: 2, amplitude, clipToImage: false },
+        1,
+      ),
+    );
+    const numbers = (path.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    expect(numbers.length).toBeGreaterThan(0);
+    for (let i = 0; i + 1 < numbers.length; i += 2) {
+      expect(numbers[i]).toBeGreaterThanOrEqual(-amplitude - 0.01);
+      expect(numbers[i]).toBeLessThanOrEqual(width + amplitude + 0.01);
+      expect(numbers[i + 1]).toBeGreaterThanOrEqual(-amplitude - 0.01);
+      expect(numbers[i + 1]).toBeLessThanOrEqual(height + amplitude + 0.01);
+    }
+  });
+
   it("changes the render when peakClipPct is lowered from its 100% default", () => {
     const source = { width: 40, height: 40, values: new Uint8Array(1600).fill(0) };
     const unclipped = generateSpiralAmplitudePath(ctx(source, { spacingMM: 3, toothWidthMM: 2, amplitude: 4 }, 1));
