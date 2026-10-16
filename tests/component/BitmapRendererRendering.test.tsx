@@ -272,6 +272,30 @@ describe("BitmapRendererSection re-render behaviour", () => {
     expect(storedImport().bitmapRenderSignature).toBe(bitmapRenderSignature(storedImport()));
   });
 
+  describe("tone", () => {
+    it("shows tone controls for every renderer, from the shared pipeline", () => {
+      const imp = bitmapImport({ bitmapRendererId: "dot-halftone", bitmapRendererSettings: {} });
+      renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
+
+      expect(screen.getByLabelText("Auto levels")).toBeInTheDocument();
+      expect(screen.getByLabelText("Contrast")).toBeInTheDocument();
+      expect(screen.getByLabelText("Smoothing (mm)")).toBeInTheDocument();
+    });
+
+    it("stores an edit as explicit tone, carrying an older drawing's settings over", async () => {
+      const imp = bitmapImport({ bitmapRendererSettings: { spacingMM: 8, toothWidthMM: 9, amplitude: 10, autoLevels: true } });
+      renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
+      expect(screen.getByLabelText("Auto levels")).toBeChecked();
+
+      fireEvent.change(screen.getByLabelText("Contrast"), { target: { value: "2" } });
+
+      expect(storedImport().bitmapTone).toEqual({ autoLevels: true, contrast: 2, smoothingMM: 0.5 });
+      // A tone change is a settings change: it re-renders like any other.
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+      expect(materialize).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("output from an older renderer version", () => {
     /** Settings unchanged since the render, but made by an older renderer. */
     function oldRender() {

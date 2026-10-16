@@ -42,24 +42,7 @@ export function peakClipField(): BitmapRendererNumberFieldSchema {
   return { type: "number", key: "peakClipPct", label: "Peak clip (%)", min: 1, max: 100, step: 1 };
 }
 
-/** A third, independent tone-shaping feature from `clipToImageField`/
- * `peakClipField`: rescales tone to this image's own darkest/lightest
- * sampled pixel instead of assuming the full 0–255 range, so a low-contrast
- * photo (no true blacks) still reaches full amplitude somewhere, rather than
- * silently topping out below the dial's actual max everywhere. */
-export function autoLevelsField(): BitmapRendererBooleanFieldSchema {
-  return { type: "boolean", key: "autoLevels", label: "Auto levels" };
-}
-
-/** Pushes tone away from (above 1) or toward (below 1) mid-grey, applied
- * after auto levels if that's also on. 1 (the default) is neutral. */
-export function contrastField(): BitmapRendererNumberFieldSchema {
-  return { type: "number", key: "contrast", label: "Contrast", min: 0.1, max: 3, step: 0.05 };
-}
-
 export const DEFAULT_ANGLE_DEG = 0;
 export const DEFAULT_ORIGIN_PCT = 50;
 export const DEFAULT_CLIP_TO_IMAGE = true;
 export const DEFAULT_PEAK_CLIP_PCT = 100;
-export const DEFAULT_AUTO_LEVELS = false;
-export const DEFAULT_CONTRAST = 1;

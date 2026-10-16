@@ -2,13 +2,9 @@ import type { BitmapRendererSettings } from "../../../../types";
 import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
 import {
   angleField,
-  autoLevelsField,
   clipToImageField,
-  contrastField,
   DEFAULT_ANGLE_DEG,
-  DEFAULT_AUTO_LEVELS,
   DEFAULT_CLIP_TO_IMAGE,
-  DEFAULT_CONTRAST,
   DEFAULT_ORIGIN_PCT,
   DEFAULT_PEAK_CLIP_PCT,
   originFields,
@@ -32,8 +28,6 @@ export const radialBurstDefaults: BitmapRendererSettings = {
   originYPct: DEFAULT_ORIGIN_PCT,
   clipToImage: DEFAULT_CLIP_TO_IMAGE,
   peakClipPct: DEFAULT_PEAK_CLIP_PCT,
-  autoLevels: DEFAULT_AUTO_LEVELS,
-  contrast: DEFAULT_CONTRAST,
 };
 
 /**
@@ -77,8 +71,6 @@ export function generateRadialBurstPath({ source, settings, scale, width, height
   const waveform = (settings.waveform as WaveformId) ?? DEFAULT_WAVEFORM;
   const clipToImage = (settings.clipToImage as boolean | undefined) ?? DEFAULT_CLIP_TO_IMAGE;
   const peakClipPct = Number(settings.peakClipPct ?? DEFAULT_PEAK_CLIP_PCT);
-  const autoLevels = (settings.autoLevels as boolean | undefined) ?? DEFAULT_AUTO_LEVELS;
-  const contrast = Number(settings.contrast ?? DEFAULT_CONTRAST);
   const angleRad = (Number(settings.angleDeg ?? DEFAULT_ANGLE_DEG) * Math.PI) / 180;
   const originX = (Number(settings.originXPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.width;
   const originY = (Number(settings.originYPct ?? DEFAULT_ORIGIN_PCT) / 100) * source.height;
@@ -105,8 +97,6 @@ export function generateRadialBurstPath({ source, settings, scale, width, height
     image: source,
     clipToImage,
     peakClipPct,
-    autoLevels,
-    contrast,
   });
 }
 
@@ -124,8 +114,6 @@ export const radialBurstRenderer: BitmapRendererDefinition = {
     ...originFields(),
     clipToImageField(),
     peakClipField(),
-    autoLevelsField(),
-    contrastField(),
   ],
   render: generateRadialBurstPath,
 };

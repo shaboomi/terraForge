@@ -1,6 +1,7 @@
 import type { SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
+import { prepareSource, resolveToneSettings } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { validateRendererOutput } from "./validatePath";
@@ -29,9 +30,11 @@ export function dataUrlFromBytes(bytes: Uint8Array, mimeType: string): string {
  */
 let decodeCache: { dataUrl: string; image: ImageData } | null = null;
 
-/** Drops the cached decode. Exported for tests; the cache self-evicts otherwise. */
+/** Drops the cached decode and prepared sources. Exported for tests; both
+ * caches self-evict otherwise. */
 export function clearBitmapDecodeCache(): void {
   decodeCache = null;
+  preparedCache = null;
 }
 
 async function decodeToImageData(dataUrl: string): Promise<ImageData> {
@@ -101,8 +104,11 @@ export async function decodeBitmapColor(dataUrl: string): Promise<BitmapColorDat
  * Bump when a change in the shared pipeline around renderers — decoding,
  * settings coercion, separation, dot splitting — alters output for the same
  * inputs. Part of every stamp, so it invalidates all renderers at once.
+ *
+ * 2: tone shaping (smoothing, auto levels, contrast) runs on the source for
+ *    every renderer, with smoothing on by default.
  */
-export const BITMAP_PIPELINE_VERSION = 1;
+export const BITMAP_PIPELINE_VERSION = 2;
 
 /** What a render records about the code that produced it — compared against
  * the current stamp to spot output made by an older renderer. */
@@ -128,6 +134,7 @@ type MaterializableBitmap = Pick<
   | "bitmapBaseScale"
   | "bitmapSeparationMode"
   | "bitmapSeparationPalette"
+  | "bitmapTone"
 >;
 
 /**
@@ -152,6 +159,10 @@ export function bitmapRenderSignature(bitmap: MaterializableBitmap): string {
     bitmap.bitmapBaseScale ?? null,
     bitmap.bitmapSeparationMode ?? "none",
     bitmap.bitmapSeparationPalette ?? [],
+    // Appended only once set, so every drawing saved before tone existed
+    // keeps the signature it was stored with — otherwise all of them would
+    // count as having changed settings, and re-render unasked on open.
+    ...(bitmap.bitmapTone ? [Object.entries(bitmap.bitmapTone).sort(([a], [b]) => a.localeCompare(b))] : []),
   ]);
 }
 
@@ -263,6 +274,49 @@ export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Pro
   };
 }
 
+/** One tone-shaped source a renderer runs against — the whole image, or one
+ * ink channel of a colour separation. */
+interface PreparedSource {
+  label: string;
+  color: string;
+  source: RendererSource;
+}
+
+/**
+ * Decoding to tone, separating into inks and tone-shaping are a full pass
+ * (or several) over the image — the blur alone is hundreds of milliseconds
+ * on a large photo — yet none of it depends on the renderer or its settings,
+ * which is what nearly every re-render changes. One entry, for the same
+ * reason as `decodeCache`; the sources are shared and must be treated as
+ * read-only by every renderer.
+ */
+let preparedCache: { dataUrl: string; key: string; sources: PreparedSource[] } | null = null;
+
+async function preparedSources(bitmap: MaterializableBitmap, dataUrl: string): Promise<PreparedSource[]> {
+  const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
+  const tone = resolveToneSettings(bitmap);
+  const mode = bitmap.bitmapSeparationMode ?? "none";
+  const key = JSON.stringify([mode, mode === "custom" ? bitmap.bitmapSeparationPalette ?? [] : null, tone, baseScale]);
+  if (preparedCache?.dataUrl === dataUrl && preparedCache.key === key) return preparedCache.sources;
+
+  const prepare = (source: RendererSource) => prepareSource(source, tone, 1 / baseScale);
+  let sources: PreparedSource[];
+  if (mode === "none") {
+    sources = [{ label: "", color: "", source: prepare(await decodeBitmapLuminance(dataUrl)) }];
+  } else {
+    const colorData = await decodeBitmapColor(dataUrl);
+    const channels =
+      mode === "rgb" ? separateRGB(colorData)
+      : mode === "cmy" ? separateCMY(colorData)
+      : mode === "cmyk" ? separateCMYK(colorData)
+      : separateCustomPalette(colorData, bitmap.bitmapSeparationPalette ?? []);
+    sources = channels.map(({ label, color, luminance }) => ({ label, color, source: prepare(luminance) }));
+  }
+
+  preparedCache = { dataUrl, key, sources };
+  return sources;
+}
+
 /** The rendering half of `materializeBitmapLayers`, once a renderer is resolved. */
 async function renderWith(
   renderer: BitmapRendererDefinition,
@@ -274,7 +328,7 @@ async function renderWith(
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
   if (mode === "none") {
-    const source = await decodeBitmapLuminance(dataUrl);
+    const [{ source }] = await preparedSources(bitmap, dataUrl);
     const layers = validateRendererOutput(
       await renderer.render({
         width: source.width,
@@ -302,12 +356,7 @@ async function renderWith(
     };
   }
 
-  const colorData = await decodeBitmapColor(dataUrl);
-  const channels =
-    mode === "rgb" ? separateRGB(colorData)
-    : mode === "cmy" ? separateCMY(colorData)
-    : mode === "cmyk" ? separateCMYK(colorData)
-    : separateCustomPalette(colorData, bitmap.bitmapSeparationPalette ?? []);
+  const channels = await preparedSources(bitmap, dataUrl);
 
   const perChannel = await Promise.all(
     channels.map(async (channel, index) => ({
@@ -315,11 +364,11 @@ async function renderWith(
       index,
       layers: validateRendererOutput(
         await renderer.render({
-          width: channel.luminance.width,
-          height: channel.luminance.height,
+          width: channel.source.width,
+          height: channel.source.height,
           scale: baseScale,
           settings,
-          source: channel.luminance,
+          source: channel.source,
         }),
         renderer.id,
       ),

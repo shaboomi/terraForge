@@ -118,7 +118,7 @@ describe("materializeBitmapLayers output checking", () => {
 
     const result = await materializeBitmapLayers(bitmap);
 
-    expect(result.rendererVersion).toBe("1/acme@plugin:abc123");
+    expect(result.rendererVersion).toBe("2/acme@plugin:abc123");
   });
 
   it("checks every ink channel when colour separation is active", async () => {

@@ -35,33 +35,3 @@ export function luminanceAt(image: RendererSource, x: number, y: number): number
   const bottom = bottomLeft + (bottomRight - bottomLeft) * fx;
   return top + (bottom - top) * fy;
 }
-
-const toneRangeCache = new WeakMap<Uint8Array, { min: number; max: number }>();
-
-/**
- * The darkest and lightest raw luminance bytes actually present in an
- * image — used to auto-scale tone to an image's own contrast instead of the
- * flat 0–255 assumption `luminanceAt` otherwise implies (a photo whose
- * darkest pixel isn't true black would never reach full tone-darkness, no
- * matter how high a renderer's amplitude is set, without this).
- *
- * Memoized per source buffer: a single render calls this once per strand —
- * hundreds of times for e.g. circular rings — and rescanning a multi-
- * megapixel array that often would be wasted work, since the same
- * `RendererSource.values` buffer is reused unchanged for the whole render.
- */
-export function toneRangeOf(image: RendererSource): { min: number; max: number } {
-  const cached = toneRangeCache.get(image.values);
-  if (cached) return cached;
-
-  let min = 255;
-  let max = 0;
-  for (let i = 0; i < image.values.length; i++) {
-    const value = image.values[i];
-    if (value < min) min = value;
-    if (value > max) max = value;
-  }
-  const range = image.values.length > 0 ? { min, max } : { min: 0, max: 255 };
-  toneRangeCache.set(image.values, range);
-  return range;
-}

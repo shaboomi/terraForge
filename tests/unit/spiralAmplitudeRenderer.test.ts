@@ -37,8 +37,6 @@ describe("generateSpiralAmplitudePath", () => {
       originYPct: 50,
       clipToImage: true,
       peakClipPct: 100,
-      autoLevels: false,
-      contrast: 1,
     });
   });
 
@@ -152,22 +150,6 @@ describe("generateSpiralAmplitudePath", () => {
       ctx(source, { spacingMM: 3, toothWidthMM: 2, amplitude: 4, peakClipPct: 20 }, 1),
     );
     expect(clipped).not.toBe(unclipped);
-  });
-
-  it("changes the render when autoLevels or contrast are turned on", () => {
-    // Mostly mid-dark grey with one far corner at full white, so the image
-    // has real range to auto-scale against.
-    const values = new Uint8Array(1600).fill(90);
-    values[39 * 40 + 39] = 255;
-    const source = { width: 40, height: 40, values };
-    const settings = { spacingMM: 3, toothWidthMM: 2, amplitude: 4 };
-
-    const baseline = generateSpiralAmplitudePath(ctx(source, settings, 1));
-    const withAutoLevels = generateSpiralAmplitudePath(ctx(source, { ...settings, autoLevels: true }, 1));
-    const withContrast = generateSpiralAmplitudePath(ctx(source, { ...settings, contrast: 2 }, 1));
-
-    expect(withAutoLevels).not.toBe(baseline);
-    expect(withContrast).not.toBe(baseline);
   });
 
   it("keeps waveform sampling dense at the outer spiral", () => {

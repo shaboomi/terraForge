@@ -1,6 +1,6 @@
 import type { RendererSource } from "../../../../../types";
 import { clipLineToRect } from "./lineFamily";
-import { luminanceAt, toneRangeOf } from "./sampling";
+import { luminanceAt } from "./sampling";
 import { waveformAt, type WaveformId } from "./waveforms";
 
 /** A point on a spine's unmodulated base curve, plus the outward unit normal
@@ -50,22 +50,6 @@ export interface ToneModulationOptions {
    * no-op — today's exact shape.
    */
   peakClipPct?: number;
-  /**
-   * When true (default `false` — preserves today's output for existing
-   * saved renders), tone is rescaled to this image's own actual darkest/
-   * lightest sampled pixel rather than the flat 0–255 assumption: a photo
-   * whose darkest pixel isn't true black otherwise never reaches full tone-
-   * darkness anywhere, so `amplitude` silently never reaches its own dial
-   * regardless of how high it's set. A perfectly flat image (no range to
-   * stretch) is left unscaled rather than painted fully dark or fully light.
-   */
-  autoLevels?: boolean;
-  /**
-   * Multiplier pushing tone-darkness away from (above 1) or toward (below 1,
-   * down to 0) mid-grey, applied after `autoLevels` if that's also on.
-   * Default `1` is neutral — today's exact output.
-   */
-  contrast?: number;
 }
 
 /**
@@ -75,8 +59,10 @@ export interface ToneModulationOptions {
  *
  * 2: strokes start and end at the strand ends and image edges, and never
  *    draw the spine outside the image.
+ * 3: no internal tone smoothing, levels or contrast — the pipeline shapes
+ *    the source instead (see `toneAdjust.ts`).
  */
-export const TONE_SPINE_ENGINE_VERSION = 2;
+export const TONE_SPINE_ENGINE_VERSION = 3;
 
 function format(value: number): string {
   return Number(value.toFixed(2)).toString();
@@ -194,18 +180,6 @@ function peakClipBreakpointPhases(waveform: WaveformId, drive: number): number[]
  */
 const FREQUENCY_GAIN = 2;
 
-/**
- * How much weight each new tone sample gets against the running average
- * (0–1; lower is smoother). Tone is now sampled continuously at every
- * sub-step rather than once per cycle, which also means fine per-pixel
- * noise in the source — water texture, grain, compression artifacts — now
- * feeds straight into displacement and phase rate instead of being damped
- * out by the old once-per-cycle bucketing. This exponential moving average
- * restores that damping without reintroducing the bucketing itself, so a
- * genuine tonal gradient is still tracked, just not single-pixel jitter.
- */
-const TONE_SMOOTHING = 0.2;
-
 /** A safety net mirroring the original spiral renderer's own point cap, now
  * shared by every spine — sub-sampling for a smooth waveform multiplies a
  * spine's point count, so this bounds the output regardless of shape. */
@@ -298,11 +272,7 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     image,
     clipToImage = true,
     peakClipPct = 100,
-    autoLevels = false,
-    contrast = 1,
   } = options;
-  const toneRange = autoLevels ? toneRangeOf(image) : null;
-  const hasToneRange = !!toneRange && toneRange.max > toneRange.min;
   // 1–100%: dividing by a smaller drive pushes the raw -1..1 waveform value
   // past ±1 sooner, so the subsequent clamp flattens it there instead of
   // letting it reach a point — the audio-clipping-style shaping described
@@ -323,7 +293,6 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
   const commands: string[] = [];
   let broken = true;
   let phase = 0;
-  let smoothedToneDark: number | null = null;
 
   const pushPoint = (base: SpineSample, toneDark: number, atPhase: number) => {
     const shapedValue = Math.max(-1, Math.min(1, waveformAt(waveform, atPhase) / peakClipDrive));
@@ -373,18 +342,9 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
       broken = true;
       return true;
     }
-    const sampledLuminance = luminanceAt(image, base.x, base.y);
-    const scaledLuminance =
-      hasToneRange && toneRange
-        ? Math.max(0, Math.min(255, ((sampledLuminance - toneRange.min) / (toneRange.max - toneRange.min)) * 255))
-        : sampledLuminance;
-    const levelsToneDark = 1 - scaledLuminance / 255;
-    const rawToneDark = Math.max(0, Math.min(1, (levelsToneDark - 0.5) * contrast + 0.5));
-    smoothedToneDark =
-      smoothedToneDark === null
-        ? rawToneDark
-        : smoothedToneDark + (rawToneDark - smoothedToneDark) * TONE_SMOOTHING;
-    const toneDark = smoothedToneDark;
+    // Tone arrives already shaped — smoothed, levelled, contrasted — by the
+    // pipeline's source preparation, so it is used exactly as sampled.
+    const toneDark = 1 - luminanceAt(image, base.x, base.y) / 255;
     let walkedFrom = segmentStart;
     let walkedLength = subArcLength;
     if (broken && (isPiecewiseLinear || segmentStart)) {

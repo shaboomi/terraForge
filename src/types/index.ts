@@ -533,6 +533,12 @@ export interface SvgImport {
    * instead.
    */
   bitmapRendererVersion?: string;
+  /**
+   * Tone shaping applied to the source before any renderer runs (see
+   * `toneAdjust.ts`). Absent until the user first edits tone; until then an
+   * older drawing's renderer-level `autoLevels`/`contrast` settings apply.
+   */
+  bitmapTone?: { autoLevels?: boolean; contrast?: number; smoothingMM?: number };
   /** Source scale used to convert renderer controls in mm into bitmap pixels. */
   bitmapBaseScale?: number;
   /** Opacity of the source image below the generated preview. */

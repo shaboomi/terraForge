@@ -11,6 +11,7 @@ import {
   pluginRendererFromManifest,
 } from "../../bitmap-renderers/registry";
 import { BitmapSeparationSection } from "./BitmapSeparationSection";
+import { BitmapToneSection } from "./BitmapToneSection";
 import { RendererFieldControl } from "./RendererFieldControl";
 
 /**
@@ -159,6 +160,7 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
           </button>
         </div>
       )}
+      {renderer && <BitmapToneSection imp={imp} onUpdate={onUpdate} />}
       {renderer && <BitmapSeparationSection imp={imp} onUpdate={onUpdate} />}
       <div className="mt-2 pt-2 border-t border-border-ui/30">
         <span className="text-[10px] text-content-muted uppercase tracking-wider block mb-1.5">Show</span>
