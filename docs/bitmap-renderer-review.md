@@ -14,6 +14,19 @@ Severity: **High** = wrong plotted output or silent data/feature loss.
 **Medium** = visible quality defect, or a robustness gap that a realistic
 input will hit. **Low** = polish, consistency, or latent risk.
 
+## Status
+
+| Item | State | Commit |
+|---|---|---|
+| 1. Stale geometry plotted | Fixed — render service plus G-code flush guard (also delivers A4) | `e2cfd47` |
+| 2. `producesDots` dropped | Fixed | `f37600b` |
+| 3. Strand start / closed shapes | Fixed (sine re-entry too) | `c36a718` |
+| 4. `clipToImage = false` bleed | Fixed | `697bcf3` |
+| 5. Settings not coerced | Fixed — `coerceSettings`; per-renderer clamp code remains until A1 | `4f48b99` |
+| 6. Clip entry/exit | Fixed — entry in `c36a718`, exit in `3d45296` | `3d45296` |
+| 9. Halftone tone curve | Area fix done; tone controls wait for A3, edge overflow still open | `f5ffab7` |
+| Everything else | Open | — |
+
 ---
 
 ## Part 1 — Issues
@@ -137,6 +150,11 @@ with:
   `amplitude` while every other renderer uses `amplitudeMM` — see issue 13),
 - a hand-edited file,
 - a plugin whose defaults change between versions.
+
+It was worse than a bad path: with `NaN` spacing, the concentric-boxes loop
+(`for (let k = 1; ; k++)`, exiting on a comparison that is always false for
+`NaN`) never terminated, hanging the UI thread. This surfaced when the
+regression tests were run without the fix.
 
 The per-renderer clamp ranges also duplicate each field's `min`/`max`, and
 the two must be edited in lockstep. The current diff changes both in eight
