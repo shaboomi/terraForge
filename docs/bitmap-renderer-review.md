@@ -34,7 +34,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 10. Fragile dot splitting | Fixed in A5 — dots are data (`{ d, x, y }`), nothing is parsed | `754c875` |
 | 14. Import ignored `paths` | Fixed in A5; decode limits still open | `754c875` |
 | A5. Structured result | Done, kept as API version 1 (unreleased) — `{ layers, warnings }`, dot layers; docs and examples checked | `754c875` |
-| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated). Decode and tone preparation still run on the main thread | (A2 commit) |
+| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated). Decode and tone preparation still run on the main thread | `7c47b8a` |
 | Everything else | Open | — |
 
 ---
