@@ -280,6 +280,50 @@ describe("modulateStrand tone shaping", () => {
   });
 });
 
+describe("modulateStrand stroke start", () => {
+  const dark: RendererSource = { width: 100, height: 20, values: new Uint8Array(2000).fill(0) };
+  const waveforms = ["triangle", "square", "sawtooth", "sine"] as const;
+
+  /** The [x, y] of the first `M` in a path. */
+  function firstPoint(path: string): [number, number] {
+    const match = /M(-?[\d.]+) (-?[\d.]+)/.exec(path)!;
+    return [Number(match[1]), Number(match[2])];
+  }
+
+  for (const waveform of waveforms) {
+    it(`starts a ${waveform} strand at its first base point rather than at its first breakpoint`, () => {
+      const line = Array.from({ length: 101 }, (_, x) => ({ x, y: 10, nx: 0, ny: -1 }));
+      const path = modulateStrand(line, { toothWidth: 10, amplitude: 5, waveform, image: dark });
+
+      const [x, y] = firstPoint(path);
+      expect(x).toBe(0);
+      // Displaced along the normal by the waveform's value at phase 0.
+      expect(y).toBeCloseTo(10 - 5 * waveformAt(waveform, 0), 5);
+    });
+
+    it(`resumes a ${waveform} strand exactly at the image edge when it re-enters`, () => {
+      // Starts left of the image, crossing into it at x = 0 midway between
+      // two samples, so the edge has to be found rather than landed on.
+      const line = Array.from({ length: 121 }, (_, i) => ({ x: i - 20.5, y: 10, nx: 0, ny: -1 }));
+      const path = modulateStrand(line, { toothWidth: 10, amplitude: 5, waveform, image: dark });
+
+      expect(firstPoint(path)[0]).toBe(0);
+    });
+  }
+
+  it("closes a ring: the stroke starts where the ring does, with no gap", () => {
+    const ring = Array.from({ length: 201 }, (_, i) => {
+      const theta = (i / 200) * Math.PI * 2;
+      return { x: 50 + 8 * Math.cos(theta), y: 10 + 8 * Math.sin(theta), nx: Math.cos(theta), ny: Math.sin(theta) };
+    });
+    const path = modulateStrand(ring, { toothWidth: 5, amplitude: 1, waveform: "sawtooth", image: dark });
+
+    const [x, y] = firstPoint(path);
+    // Within one amplitude of the ring's own start point (58, 10).
+    expect(Math.hypot(x - 58, y - 10)).toBeLessThanOrEqual(1 + 1e-6);
+  });
+});
+
 describe("renderToneSpine", () => {
   it("joins multiple strands and skips empty ones", () => {
     const strand = [{ x: 0, y: 0, nx: 1, ny: 0 }, { x: 1, y: 0, nx: 1, ny: 0 }];

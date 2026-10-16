@@ -1,4 +1,5 @@
 import type { RendererSource } from "../../../../../types";
+import { clipLineToRect } from "./lineFamily";
 import { luminanceAt, toneRangeOf } from "./sampling";
 import { waveformAt, type WaveformId } from "./waveforms";
 
@@ -216,6 +217,13 @@ function isInsideBounds(x: number, y: number, width: number, height: number): bo
   return x >= 0 && x <= width && y >= 0 && y <= height;
 }
 
+/** Fraction (0–1) of the way from `outside` to `inside` at which the segment
+ * between them enters the `[0,width] x [0,height]` image rectangle. */
+function entryFraction(outside: SpineSample, inside: SpineSample, width: number, height: number): number {
+  const range = clipLineToRect(outside, { x: inside.x - outside.x, y: inside.y - outside.y }, width, height);
+  return range ? Math.max(0, Math.min(1, range[0])) : 0;
+}
+
 /** Breakpoint phases (`n + offset` for integer `n`, for each `offset` in
  * `phases`) strictly after `phaseBefore` and at or before `phaseAfter`.
  * Phase advances at a tone-dependent, path-history-dependent rate rather
@@ -251,7 +259,8 @@ function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: nu
  *
  * For a piecewise-linear waveform (triangle/square/sawtooth —
  * `JUMP_PHASES`/`SLOPE_PHASES`, plus any extra phases peak-clipping adds),
- * only breakpoints and the strand's final point are ever drawn: every base
+ * only breakpoints and the points where the stroke starts, re-enters the
+ * image, and ends are ever drawn: every base
  * point in between is still visited (so tone/phase tracking stays
  * continuous), just not drawn, so consecutive breakpoints are connected by
  * one straight line rather than however many points the base spine happens
@@ -311,8 +320,10 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
 
   /**
    * Visits one base sample; returns false once the strand's point budget is
-   * spent. `segmentStart` is the previous base point a piecewise-linear
-   * segment is walking from, used to place each breakpoint crossing at its
+   * spent. `segmentStart` is the previous sample the walk is coming from
+   * (a base point, or for sine a sub-step). It locates where a stroke
+   * re-enters the image, and for a piecewise-linear waveform places each
+   * breakpoint crossing at its
    * actual fractional position along the segment (by phase, which advances
    * linearly across it) rather than at `base` itself — without that, a
    * segment spanning several waveform cycles (coarse spine spacing relative
@@ -343,8 +354,27 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
         ? rawToneDark
         : smoothedToneDark + (rawToneDark - smoothedToneDark) * TONE_SMOOTHING;
     const toneDark = smoothedToneDark;
+    let walkedFrom = segmentStart;
+    let walkedLength = subArcLength;
+    if (broken && (isPiecewiseLinear || segmentStart)) {
+      // A piecewise-linear waveform otherwise draws nothing until its first
+      // breakpoint — up to a whole tooth for sawtooth — leaving every strand
+      // short at its start and every closed ring with a gap. So the point the
+      // stroke (re)starts from is drawn explicitly: the strand's first point,
+      // or, re-entering the image, where this segment crosses into it. (Sine
+      // already draws every sample, so it only needs the re-entry point.)
+      let startPoint = base;
+      if (segmentStart) {
+        const fraction = entryFraction(segmentStart, base, image.width, image.height);
+        startPoint = interpolateSample(segmentStart, base, fraction);
+        walkedFrom = startPoint;
+        walkedLength = subArcLength * (1 - fraction);
+      }
+      pushPoint(startPoint, toneDark, phase);
+      if (commands.length >= MAX_STRAND_POINTS) return false;
+    }
     const phaseBefore = phase;
-    phase += (subArcLength / safeToothWidth) * (1 + FREQUENCY_GAIN * toneDark);
+    phase += (walkedLength / safeToothWidth) * (1 + FREQUENCY_GAIN * toneDark);
     const phaseSpan = phase - phaseBefore;
     const crossings = [
       ...breakpointCrossings(phaseBefore, phase, jumpPhases).map((boundary) => ({ boundary, isJump: true })),
@@ -352,7 +382,7 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     ].sort((a, b) => a.boundary - b.boundary);
     for (const crossing of crossings) {
       const t = phaseSpan > 0 ? Math.max(0, Math.min(1, (crossing.boundary - phaseBefore) / phaseSpan)) : 1;
-      const position = segmentStart ? interpolateSample(segmentStart, base, t) : base;
+      const position = walkedFrom ? interpolateSample(walkedFrom, base, t) : base;
       if (crossing.isJump) {
         pushPoint(position, toneDark, crossing.boundary - DISCONTINUITY_EPSILON);
         if (commands.length >= MAX_STRAND_POINTS) return false;
@@ -386,9 +416,11 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     } else {
       const subStepCount = Math.max(1, Math.ceil(segmentLength / maxSubStep));
       const subArcLength = segmentLength / subStepCount;
+      let subStart = previous;
       for (let step = 1; step <= subStepCount; step++) {
         const sample = interpolateSample(previous, point, step / subStepCount);
-        if (!visit(null, sample, subArcLength, isLastSegment && step === subStepCount)) break outer;
+        if (!visit(subStart, sample, subArcLength, isLastSegment && step === subStepCount)) break outer;
+        subStart = sample;
       }
     }
   }
