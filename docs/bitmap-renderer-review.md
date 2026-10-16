@@ -28,8 +28,8 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 9. Halftone tone curve | Area fix done (`f5ffab7`); tone controls via A3; edge overflow still open | `f5ffab7` |
 | 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | `3c96690` |
 | A3. Tone preprocessing | Done — `toneAdjust.ts`; per-import Tone section for every renderer and plugin; auto levels still per ink channel under separation (issue 15) | `6dddf4f` |
-| A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | (A1 commit) |
-| 13. Stale "Sawtooth width" label | Fixed in A1; other items in 13 still open | (A1 commit) |
+| A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | `0fb3342` |
+| 13. Stale "Sawtooth width" label | Fixed in A1; other items in 13 still open | `0fb3342` |
 | Everything else | Open | — |
 
 ---
