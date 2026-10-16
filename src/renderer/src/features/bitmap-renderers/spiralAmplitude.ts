@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
 import { luminanceAt } from "./toneSpine/sampling";
 import {
   angleField,
@@ -156,6 +156,7 @@ export function generateSpiralAmplitudePath({
 export const spiralAmplitudeRenderer: BitmapRendererDefinition = {
   id: SPIRAL_AMPLITUDE_RENDERER_ID,
   label: "Spiral amplitude",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: spiralAmplitudeDefaults,
   fields: [
     { type: "number", key: "spacingMM", label: "Spacing (mm)", ariaLabel: "Spiral spacing", min: 0.1, max: 50, step: 0.1 },

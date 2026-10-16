@@ -13,9 +13,14 @@ vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal
 });
 
 import {
+  bitmapRendererStamp,
   bitmapRenderSignature,
   materializeBitmapLayers,
 } from "@renderer/features/bitmap-renderers/bitmapImage";
+import { spiralAmplitudeRenderer } from "@renderer/features/bitmap-renderers/spiralAmplitude";
+
+/** What the current spiral renderer stamps on its output. */
+const currentVersion = bitmapRendererStamp(spiralAmplitudeRenderer);
 
 const materialize = vi.mocked(materializeBitmapLayers);
 
@@ -74,6 +79,7 @@ function bitmapImport(overrides: Partial<SvgImport> = {}): SvgImport {
     bitmapRendererSettings: { spacingMM: 8, toothWidthMM: 9, amplitude: 10 },
     bitmapBaseScale: 0.264,
     bitmapRendererPath: "M0 0",
+    bitmapRendererVersion: currentVersion,
     ...overrides,
   };
 }
@@ -82,7 +88,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   useBitmapPluginStore.setState({ plugins: [], errors: [], scanning: false, actionError: null });
   materialize.mockReset();
-  materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [] });
+  materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [], rendererVersion: currentVersion });
   useCanvasStore.setState({ imports: [] });
   stopService = startBitmapRenderService();
 });
@@ -264,6 +270,46 @@ describe("BitmapRendererSection re-render behaviour", () => {
     expect(materialize).toHaveBeenCalledTimes(1);
     expect(storedImport().bitmapRendererPath).toBe("M1 1");
     expect(storedImport().bitmapRenderSignature).toBe(bitmapRenderSignature(storedImport()));
+  });
+
+  describe("output from an older renderer version", () => {
+    /** Settings unchanged since the render, but made by an older renderer. */
+    function oldRender() {
+      const imp = bitmapImport({ bitmapRendererVersion: "1/spiral-amplitude@tone-spine-1.1" });
+      return { ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) };
+    }
+
+    it("offers a re-render instead of silently replacing what the user has seen", async () => {
+      renderPanel(oldRender());
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+      expect(materialize).not.toHaveBeenCalled();
+      expect(storedImport().bitmapRendererPath).toBe("M0 0");
+      expect(screen.getByRole("status")).toHaveTextContent("Status: Renderer updated");
+      expect(screen.getByRole("button", { name: "Re-render" })).toBeInTheDocument();
+    });
+
+    it("re-renders on request and records the current renderer version", async () => {
+      renderPanel(oldRender());
+
+      fireEvent.click(screen.getByRole("button", { name: "Re-render" }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+      expect(materialize).toHaveBeenCalledTimes(1);
+      expect(storedImport()).toMatchObject({ bitmapRendererPath: "M1 1", bitmapRendererVersion: currentVersion });
+      expect(screen.queryByRole("button", { name: "Re-render" })).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Status: Ready");
+    });
+
+    it("re-renders automatically, picking up the new version, once a setting changes", async () => {
+      renderPanel(oldRender());
+
+      fireEvent.change(screen.getByLabelText("Spiral spacing"), { target: { value: "9" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+      expect(materialize).toHaveBeenCalledTimes(1);
+      expect(storedImport().bitmapRendererVersion).toBe(currentVersion);
+    });
   });
 
   /**

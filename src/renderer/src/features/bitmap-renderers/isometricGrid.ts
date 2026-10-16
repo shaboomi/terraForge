@@ -1,6 +1,6 @@
 import type { BitmapRendererSettings } from "../../../../types";
 import type { SpineStrand } from "./toneSpine/engine";
-import { renderToneSpine } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION } from "./toneSpine/engine";
 import {
   angleField,
   autoLevelsField,
@@ -89,6 +89,7 @@ export function generateIsometricGridPath({ source, settings, scale, width, heig
 export const isometricGridRenderer: BitmapRendererDefinition = {
   id: ISOMETRIC_GRID_RENDERER_ID,
   label: "Isometric grid",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: isometricGridDefaults,
   fields: [
     { type: "number", key: "spacingMM", label: "Line spacing (mm)", min: 0.1, max: 50, step: 0.1 },

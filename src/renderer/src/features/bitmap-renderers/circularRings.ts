@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
 import {
   angleField,
   autoLevelsField,
@@ -106,6 +106,7 @@ export function generateCircularRingsPath({ source, settings, scale, width, heig
 export const circularRingsRenderer: BitmapRendererDefinition = {
   id: CIRCULAR_RINGS_RENDERER_ID,
   label: "Circular tone rings",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: circularRingsDefaults,
   fields: [
     { type: "number", key: "spacingMM", label: "Ring spacing (mm)", min: 0.1, max: 50, step: 0.1 },

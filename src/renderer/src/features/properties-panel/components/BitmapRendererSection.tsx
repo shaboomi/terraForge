@@ -1,7 +1,8 @@
 import type { BitmapRendererSettings, SvgImport } from "../../../../../types";
 import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
-import { useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
+import { bitmapRendererStamp, bitmapRenderSignature } from "../../bitmap-renderers/bitmapImage";
+import { rerenderBitmap, useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
 import { coerceSettings } from "../../bitmap-renderers/coerceSettings";
 import {
   bitmapRenderers,
@@ -24,6 +25,7 @@ const RENDER_STATUS_LABEL = {
   pending: "Status: Pending",
   rendering: "Status: Rendering",
   error: "Status: Failed",
+  outdated: "Status: Renderer updated",
 } as const;
 
 export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpdate: (changes: Partial<SvgImport>) => void }) {
@@ -48,7 +50,18 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
 
   // Rendering itself is owned by the bitmap render service, not this panel,
   // so a change still renders if the import is deselected before it lands.
-  const { status: renderStatus, error: renderError } = useBitmapRenderState(imp.id);
+  const { status: serviceStatus, error: renderError } = useBitmapRenderState(imp.id);
+
+  // Output whose settings are current but which an older version of the
+  // renderer produced. It is not replaced automatically — that would change
+  // geometry the user has already seen without them touching anything — so
+  // it is offered as a re-render instead, and plots as shown until then.
+  const outdated =
+    !!renderer &&
+    serviceStatus === "idle" &&
+    imp.bitmapRenderSignature === bitmapRenderSignature(imp) &&
+    imp.bitmapRendererVersion !== bitmapRendererStamp(renderer);
+  const renderStatus: keyof typeof RENDER_STATUS_LABEL = outdated ? "outdated" : serviceStatus;
 
   /**
    * Deliberately leaves the existing geometry in place. The stored output is
@@ -133,6 +146,18 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
       */}
       {renderer && renderStatus === "error" && (
         <p className="mt-1.5 text-[10px] text-red-400">Render failed: {renderError}</p>
+      )}
+      {outdated && (
+        <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[10px] text-content-muted">
+          <span>This renderer has changed since this image was rendered.</span>
+          <button
+            type="button"
+            onClick={() => void rerenderBitmap(imp.id)}
+            className="shrink-0 text-accent hover:underline"
+          >
+            Re-render
+          </button>
+        </div>
       )}
       {renderer && <BitmapSeparationSection imp={imp} onUpdate={onUpdate} />}
       <div className="mt-2 pt-2 border-t border-border-ui/30">

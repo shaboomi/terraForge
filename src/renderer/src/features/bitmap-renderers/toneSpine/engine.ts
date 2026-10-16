@@ -68,6 +68,16 @@ export interface ToneModulationOptions {
   contrast?: number;
 }
 
+/**
+ * Bump whenever an engine change alters the geometry produced for the same
+ * inputs; every tone-spine renderer's `version` includes it, so drawings
+ * rendered by an older engine are offered a re-render.
+ *
+ * 2: strokes start and end at the strand ends and image edges, and never
+ *    draw the spine outside the image.
+ */
+export const TONE_SPINE_ENGINE_VERSION = 2;
+
 function format(value: number): string {
   return Number(value.toFixed(2)).toString();
 }

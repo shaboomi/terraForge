@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
 import {
   angleField,
   autoLevelsField,
@@ -113,6 +113,7 @@ export function generateRadialBurstPath({ source, settings, scale, width, height
 export const radialBurstRenderer: BitmapRendererDefinition = {
   id: RADIAL_BURST_RENDERER_ID,
   label: "Radial burst",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: radialBurstDefaults,
   fields: [
     { type: "number", key: "rayCount", label: "Ray count", min: 3, max: 180, step: 1 },

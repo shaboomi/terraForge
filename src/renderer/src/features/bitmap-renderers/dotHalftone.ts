@@ -104,6 +104,8 @@ export function generateDotHalftonePath({ source, settings, scale, width, height
 export const dotHalftoneRenderer: BitmapRendererDefinition = {
   id: DOT_HALFTONE_RENDERER_ID,
   label: "Dot halftone",
+  // 2: dot area, rather than radius, proportional to tone.
+  version: "2",
   defaults: dotHalftoneDefaults,
   producesDots: true,
   fields: [

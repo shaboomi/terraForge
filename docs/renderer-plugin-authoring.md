@@ -252,6 +252,7 @@ renderer, never terraForge or anyone else's plugin.
 | "timed out after …" | Took longer than `renderTimeoutMs` |
 | "returned invalid path data at character …" | A bad number reached your path string |
 | Edits not taking effect | Press **Rescan** — source is read once and kept warm |
+| "Status: Renderer updated" after a Rescan | Your source changed since that drawing was rendered. Drawings keep their existing output until **Re-render** is pressed, so an edit never silently changes geometry someone has already approved |
 
 ## Generators
 

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { existsSync, readdirSync } from "fs";
 import { readFile } from "fs/promises";
 import { join, resolve, sep } from "path";
@@ -7,6 +8,7 @@ import {
   type BitmapRendererFieldSchema,
   type BitmapRendererSettings,
 } from "../../types";
+import { readPluginModules } from "./pluginSource";
 
 /** Bitmap-renderer plugin API versions this build knows how to load. */
 const SUPPORTED_API_VERSIONS = [1];
@@ -220,6 +222,27 @@ function validateManifestShape(raw: unknown, folder: string): string | null {
 }
 
 /**
+ * A fingerprint of everything the plugin would load — its .js/.json files,
+ * manifest included — so the app can tell when a plugin's code has changed
+ * since a drawing was rendered with it, without relying on authors to bump a
+ * version. Reads the files; never runs them. Unreadable source (missing
+ * entry, over the size limits) yields undefined, and the render itself then
+ * reports the problem as it always has.
+ */
+async function pluginSourceHash(record: BitmapPluginRecord): Promise<string | undefined> {
+  try {
+    const { modules } = await readPluginModules(record);
+    const hash = createHash("sha256");
+    for (const path of Object.keys(modules).sort()) {
+      hash.update(path).update("\0").update(modules[path]).update("\0");
+    }
+    return hash.digest("hex").slice(0, 16);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Scans `pluginsDir` for plugin subfolders, parsing and validating each
  * manifest.json without ever executing plugin code. Degrades gracefully per
  * folder — one bad manifest never breaks discovery of the rest.
@@ -259,7 +282,7 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
       }
       seenIds.add(id);
 
-      plugins.push({
+      const record: BitmapPluginRecord = {
         manifest: {
           id,
           label: raw.label,
@@ -274,7 +297,9 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
         },
         entryPath: resolve(folder, raw.entry as string),
         folder,
-      });
+      };
+      record.manifest.sourceHash = await pluginSourceHash(record);
+      plugins.push(record);
     } catch (err) {
       errors.push({ folder: folderName, message: err instanceof Error ? err.message : String(err) });
     }

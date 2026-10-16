@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION } from "./toneSpine/engine";
 import {
   angleField,
   autoLevelsField,
@@ -83,6 +83,7 @@ export function generateRasterLinesPath({ source, settings, scale, width, height
 export const rasterLinesRenderer: BitmapRendererDefinition = {
   id: RASTER_LINES_RENDERER_ID,
   label: "Row & diagonal lines",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: rasterLinesDefaults,
   fields: [
     { type: "number", key: "spacingMM", label: "Line spacing (mm)", min: 0.1, max: 50, step: 0.1 },

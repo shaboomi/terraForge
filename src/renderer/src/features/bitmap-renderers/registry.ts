@@ -26,6 +26,7 @@ export function pluginRendererFromManifest(manifest: BitmapPluginManifest): Bitm
   return {
     id: manifest.id,
     label: manifest.label,
+    version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,
     producesDots: manifest.producesDots,

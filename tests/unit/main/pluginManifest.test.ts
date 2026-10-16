@@ -38,6 +38,28 @@ describe("discoverBitmapPlugins", () => {
     await rm(pluginsDir, { recursive: true, force: true });
   });
 
+  it("fingerprints a plugin's source, and the fingerprint follows edits", async () => {
+    await writePlugin(pluginsDir, "acme-halftone", validManifest);
+    const entry = join(pluginsDir, "acme-halftone", "index.js");
+    await writeFile(entry, "module.exports = { render: () => 'M0 0' };", "utf-8");
+
+    const before = (await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash;
+    expect(before).toMatch(/^[0-9a-f]{16}$/);
+    expect((await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash).toBe(before);
+
+    await writeFile(entry, "module.exports = { render: () => 'M1 1' };", "utf-8");
+    expect((await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash).not.toBe(before);
+  });
+
+  it("still loads a plugin whose source cannot be read, leaving it unfingerprinted", async () => {
+    await writePlugin(pluginsDir, "acme-halftone", validManifest);
+
+    const result = await discoverBitmapPlugins(pluginsDir);
+
+    expect(result.errors).toEqual([]);
+    expect(result.plugins[0].manifest.sourceHash).toBeUndefined();
+  });
+
   it("returns nothing for an empty directory", async () => {
     const result = await discoverBitmapPlugins(pluginsDir);
     expect(result.plugins).toEqual([]);

@@ -106,10 +106,19 @@ describe("materializeBitmapLayers output checking", () => {
   it("passes a well-formed path through untouched", async () => {
     (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
 
-    await expect(materializeBitmapLayers(bitmap)).resolves.toEqual({
+    await expect(materializeBitmapLayers(bitmap)).resolves.toMatchObject({
       bitmapRendererPath: "M0 0 L1 1",
       paths: [],
     });
+  });
+
+  it("stamps the output with the plugin's source version", async () => {
+    useBitmapPluginStore.setState({ plugins: [{ ...manifest, sourceHash: "abc123" }] });
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
+
+    const result = await materializeBitmapLayers(bitmap);
+
+    expect(result.rendererVersion).toBe("1/acme@plugin:abc123");
   });
 
   it("checks every ink channel when colour separation is active", async () => {

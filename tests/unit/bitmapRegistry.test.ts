@@ -63,6 +63,10 @@ describe("pluginRendererFromManifest", () => {
     expect(typeof renderer.render).toBe("function");
   });
 
+  it("versions a plugin by its source hash", () => {
+    expect(pluginRendererFromManifest({ ...pluginManifest, sourceHash: "abc" }).version).toBe("plugin:abc");
+  });
+
   it("carries a plugin's producesDots declaration so its output is split into dots", () => {
     expect(pluginRendererFromManifest({ ...pluginManifest, producesDots: true }).producesDots).toBe(true);
     expect(pluginRendererFromManifest(pluginManifest).producesDots).toBeUndefined();
@@ -72,5 +76,11 @@ describe("pluginRendererFromManifest", () => {
 describe("bitmapRenderers", () => {
   it("still ships spiral-amplitude in-tree", () => {
     expect(bitmapRenderers.some((r) => r.id === SPIRAL_AMPLITUDE_RENDERER_ID)).toBe(true);
+  });
+
+  it("gives every in-tree renderer a version, so changed output can be detected", () => {
+    for (const renderer of bitmapRenderers) {
+      expect(renderer.version, renderer.id).toMatch(/\S/);
+    }
   });
 });

@@ -493,6 +493,13 @@ export interface BitmapPluginManifest {
    * uses this.
    */
   producesDots?: boolean;
+  /**
+   * Set by the app at discovery, never read from manifest.json: a hash of
+   * the plugin's source files, so a drawing rendered with an older copy of
+   * the plugin can be recognised as such. Absent when the source could not
+   * be read.
+   */
+  sourceHash?: string;
 }
 
 /** One imported SVG file, treated as a positioned group on the bed */
@@ -517,6 +524,15 @@ export interface SvgImport {
    * settings have not changed, including after a layout is reopened.
    */
   bitmapRenderSignature?: string;
+  /**
+   * Which version of the renderer (and of the shared pipeline around it)
+   * produced the stored output — see `bitmapRendererStamp`. Kept apart from
+   * `bitmapRenderSignature` on purpose: changed *settings* re-render
+   * automatically, but changed renderer *code* must not silently alter
+   * geometry the user has already seen, so it is offered as a re-render
+   * instead.
+   */
+  bitmapRendererVersion?: string;
   /** Source scale used to convert renderer controls in mm into bitmap pixels. */
   bitmapBaseScale?: number;
   /** Opacity of the source image below the generated preview. */

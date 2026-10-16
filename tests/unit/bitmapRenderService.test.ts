@@ -15,6 +15,7 @@ import {
 } from "@renderer/features/bitmap-renderers/bitmapImage";
 import {
   flushBitmapRenders,
+  rerenderBitmap,
   startBitmapRenderService,
   useBitmapRenderStatusStore,
 } from "@renderer/features/bitmap-renderers/bitmapRenderService";
@@ -57,7 +58,7 @@ let stopService: () => void = () => {};
 
 beforeEach(() => {
   materialize.mockReset();
-  materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [] });
+  materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [], rendererVersion: "1/new" });
   useBitmapPluginStore.setState({ plugins: [] });
   useCanvasStore.setState({ imports: [] });
   // Started for every test so that stopping it afterwards clears any job a
@@ -134,6 +135,15 @@ describe("flushBitmapRenders", () => {
     expect(materialize).not.toHaveBeenCalled();
   });
 
+  it("plots output from an older renderer as shown, rather than re-rendering it unasked", async () => {
+    useCanvasStore.setState({ imports: [renderedImport({ bitmapRendererVersion: "0/old" })] });
+
+    await flushBitmapRenders();
+
+    expect(materialize).not.toHaveBeenCalled();
+    expect(stored().bitmapRendererPath).toBe("M0 0");
+  });
+
   it("ignores hidden bitmaps, which do not reach the output", async () => {
     useCanvasStore.setState({ imports: [bitmapImport({ bitmapRenderSignature: "stale", visible: false })] });
 
@@ -158,6 +168,17 @@ describe("flushBitmapRenders", () => {
     await flushBitmapRenders();
 
     expect(stored().bitmapRendererPath).toBe("M1 1");
+  });
+});
+
+describe("rerenderBitmap", () => {
+  it("re-renders an up-to-date bitmap on request and records the renderer version", async () => {
+    useCanvasStore.setState({ imports: [renderedImport({ bitmapRendererVersion: "0/old" })] });
+
+    await rerenderBitmap("bmp-1");
+
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(stored()).toMatchObject({ bitmapRendererPath: "M1 1", bitmapRendererVersion: "1/new" });
   });
 });
 

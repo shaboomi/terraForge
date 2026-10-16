@@ -446,7 +446,7 @@ export function useImportActions() {
         bitmapRendererSettings,
         bitmapBaseScale: baseScale,
       };
-      const { bitmapRendererPath } = await materializeBitmapLayers(renderInputs);
+      const { bitmapRendererPath, rendererVersion } = await materializeBitmapLayers(renderInputs);
       const objW = image.naturalWidth * baseScale;
       const objH = image.naturalHeight * baseScale;
       const origin = activeMachineConfig?.origin ?? "bottom-left";
@@ -459,6 +459,7 @@ export function useImportActions() {
         // Stamped now so selecting the new import does not immediately
         // re-render geometry that was just produced.
         bitmapRenderSignature: bitmapRenderSignature(renderInputs),
+        bitmapRendererVersion: rendererVersion,
         bitmapSourceVisible: true,
         bitmapPreviewOpacity: 1,
         bitmapPreviewVisible: true,

@@ -162,6 +162,7 @@ async function run(importId: string, job: RenderJob): Promise<void> {
     bitmapRendererPath: result.bitmapRendererPath,
     paths: result.paths,
     bitmapRenderSignature: job.signature,
+    bitmapRendererVersion: result.rendererVersion,
   });
   job.applied = true;
 
@@ -253,6 +254,19 @@ export async function flushBitmapRenders(): Promise<void> {
     });
     throw new Error(`Bitmap output is out of date and could not be re-rendered — ${details.join("; ")}`);
   }
+}
+
+/**
+ * Re-renders one bitmap now, even though its settings have not changed — for
+ * output that an older version of its renderer produced, which is never
+ * replaced automatically (see `SvgImport.bitmapRendererVersion`). Status is
+ * reported through the same store as any other render.
+ */
+export function rerenderBitmap(importId: string): Promise<void> {
+  const imp = useCanvasStore.getState().imports.find((item) => item.id === importId);
+  if (!imp || imp.kind !== "bitmap") return Promise.resolve();
+  schedule(importId, signatureOf(imp));
+  return start(importId, jobs.get(importId)!);
 }
 
 let stopService: (() => void) | null = null;

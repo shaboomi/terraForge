@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings } from "../../../../types";
-import { renderToneSpine, type SpineStrand } from "./toneSpine/engine";
+import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./toneSpine/engine";
 import {
   angleField,
   autoLevelsField,
@@ -133,6 +133,7 @@ export function generateConcentricBoxesPath({ source, settings, scale, width, he
 export const concentricBoxesRenderer: BitmapRendererDefinition = {
   id: CONCENTRIC_BOXES_RENDERER_ID,
   label: "Concentric boxes",
+  version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.1`,
   defaults: concentricBoxesDefaults,
   fields: [
     { type: "number", key: "spacingMM", label: "Box spacing (mm)", min: 0.1, max: 50, step: 0.1 },

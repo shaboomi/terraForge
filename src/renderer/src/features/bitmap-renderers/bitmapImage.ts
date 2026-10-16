@@ -4,7 +4,7 @@ import { coerceSettings } from "./coerceSettings";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { validateRendererOutput } from "./validatePath";
-import type { RendererSource } from "./types";
+import type { BitmapRendererDefinition, RendererSource } from "./types";
 
 export function dataUrlFromBytes(bytes: Uint8Array, mimeType: string): string {
   const chunkSize = 0x8000;
@@ -97,11 +97,26 @@ export async function decodeBitmapColor(dataUrl: string): Promise<BitmapColorDat
   return { width, height, rgba };
 }
 
+/**
+ * Bump when a change in the shared pipeline around renderers — decoding,
+ * settings coercion, separation, dot splitting — alters output for the same
+ * inputs. Part of every stamp, so it invalidates all renderers at once.
+ */
+export const BITMAP_PIPELINE_VERSION = 1;
+
+/** What a render records about the code that produced it — compared against
+ * the current stamp to spot output made by an older renderer. */
+export function bitmapRendererStamp(renderer: Pick<BitmapRendererDefinition, "id" | "version">): string {
+  return `${BITMAP_PIPELINE_VERSION}/${renderer.id}@${renderer.version}`;
+}
+
 export interface MaterializedBitmap {
   /** Legacy single-path fast path — populated only when separation is inactive ("none"). */
   bitmapRendererPath: string;
   /** One synthesized path per ink channel — populated only when separation is active. */
   paths: SvgPath[];
+  /** `bitmapRendererStamp` of the renderer that produced this output. */
+  rendererVersion?: string;
 }
 
 type MaterializableBitmap = Pick<
@@ -242,12 +257,24 @@ export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Pro
     throw new Error(`Bitmap renderer "${bitmap.bitmapRendererId}" is not installed.`);
   }
 
+  return {
+    ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl)),
+    rendererVersion: bitmapRendererStamp(renderer),
+  };
+}
+
+/** The rendering half of `materializeBitmapLayers`, once a renderer is resolved. */
+async function renderWith(
+  renderer: BitmapRendererDefinition,
+  bitmap: MaterializableBitmap,
+  dataUrl: string,
+): Promise<MaterializedBitmap> {
   const settings = coerceSettings(renderer.fields, renderer.defaults, bitmap.bitmapRendererSettings);
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
   if (mode === "none") {
-    const source = await decodeBitmapLuminance(bitmap.bitmapDataUrl);
+    const source = await decodeBitmapLuminance(dataUrl);
     const layers = validateRendererOutput(
       await renderer.render({
         width: source.width,
@@ -275,7 +302,7 @@ export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Pro
     };
   }
 
-  const colorData = await decodeBitmapColor(bitmap.bitmapDataUrl);
+  const colorData = await decodeBitmapColor(dataUrl);
   const channels =
     mode === "rgb" ? separateRGB(colorData)
     : mode === "cmy" ? separateCMY(colorData)
