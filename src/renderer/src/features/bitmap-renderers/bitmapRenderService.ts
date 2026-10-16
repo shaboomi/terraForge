@@ -84,6 +84,8 @@ interface RenderJob {
   failed: boolean;
   /** Its output reached the document; it lingers only to hold the label. */
   applied: boolean;
+  /** Stops the render itself — not just its result — once superseded. */
+  controller: AbortController;
 }
 
 const jobs = new Map<string, RenderJob>();
@@ -114,12 +116,13 @@ function cancelJob(importId: string): void {
   const job = jobs.get(importId);
   if (!job) return;
   if (job.debounce) clearTimeout(job.debounce);
+  if (!job.applied) job.controller.abort();
   jobs.delete(importId);
 }
 
 function schedule(importId: string, signature: string): void {
   cancelJob(importId);
-  const job: RenderJob = { signature, debounce: null, inFlight: null, failed: false, applied: false };
+  const job: RenderJob = { signature, debounce: null, inFlight: null, failed: false, applied: false, controller: new AbortController() };
   job.debounce = setTimeout(() => void start(importId, job), RENDER_DEBOUNCE_MS);
   jobs.set(importId, job);
   setStatus(importId, "pending");
@@ -139,8 +142,8 @@ async function run(importId: string, job: RenderJob): Promise<void> {
   const current = () => jobs.get(importId) === job;
   setStatus(importId, "rendering");
 
-  // Yield a turn so "rendering" is committed before a synchronous in-tree
-  // renderer ties up the thread.
+  // Yield a turn so "rendering" is committed before decoding and tone
+  // preparation — which still run on this thread — tie it up.
   await delay(0);
   if (!current()) return;
 
@@ -149,7 +152,7 @@ async function run(importId: string, job: RenderJob): Promise<void> {
 
   let result;
   try {
-    result = await materializeBitmapLayers(imp);
+    result = await materializeBitmapLayers(imp, { signal: job.controller.signal });
   } catch (err: unknown) {
     if (!current()) return;
     job.failed = true;

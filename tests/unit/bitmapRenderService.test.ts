@@ -224,6 +224,20 @@ describe("background rendering", () => {
     expect(statusOf()).toBe("idle");
   });
 
+  it("aborts a render already in flight once newer settings supersede it", async () => {
+    materialize.mockReturnValue(new Promise(() => {}));
+    useCanvasStore.setState({ imports: [renderedImport()] });
+
+    useCanvasStore.getState().updateImport("bmp-1", { bitmapRendererSettings: { spacingMM: 9 } });
+    await vi.advanceTimersByTimeAsync(500);
+    const { signal } = materialize.mock.calls[0][1]!;
+    expect(signal!.aborted).toBe(false);
+
+    useCanvasStore.getState().updateImport("bmp-1", { bitmapRendererSettings: { spacingMM: 10 } });
+
+    expect(signal!.aborted).toBe(true);
+  });
+
   it("drops a pending render when its import is removed", async () => {
     useCanvasStore.setState({ imports: [bitmapImport({ bitmapRenderSignature: "stale" })] });
 

@@ -3,7 +3,8 @@ import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
 import { prepareSource, resolveToneSettings } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
-import { findBitmapRenderer, getBitmapRenderer } from "./registry";
+import { bitmapRenderers, findBitmapRenderer, getBitmapRenderer } from "./registry";
+import { runInTreeRenderer } from "./rendererPool";
 import { validateRendererOutput, type ValidatedLayer } from "./validatePath";
 import type { BitmapRendererDefinition, RendererSource } from "./types";
 
@@ -246,7 +247,10 @@ function layerPaths(
  * The renderer itself never changes between these cases — separation is a
  * fan-out one level above `render()`, not a different rendering mode.
  */
-export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Promise<MaterializedBitmap> {
+export async function materializeBitmapLayers(
+  bitmap: MaterializableBitmap,
+  options: { signal?: AbortSignal } = {},
+): Promise<MaterializedBitmap> {
   if (!bitmap.bitmapDataUrl) return { bitmapRendererPath: "", paths: [] };
 
   const pluginManifests = useBitmapPluginStore.getState().plugins;
@@ -262,7 +266,7 @@ export async function materializeBitmapLayers(bitmap: MaterializableBitmap): Pro
   }
 
   return {
-    ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl)),
+    ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl, options.signal)),
     rendererVersion: bitmapRendererStamp(renderer),
   };
 }
@@ -315,16 +319,23 @@ async function renderWith(
   renderer: BitmapRendererDefinition,
   bitmap: MaterializableBitmap,
   dataUrl: string,
+  signal: AbortSignal | undefined,
 ): Promise<MaterializedBitmap> {
   const settings = coerceSettings(renderer.fields, renderer.defaults, bitmap.bitmapRendererSettings);
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
-  const render = async (source: RendererSource) =>
-    validateRendererOutput(
-      await renderer.render({ width: source.width, height: source.height, scale: baseScale, settings, source }),
-      renderer.id,
-    );
+  // In-tree renderers run in the worker pool; a plugin already runs in its
+  // own sandbox process, so it is called directly.
+  const inTree = bitmapRenderers.includes(renderer);
+  const render = async (source: RendererSource) => {
+    const context = { width: source.width, height: source.height, scale: baseScale, settings, source };
+    const output = inTree ? await runInTreeRenderer(renderer, context, signal) : await renderer.render(context);
+    // A plugin render cannot be stopped mid-flight, but its result must not
+    // be used once the caller has moved on.
+    if (signal?.aborted) throw new DOMException("Render cancelled.", "AbortError");
+    return validateRendererOutput(output, renderer.id);
+  };
 
   if (mode === "none") {
     const [{ source }] = await preparedSources(bitmap, dataUrl);
