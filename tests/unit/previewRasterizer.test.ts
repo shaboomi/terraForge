@@ -90,7 +90,7 @@ afterEach(() => {
 
 describe("BitmapPreviewRasterizer", () => {
   it("asks for an overview of the whole import straight away, as a tintable mask", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
 
     const [request] = rasters();
     expect(request).toMatchObject({
@@ -104,8 +104,8 @@ describe("BitmapPreviewRasterizer", () => {
 
   it("does not ask again for an image already on its way", () => {
     const ctx = fakeContext(0.1);
-    rasterizer.draw(ctx, bitmapImport(), false, 1);
-    rasterizer.draw(ctx, bitmapImport(), false, 1);
+    rasterizer.draw(ctx, bitmapImport(), false);
+    rasterizer.draw(ctx, bitmapImport(), false);
 
     expect(rasters()).toHaveLength(1);
   });
@@ -113,27 +113,27 @@ describe("BitmapPreviewRasterizer", () => {
   it("draws a finished image over the import's own bounds, and asks for a redraw", () => {
     const listener = vi.fn();
     rasterizer.subscribe(listener);
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     const [request] = rasters();
     const bitmap = FakeWorker.last!.reply(request.id, request.slot);
 
     expect(listener).toHaveBeenCalled();
     const ctx = fakeContext(0.1);
-    rasterizer.draw(ctx, bitmapImport(), false, 1);
+    rasterizer.draw(ctx, bitmapImport(), false);
     expect(ctx.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 4000, 3000);
   });
 
   it("waits for a zoom to settle before asking for a sharper image, then asks for just the visible part", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     const [first] = rasters();
     FakeWorker.last!.reply(first.id, first.slot);
 
     // Zoomed in well past the overview's size cap.
     const zoomed = fakeContext(4, -2000);
-    rasterizer.draw(zoomed, bitmapImport(), false, 1);
+    rasterizer.draw(zoomed, bitmapImport(), false);
     expect(rasters()).toHaveLength(1);
 
-    rasterizer.draw(zoomed, bitmapImport(), false, 1); // still moving
+    rasterizer.draw(zoomed, bitmapImport(), false); // still moving
     vi.advanceTimersByTime(119);
     expect(rasters()).toHaveLength(1);
 
@@ -149,8 +149,8 @@ describe("BitmapPreviewRasterizer", () => {
   });
 
   it("asks for a new overview straight away when the render changes, sending the new geometry", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
-    rasterizer.draw(fakeContext(0.1), bitmapImport({ bitmapRendererPath: "M5 5 L6 6" }), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
+    rasterizer.draw(fakeContext(0.1), bitmapImport({ bitmapRendererPath: "M5 5 L6 6" }), false);
 
     const [, second] = rasters();
     expect(second.layers).toEqual([{ d: "M5 5 L6 6", color: null }]);
@@ -159,11 +159,11 @@ describe("BitmapPreviewRasterizer", () => {
   });
 
   it("re-tints rather than re-draws when only the selection colour changes", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     const [request] = rasters();
     FakeWorker.last!.reply(request.id, request.slot);
 
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), true, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), true);
 
     expect(rasters()).toHaveLength(1);
     expect(FakeWorker.last!.posted.at(-1)).toMatchObject({ type: "tint", slot: "bmp:overview", color: "#60a0ff" });
@@ -177,26 +177,70 @@ describe("BitmapPreviewRasterizer", () => {
         { id: "m", d: "M2 2 L3 3", strokeColor: "#ff00ff", visible: false } as SvgImport["paths"][number],
       ],
     });
-    rasterizer.draw(fakeContext(0.1), imp, false, 1);
+    rasterizer.draw(fakeContext(0.1), imp, false);
 
     expect(rasters()[0]).toMatchObject({ mask: false, blend: "darken", layers: [{ d: "M0 0 L1 1", color: "#00ffff" }] });
   });
 
+  it("draws strokes at the pen's real width, so zoomed out shows the plot's true coverage", () => {
+    // 0.25 mm per source pixel; a 0.5 mm pen is 2 source pixels wide whatever the zoom.
+    rasterizer.draw(fakeContext(0.1), bitmapImport({ scale: 0.25, strokeWidthMM: 0.5 }), false);
+    rasterizer.draw(fakeContext(4), bitmapImport({ id: "b2", scale: 0.25, strokeWidthMM: 0.5 }), false);
+
+    for (const request of rasters()) expect(request.lineWidth).toBeCloseTo(2, 10);
+  });
+
+  it("supersamples, so fine screens do not alias into bands", () => {
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
+    expect(rasters()[0].supersample).toBeGreaterThan(1);
+  });
+
+  describe("separated inks", () => {
+    const inks = (mode: SvgImport["bitmapSeparationMode"]) =>
+      bitmapImport({
+        bitmapRendererPath: "",
+        bitmapSeparationMode: mode,
+        paths: [
+          { id: "c", d: "M0 0 L1 1", strokeColor: "#00ffff", visible: true } as SvgImport["paths"][number],
+          { id: "m", d: "M2 2 L3 3", strokeColor: "#ff00ff", visible: true } as SvgImport["paths"][number],
+        ],
+      });
+
+    it("multiplies inks onto white paper for subtractive modes", () => {
+      for (const mode of ["cmy", "cmyk", "rgb-white", "custom"] as const) {
+        rasterizer = new BitmapPreviewRasterizer();
+        rasterizer.draw(fakeContext(0.1), inks(mode), false);
+        expect(rasters().at(-1), mode).toMatchObject({ paper: "#ffffff", blend: "multiply" });
+      }
+    });
+
+    it("screens light inks onto black paper", () => {
+      rasterizer.draw(fakeContext(0.1), inks("rgb"), false);
+      expect(rasters()[0]).toMatchObject({ paper: "#000000", blend: "screen" });
+    });
+
+    it("redraws when the separation mode changes the paper", () => {
+      rasterizer.draw(fakeContext(0.1), inks("cmyk"), false);
+      rasterizer.draw(fakeContext(0.1), inks("rgb"), false);
+      expect(rasters().map((request) => request.paper)).toEqual(["#ffffff", "#000000"]);
+    });
+  });
+
   it("throws away a reply that a newer request has superseded", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     const [old] = rasters();
-    rasterizer.draw(fakeContext(0.1), bitmapImport({ bitmapRendererPath: "M5 5" }), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport({ bitmapRendererPath: "M5 5" }), false);
 
     const stale = FakeWorker.last!.reply(old.id, old.slot);
 
     expect(stale.close).toHaveBeenCalled();
     const ctx = fakeContext(0.1);
-    rasterizer.draw(ctx, bitmapImport({ bitmapRendererPath: "M5 5" }), false, 1);
+    rasterizer.draw(ctx, bitmapImport({ bitmapRendererPath: "M5 5" }), false);
     expect(ctx.drawImage).not.toHaveBeenCalled();
   });
 
   it("frees an import's images and worker state once it is gone", () => {
-    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, 1);
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     const [request] = rasters();
     const bitmap = FakeWorker.last!.reply(request.id, request.slot);
 
@@ -209,7 +253,7 @@ describe("BitmapPreviewRasterizer", () => {
 
   it("draws nothing, and asks for nothing, while the preview is hidden", () => {
     const ctx = fakeContext(0.1);
-    rasterizer.draw(ctx, bitmapImport({ bitmapPreviewVisible: false }), false, 1);
+    rasterizer.draw(ctx, bitmapImport({ bitmapPreviewVisible: false }), false);
 
     expect(FakeWorker.last).toBeUndefined();
     expect(ctx.drawImage).not.toHaveBeenCalled();

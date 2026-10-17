@@ -116,7 +116,7 @@ export function drawImportsLayer({
       if (bitmapPreviews) {
         ctx.save();
         applyImportTransform(ctx, imp, [vpA, vpE, vpF], isBottom, canvasH);
-        bitmapPreviews.draw(ctx, imp, isSelected(imp), dpr);
+        bitmapPreviews.draw(ctx, imp, isSelected(imp));
         ctx.restore();
       }
       continue;

@@ -1,5 +1,4 @@
 import type { SvgImport, SvgPath } from "../../../../../types";
-import { MM_TO_PX } from "../constants";
 import type { LocalRect, RasterReply, RasterRequest, RasterWorkerRequest } from "./rasterProtocol";
 
 /**
@@ -29,6 +28,9 @@ const MAX_DETAIL_PIXELS = 24_000_000;
 const DETAIL_MARGIN = 0.25;
 /** How far the screen scale may drift from an image's before it is redrawn. */
 const SCALE_TOLERANCE = 1.3;
+/** Drawn at this many times the needed resolution, then scaled down smoothly
+ * — fine screens otherwise alias into moiré bands when zoomed out. */
+const SUPERSAMPLE = 2;
 /** Quiet period after a zoom or pan before sharper images are requested. */
 const VIEW_SETTLE_MS = 120;
 
@@ -60,6 +62,8 @@ interface Geometry {
   key: string;
   layers: { d: string; color: string | null }[];
   mask: boolean;
+  /** For separated inks: the paper they are drawn on and how they combine there. */
+  paper: { color: string; blend: "multiply" | "screen" } | null;
   /** The import fields the geometry was built from, compared by identity. */
   inputs: unknown[];
 }
@@ -71,7 +75,20 @@ interface ImportState {
   detail: Slot;
   settleTimer: ReturnType<typeof setTimeout> | null;
   /** The last view this import was drawn in, for requests made once it settles. */
-  lastDraw: { transform: DOMMatrix; width: number; height: number; imp: SvgImport; selected: boolean; dpr: number } | null;
+  lastDraw: { transform: DOMMatrix; width: number; height: number; imp: SvgImport; selected: boolean } | null;
+}
+
+/**
+ * Separated inks are previewed the way they will combine on the page:
+ * transparent inks on white paper filter the light, which multiplying
+ * approximates; light inks on dark paper add light, which screening does.
+ * Anything else (a single-colour preview, or a plugin's coloured layers
+ * without separation) is drawn without paper, as before.
+ */
+function paperFor(imp: SvgImport): Geometry["paper"] {
+  const mode = imp.bitmapSeparationMode ?? "none";
+  if (mode === "none") return null;
+  return mode === "rgb" ? { color: "#000000", blend: "screen" } : { color: "#ffffff", blend: "multiply" };
 }
 
 /** Which of a bitmap's separated-ink paths its preview shows. Mirrors the
@@ -155,7 +172,7 @@ export class BitmapPreviewRasterizer {
    * be transformed into the import's local coordinates, exactly as its
    * vector paths would be.
    */
-  draw(ctx: CanvasRenderingContext2D, imp: SvgImport, selected: boolean, dpr: number): void {
+  draw(ctx: CanvasRenderingContext2D, imp: SvgImport, selected: boolean): void {
     const bounds = { x: imp.viewBoxX ?? 0, y: imp.viewBoxY ?? 0, w: imp.svgWidth, h: imp.svgHeight };
 
     if (imp.bitmapDataUrl && imp.bitmapSourceVisible !== false) {
@@ -173,7 +190,7 @@ export class BitmapPreviewRasterizer {
     this.updateGeometry(state, imp);
     if (!state.geometry) return;
 
-    state.lastDraw = { transform: ctx.getTransform(), width: ctx.canvas.width, height: ctx.canvas.height, imp, selected, dpr };
+    state.lastDraw = { transform: ctx.getTransform(), width: ctx.canvas.width, height: ctx.canvas.height, imp, selected };
     this.request(state, false);
 
     const { overview, detail } = state;
@@ -269,7 +286,7 @@ export class BitmapPreviewRasterizer {
     // replaced by another empty array.
     const inputs =
       imp.paths.length > 0
-        ? [imp.paths, imp.strokeEnabled, imp.generatedStrokeForNoStroke]
+        ? [imp.paths, imp.strokeEnabled, imp.generatedStrokeForNoStroke, imp.bitmapSeparationMode]
         : [imp.bitmapRendererPath];
     if (state.geometry && sameInputs(state.geometry.inputs, inputs)) return;
 
@@ -289,7 +306,10 @@ export class BitmapPreviewRasterizer {
       this.post({ type: "drop", prefix: previous.key });
       this.workerGeometry.delete(previous.key);
     }
-    state.geometry = layers.length > 0 ? { key: `${state.id}#${this.nextGeometry++}#`, layers, mask, inputs } : null;
+    state.geometry =
+      layers.length > 0
+        ? { key: `${state.id}#${this.nextGeometry++}#`, layers, mask, paper: paperFor(imp), inputs }
+        : null;
     if (!state.geometry) {
       // Nothing to show any more: drop the images rather than leave a stale preview.
       state.overview.tile?.bitmap.close();
@@ -307,7 +327,7 @@ export class BitmapPreviewRasterizer {
     // A single-colour preview is tinted, so its colour is not part of the
     // drawn shape; a layered one only depends on it for uncoloured layers.
     const usesFallback = !geometry.mask && geometry.layers.some((layer) => layer.color === null);
-    return `${lineWidth}|${geometry.mask ? "mask" : "inks"}|${usesFallback ? color : ""}`;
+    return `${lineWidth}|${geometry.mask ? "mask" : "inks"}|${geometry.paper?.blend ?? ""}|${usesFallback ? color : ""}`;
   }
 
   /**
@@ -320,10 +340,14 @@ export class BitmapPreviewRasterizer {
     const geometry = state.geometry;
     if (!view || !geometry) return;
 
-    const { transform, width, height, imp, selected, dpr } = view;
+    const { transform, width, height, imp, selected } = view;
     const bounds = { x: imp.viewBoxX ?? 0, y: imp.viewBoxY ?? 0, w: imp.svgWidth, h: imp.svgHeight };
     const screenScale = Math.sqrt(Math.abs(transform.a * transform.d - transform.b * transform.c));
-    const lineWidth = (imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * MM_TO_PX * dpr;
+    // The pen's real width in local units (source pixels), so the preview's
+    // ink coverage matches the plot's at every zoom — a fixed on-screen width
+    // drew lines many times too thick when zoomed out, darkening the preview.
+    const mmPerUnit = Math.sqrt(Math.abs((imp.scaleX ?? imp.scale) * (imp.scaleY ?? imp.scale))) || 1;
+    const lineWidth = (imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) / mmPerUnit;
     const color = this.colorFor(selected);
     const styleKey = this.styleKey(geometry, lineWidth, color);
 
@@ -415,7 +439,9 @@ export class BitmapPreviewRasterizer {
       lineWidth,
       mask: geometry.mask,
       color,
-      blend: geometry.mask ? "source-over" : "darken",
+      blend: geometry.mask ? "source-over" : (geometry.paper?.blend ?? "darken"),
+      paper: geometry.paper?.color,
+      supersample: SUPERSAMPLE,
     };
     this.workerGeometry.add(geometry.key);
     slot.pending = { id, region: wanted.region, scale: wanted.scale, geometryKey: geometry.key, styleKey, color };

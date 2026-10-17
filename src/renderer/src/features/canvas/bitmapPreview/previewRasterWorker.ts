@@ -17,6 +17,8 @@ interface Geometry {
 }
 
 const geometries = new Map<string, Geometry>();
+/** Largest temporary supersampled image, in pixels (~256MB of RGBA). */
+const MAX_SUPERSAMPLED_PIXELS = 64_000_000;
 /** Per slot: the last single-colour mask, kept for re-tinting. */
 const masks = new Map<string, OffscreenCanvas>();
 
@@ -62,16 +64,32 @@ self.onmessage = (event: MessageEvent<RasterWorkerRequest>) => {
     const { region, scale } = request;
     const width = Math.max(1, Math.round(region.w * scale));
     const height = Math.max(1, Math.round(region.h * scale));
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(scale, 0, 0, scale, -region.x * scale, -region.y * scale);
-    // Line width is given in device pixels, matching the SVG preview's
-    // non-scaling stroke; the transform would otherwise scale it.
-    ctx.lineWidth = request.lineWidth / scale;
-    ctx.globalCompositeOperation = request.blend;
+    // Supersample, but keep the temporary image to a sane size.
+    const supersample = Math.max(1, Math.min(request.supersample ?? 1, Math.sqrt(MAX_SUPERSAMPLED_PIXELS / (width * height))));
+    const drawScale = scale * supersample;
+    const big = new OffscreenCanvas(Math.max(1, Math.round(width * supersample)), Math.max(1, Math.round(height * supersample)));
+    const bigCtx = big.getContext("2d")!;
+    if (request.paper) {
+      bigCtx.fillStyle = request.paper;
+      bigCtx.fillRect(0, 0, big.width, big.height);
+    }
+    bigCtx.setTransform(drawScale, 0, 0, drawScale, -region.x * drawScale, -region.y * drawScale);
+    // The pen's real width, in local units: the transform scales it with the
+    // drawing, so a zoomed-out preview shows the coverage the plot will have.
+    bigCtx.lineWidth = request.lineWidth;
+    bigCtx.globalCompositeOperation = request.blend;
     for (const layer of geometry.layers) {
-      ctx.strokeStyle = request.mask ? "#ffffff" : (layer.color ?? request.color);
-      ctx.stroke(layer.path);
+      bigCtx.strokeStyle = request.mask ? "#ffffff" : (layer.color ?? request.color);
+      bigCtx.stroke(layer.path);
+    }
+
+    let canvas = big;
+    if (big.width !== width || big.height !== height) {
+      canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(big, 0, 0, width, height);
     }
 
     if (request.mask) {
