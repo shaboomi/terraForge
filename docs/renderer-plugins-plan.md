@@ -15,8 +15,10 @@ plugin's source itself and posts it in as data; the plugin never touches disk.
 Settled and shipped:
 
 - **Contract.** `render(context)` taking one object — `width`, `height`,
-  `scale`, `settings` (already coerced to the manifest's schema), and an
-  **optional** `source` (already tone-shaped). Returns a path string, an
+  `scale`, `settings` (already coerced to the manifest's schema), an
+  **optional** `source` (already tone-shaped), and under colour separation
+  an `ink` (`{ index, count, label, color, offset }`) so a renderer can
+  offset each ink's pattern. Returns a path string, an
   array of `{ d?, dots?, label?, color? }` layers to drive several pens, or
   `{ layers, warnings? }`. Dots (`{ d, x, y }`) are independent fillable,
   tappable shapes; warnings are shown under the renderer's controls.

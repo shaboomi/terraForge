@@ -133,6 +133,7 @@ It may be `async` or return a promise.
   scale,    // millimetres per output unit
   settings, // your fields, by key
   source,   // tones over the area — absent unless you asked for one
+  ink,      // which ink of a colour separation this is — absent otherwise
 }
 ```
 
@@ -162,6 +163,28 @@ declared is present, numbers are finite and within your `min`/`max`, and
 selects hold one of their options. A value a saved drawing is missing, or
 that falls outside a range you have since tightened, is replaced with your
 default first.
+
+### Colour separation: `ink`
+
+When the user separates a bitmap into inks (CMYK, RGB, a custom palette),
+your renderer runs once per ink, each with that ink's tones as `source` and
+an `ink` describing it:
+
+```js
+{ index, count, label, color, offset } // e.g. { index: 1, count: 4, label: "Magenta", color: "#ff00ff", offset: true }
+```
+
+If every ink is drawn with the same pattern, the pens trace each other's
+lines or dots, so the inks stack and muddy rather than sitting side by side.
+When `offset` is true, shift your pattern by an amount that depends on
+`index` — the way print screens are set at different angles. The built-in
+renderers rotate by `index / count` of their pattern's repeat (a line
+screen through 180°, a hex dot grid through 60°), or move outward by
+`index / count` of their spacing (rings, boxes). Leave ink 0 where it would
+be without separation. When `offset` is false the user wants every ink on
+one shared pattern, so don't shift.
+
+You can ignore `ink` entirely; your inks will then stack.
 
 ### What you return
 

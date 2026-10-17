@@ -44,6 +44,16 @@ export interface SpineGeometry {
   /** Reports something the user should know about this render — e.g. a
    * generator stopping at its own size cap. */
   warn(message: string): void;
+  /**
+   * For one ink of a colour separation with offsetting on: this ink's index
+   * divided by the number of inks (0, 1/n, 2/n …); otherwise 0. Generators
+   * shift their pattern by this fraction of its own repeat — a rotation, or a
+   * part of the spacing — so the inks' lines fall beside each other rather
+   * than on top of each other.
+   */
+  inkFraction: number;
+  /** This ink's index when offsetting (see `inkFraction`), otherwise 0. */
+  inkIndex: number;
 }
 
 /** What a tone-spine renderer returns: always a single stroked layer. */
@@ -133,7 +143,7 @@ export function defineToneSpineRenderer(
     peakClipPct: DEFAULT_PEAK_CLIP_PCT,
   };
 
-  const render = ({ source, settings: rawSettings, scale, width, height }: RendererContext): ToneSpineResult => {
+  const render = ({ source, settings: rawSettings, scale, width, height, ink }: RendererContext): ToneSpineResult => {
     // A tone spine traces tone, so it has nothing to draw without a source.
     if (!source || width < 1 || height < 1 || source.values.length === 0) return { layers: [{ d: "" }], warnings: [] };
     const warnings: string[] = [];
@@ -160,6 +170,8 @@ export function defineToneSpineRenderer(
         Math.hypot(source.width - originX, source.height - originY),
       ),
       warn: (message) => warnings.push(message),
+      inkFraction: ink?.offset ? ink.index / ink.count : 0,
+      inkIndex: ink?.offset ? ink.index : 0,
     };
 
     const { d, truncated } = renderToneSpine(spec.strands(geometry, settings), {

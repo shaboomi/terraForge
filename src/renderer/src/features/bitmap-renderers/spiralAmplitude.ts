@@ -26,7 +26,19 @@ const MAX_SPIRAL_POINTS = MAX_RENDER_POINTS;
  * stretching outer waveform periods, so the step is chosen per point to keep
  * every segment near `targetSegmentLength`.
  */
-function spiralStrand({ originX, originY, angleRad, spacing, targetSegmentLength, maxRadius, warn }: SpineGeometry): SpineStrand {
+function spiralStrand({
+  originX,
+  originY,
+  angleRad: baseAngle,
+  spacing,
+  targetSegmentLength,
+  maxRadius,
+  warn,
+  inkFraction,
+}: SpineGeometry): SpineStrand {
+  // Rotating an Archimedean spiral by a fraction of a turn moves each turn
+  // outward by that fraction of the spacing, so separated inks interleave.
+  const angleRad = baseAngle + inkFraction * Math.PI * 2;
   const maxTheta = (maxRadius / spacing) * Math.PI * 2;
   const radialRate = spacing / (Math.PI * 2);
   const points: SpineStrand = [];

@@ -72,7 +72,7 @@ export const concentricBoxesRenderer = defineToneSpineRenderer({
   revision: 2,
   fields: [spacingField("Box spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 4, toothWidthMM: 6, amplitudeMM: 1.5 },
-  *strands({ originX, originY, spacing, angleRad, targetSegmentLength, width, height }) {
+  *strands({ originX, originY, spacing, angleRad, targetSegmentLength, width, height, inkFraction }) {
     // The innermost "box" is the line the image's offsets shrink to: as long
     // as the image's longer side exceeds its shorter one.
     const baseHalfWidth = Math.max(0, (width - height) / 2);
@@ -89,9 +89,11 @@ export const concentricBoxesRenderer = defineToneSpineRenderer({
     const coverHalfWidth = Math.max(...corners.map((c) => Math.abs(c.x)));
     const coverHalfHeight = Math.max(...corners.map((c) => Math.abs(c.y)));
 
+    // Separated inks sit a fraction of the spacing further out each, so
+    // their boxes interleave.
     for (let k = 1; ; k++) {
-      const halfWidth = baseHalfWidth + k * spacing;
-      const halfHeight = baseHalfHeight + k * spacing;
+      const halfWidth = baseHalfWidth + (k + inkFraction) * spacing;
+      const halfHeight = baseHalfHeight + (k + inkFraction) * spacing;
       yield boxStrand(originX, originY, halfWidth, halfHeight, angleRad, targetSegmentLength);
       if (halfWidth >= coverHalfWidth && halfHeight >= coverHalfHeight) break;
     }

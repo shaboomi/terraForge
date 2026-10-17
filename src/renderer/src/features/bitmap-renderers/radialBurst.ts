@@ -14,6 +14,9 @@ export const RADIAL_BURST_RENDERER_ID = "radial-burst";
  * is small; enough that the burst reads as a burst before any branching. */
 const INNER_RAYS = 8;
 
+/** The fractional part of the golden ratio: steps by it never repeat. */
+const GOLDEN_FRACTION = (Math.sqrt(5) - 1) / 2;
+
 /**
  * One ray's base points, straight out from the origin between radii `from`
  * and `to` in direction `dir`, with the tangential (perpendicular-to-ray)
@@ -74,7 +77,11 @@ export const radialBurstRenderer = defineToneSpineRenderer({
   revision: 2,
   fields: [spacingField("Ray spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 3, toothWidthMM: 4, amplitudeMM: 1.5 },
-  *strands({ originX, originY, angleRad, spacing, targetSegmentLength, width, height, maxRadius }) {
+  *strands({ originX, originY, angleRad: baseAngle, spacing, targetSegmentLength, width, height, maxRadius, inkIndex }) {
+    // Separated inks are rotated by golden-ratio steps of the innermost ray
+    // gap. The gap halves at every doubling, so any even fraction of it would
+    // land one ink's rays on another's at some radius; this never does.
+    const angleRad = baseAngle + ((inkIndex * GOLDEN_FRACTION) % 1) * ((2 * Math.PI) / INNER_RAYS);
     // The radius at which `rays` rays are exactly one spacing apart.
     const radiusFor = (rays: number) => (rays * spacing) / (2 * Math.PI);
 

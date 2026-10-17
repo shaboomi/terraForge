@@ -58,6 +58,24 @@ export function BitmapSeparationSection({ imp, onUpdate }: { imp: SvgImport; onU
         ))}
       </select>
 
+      {mode !== "none" && (
+        // Like print screens set at different angles: each ink's lines or
+        // dots fall beside the others' instead of every pen tracing the same
+        // pattern. Off stacks the inks on one shared pattern.
+        <label
+          className="mt-1.5 flex items-center gap-1.5 text-[10px] text-content-muted"
+          title="Shift each ink's pattern so the pens draw beside each other rather than over each other"
+        >
+          <input
+            type="checkbox"
+            aria-label="Offset each ink"
+            checked={imp.bitmapSeparationOffset !== false}
+            onChange={(event) => onUpdate({ bitmapSeparationOffset: event.target.checked })}
+          />
+          Offset each ink
+        </label>
+      )}
+
       {mode === "custom" && (
         <div className="mt-2 space-y-1.5">
           {palette.map((swatch, index) => (

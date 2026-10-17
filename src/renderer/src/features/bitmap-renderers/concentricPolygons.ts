@@ -76,7 +76,10 @@ export const concentricPolygonsRenderer = defineToneSpineRenderer({
     const sides = Math.round(settings.sides as number);
     // Circumradius per unit of apothem (the centre-to-edge distance).
     const step = geometry.spacing / Math.cos(Math.PI / sides);
-    for (let radius = step; radius * Math.cos(Math.PI / sides) <= geometry.maxRadius; radius += step) {
+    // Separated inks sit a fraction of the spacing further out each, so
+    // their polygons interleave.
+    const first = step * (1 + geometry.inkFraction);
+    for (let radius = first; radius * Math.cos(Math.PI / sides) <= geometry.maxRadius; radius += step) {
       yield polygonStrand(radius, sides, geometry);
     }
   },

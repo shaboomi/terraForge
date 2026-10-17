@@ -23,9 +23,13 @@ export const isometricGridRenderer = defineToneSpineRenderer({
   revision: 1,
   fields: [spacingField("Line spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 3, toothWidthMM: 4, amplitudeMM: 1 },
+  // Separated inks are rotated through the grid's 60° repeat.
   strands: (geometry) =>
     [0, SIXTY_DEGREES, 2 * SIXTY_DEGREES].flatMap((offset) =>
-      generateLineFamilyStrands({ ...geometry, angleRad: geometry.angleRad + offset }),
+      generateLineFamilyStrands({
+        ...geometry,
+        angleRad: geometry.angleRad + offset + geometry.inkFraction * SIXTY_DEGREES,
+      }),
     ),
 });
 

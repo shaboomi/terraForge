@@ -371,6 +371,27 @@ export interface RendererContext {
   settings: BitmapRendererSettings;
   /** Tone data over the output area, when a source image is driving this render. */
   source?: RendererSource;
+  /**
+   * Present when this render is one ink of a colour separation: which ink,
+   * of how many. When `offset` is true, the renderer should shift its
+   * pattern by an amount that depends on `index` — rotating it, or moving it
+   * by a fraction of its spacing — so each ink's lines or dots fall beside
+   * the others' rather than on top of them, as print screens are set at
+   * different angles. When false, every ink is meant to share one pattern.
+   */
+  ink?: RendererInk;
+}
+
+/** Which ink of a colour separation a render is for — see `RendererContext.ink`. */
+export interface RendererInk {
+  /** 0-based position of this ink among the separation's inks. */
+  index: number;
+  count: number;
+  label: string;
+  /** CSS colour of the ink. */
+  color: string;
+  /** Whether to offset this ink's pattern from the others'. */
+  offset: boolean;
 }
 
 /**
@@ -582,6 +603,12 @@ export interface SvgImport {
    * light inks on dark paper; "rgb-white" the same pens on white paper.
    */
   bitmapSeparationMode?: "none" | "rgb" | "rgb-white" | "cmy" | "cmyk" | "custom";
+  /**
+   * Whether each ink's pattern is offset from the others' (see
+   * `RendererContext.ink`). Absent means on; false stacks every ink on one
+   * shared pattern.
+   */
+  bitmapSeparationOffset?: boolean;
   /** Custom palette swatches, used only when bitmapSeparationMode is "custom". */
   bitmapSeparationPalette?: { label: string; color: string }[];
   /** Position of the SVG's bottom-left corner on the bed (mm) */

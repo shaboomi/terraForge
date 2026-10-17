@@ -1,7 +1,7 @@
 import type { BitmapRendererSettings, SvgImport } from "../../../../../types";
 import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
-import { bitmapRendererStamp, bitmapRenderSignature } from "../../bitmap-renderers/bitmapImage";
+import { bitmapRendererStamp, bitmapRenderSignature, isSeparated } from "../../bitmap-renderers/bitmapImage";
 import { rerenderBitmap, useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
 import { rendererSettings } from "../../bitmap-renderers/coerceSettings";
 import {
@@ -65,7 +65,7 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
     !!renderer &&
     serviceStatus === "idle" &&
     imp.bitmapRenderSignature === bitmapRenderSignature(imp) &&
-    imp.bitmapRendererVersion !== bitmapRendererStamp(renderer);
+    imp.bitmapRendererVersion !== bitmapRendererStamp(renderer, isSeparated(imp));
   const renderStatus: keyof typeof RENDER_STATUS_LABEL = outdated ? "outdated" : serviceStatus;
 
   /**

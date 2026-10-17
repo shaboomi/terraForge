@@ -20,7 +20,10 @@ export const rasterLinesRenderer = defineToneSpineRenderer({
   revision: 1,
   fields: [spacingField("Line spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 2, toothWidthMM: 3, amplitudeMM: 1 },
-  strands: (geometry) => generateLineFamilyStrands(geometry),
+  // Separated inks are rotated through the lines' 180° repeat, like print
+  // screens set at different angles.
+  strands: (geometry) =>
+    generateLineFamilyStrands({ ...geometry, angleRad: geometry.angleRad + geometry.inkFraction * Math.PI }),
 });
 
 export const rasterLinesDefaults: BitmapRendererSettings = rasterLinesRenderer.defaults;

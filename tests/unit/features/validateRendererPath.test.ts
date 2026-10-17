@@ -153,6 +153,33 @@ describe("materializeBitmapLayers output checking", () => {
     expect((await materializeBitmapLayers(bitmap)).warnings).toEqual(["Cut short"]);
   });
 
+  it("tells each separated render which ink it is, so it can offset its pattern", async () => {
+    const render = (window as any).terraForge.bitmapPlugins.render;
+    render.mockClear();
+    render.mockResolvedValue("M0 0 L1 1");
+
+    await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "cmy" });
+
+    expect(render.mock.calls.map(([, context]: [string, { ink: unknown }]) => context.ink)).toEqual([
+      { index: 0, count: 3, label: "Cyan", color: "#00ffff", offset: true },
+      { index: 1, count: 3, label: "Magenta", color: "#ff00ff", offset: true },
+      { index: 2, count: 3, label: "Yellow", color: "#ffff00", offset: true },
+    ]);
+  });
+
+  it("asks for one shared pattern when offsetting is turned off, and gives unseparated renders no ink", async () => {
+    const render = (window as any).terraForge.bitmapPlugins.render;
+    render.mockClear();
+    render.mockResolvedValue("M0 0 L1 1");
+
+    await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "cmy", bitmapSeparationOffset: false });
+    expect(render.mock.calls.every(([, context]: [string, { ink: { offset: boolean } }]) => context.ink.offset === false)).toBe(true);
+
+    render.mockClear();
+    await materializeBitmapLayers(bitmap);
+    expect(render.mock.calls[0][1].ink).toBeUndefined();
+  });
+
   it("separates for red, green and blue pens on white paper as three coloured inks", async () => {
     (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
 

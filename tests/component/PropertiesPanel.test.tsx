@@ -113,6 +113,14 @@ describe("PropertiesPanel", () => {
     expect(screen.getByRole("option", { name: "RGB (white paper)" })).toHaveValue("rgb-white");
     expect(screen.queryByRole("button", { name: /add colour/i })).not.toBeInTheDocument();
 
+    // Offsetting only applies to a separation, and is on unless turned off.
+    expect(screen.queryByRole("checkbox", { name: "Offset each ink" })).not.toBeInTheDocument();
+    fireEvent.change(mode, { target: { value: "cmyk" } });
+    const offset = screen.getByRole("checkbox", { name: "Offset each ink" });
+    expect(offset).toBeChecked();
+    fireEvent.click(offset);
+    expect(useCanvasStore.getState().imports[0].bitmapSeparationOffset).toBe(false);
+
     fireEvent.change(mode, { target: { value: "custom" } });
     expect(useCanvasStore.getState().imports[0].bitmapSeparationMode).toBe("custom");
     expect(useCanvasStore.getState().imports[0].bitmapSeparationPalette).toHaveLength(1);

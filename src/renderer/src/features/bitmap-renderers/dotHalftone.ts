@@ -87,7 +87,7 @@ function circlePath(cx: number, cy: number, radius: number, width: number, heigh
  * cells slightly overlap their neighbours (>1) or stay inset (<1), matching
  * how a real halftone screen's dot gain is tuned.
  */
-export function generateHalftoneDots({ source, settings: rawSettings, scale, width, height }: RendererContext): RendererDot[] {
+export function generateHalftoneDots({ source, settings: rawSettings, scale, width, height, ink }: RendererContext): RendererDot[] {
   if (!source || width < 1 || height < 1 || source.values.length === 0) return [];
 
   const settings = coerceSettings(HALFTONE_FIELDS, dotHalftoneDefaults, rawSettings);
@@ -95,7 +95,11 @@ export function generateHalftoneDots({ source, settings: rawSettings, scale, wid
   const spacing = Math.max((settings.spacingMM as number) * pixelsPerMM, 0.1);
   const rowSpacing = spacing * ROW_SPACING_RATIO;
   const maxRadius = (spacing / 2) * (settings.dotScale as number);
-  const angleRad = ((settings.angleDeg as number) * Math.PI) / 180;
+  // Separated inks each get their own screen angle, spread through the hex
+  // grid's 60° repeat (CMYK: 0°, 15°, 30°, 45°), as in print: each ink's dots
+  // then sit beside the others' in a rosette instead of stacked on top.
+  const inkAngle = ink?.offset ? (ink.index / ink.count) * (Math.PI / 3) : 0;
+  const angleRad = ((settings.angleDeg as number) * Math.PI) / 180 + inkAngle;
   const originX = ((settings.originXPct as number) / 100) * source.width;
   const originY = ((settings.originYPct as number) / 100) * source.height;
 

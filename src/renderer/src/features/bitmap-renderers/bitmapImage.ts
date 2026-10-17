@@ -1,4 +1,4 @@
-import type { RendererDot, RendererSource, SvgImport, SvgPath } from "../../../../types";
+import type { RendererDot, RendererInk, RendererSource, SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
@@ -184,10 +184,28 @@ export async function decodeBitmapColor(dataUrl: string): Promise<BitmapColorDat
  */
 export const BITMAP_PIPELINE_VERSION = 2;
 
+/**
+ * Bump when the way separated inks are rendered changes for the same inputs.
+ * Only part of the stamp for a separated render, so a change here offers a
+ * re-render to separated bitmaps alone.
+ *
+ * 1: each ink's pattern offset from the others' (`RendererContext.ink`).
+ */
+const SEPARATION_VERSION = 1;
+
 /** What a render records about the code that produced it — compared against
  * the current stamp to spot output made by an older renderer. */
-export function bitmapRendererStamp(renderer: Pick<BitmapRendererDefinition, "id" | "version">): string {
-  return `${BITMAP_PIPELINE_VERSION}/${renderer.id}@${renderer.version}`;
+export function bitmapRendererStamp(
+  renderer: Pick<BitmapRendererDefinition, "id" | "version">,
+  separated = false,
+): string {
+  const stamp = `${BITMAP_PIPELINE_VERSION}/${renderer.id}@${renderer.version}`;
+  return separated ? `${stamp}+inks${SEPARATION_VERSION}` : stamp;
+}
+
+/** Whether a bitmap renders as separated inks. */
+export function isSeparated(bitmap: Pick<SvgImport, "bitmapSeparationMode">): boolean {
+  return (bitmap.bitmapSeparationMode ?? "none") !== "none";
 }
 
 export interface MaterializedBitmap {
@@ -211,6 +229,7 @@ type MaterializableBitmap = Pick<
   | "bitmapSeparationMode"
   | "bitmapSeparationPalette"
   | "bitmapTone"
+  | "bitmapSeparationOffset"
 >;
 
 /**
@@ -239,6 +258,8 @@ export function bitmapRenderSignature(bitmap: MaterializableBitmap): string {
     // keeps the signature it was stored with — otherwise all of them would
     // count as having changed settings, and re-render unasked on open.
     ...(bitmap.bitmapTone ? [Object.entries(bitmap.bitmapTone).sort(([a], [b]) => a.localeCompare(b))] : []),
+    // Likewise only once set: absent means on.
+    ...(bitmap.bitmapSeparationOffset !== undefined ? [["inkOffset", bitmap.bitmapSeparationOffset]] : []),
   ]);
 }
 
@@ -340,7 +361,7 @@ export async function materializeBitmapLayers(
 
   return {
     ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl, options.signal)),
-    rendererVersion: bitmapRendererStamp(renderer),
+    rendererVersion: bitmapRendererStamp(renderer, isSeparated(bitmap)),
   };
 }
 
@@ -442,8 +463,8 @@ async function renderWith(
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 
-  const render = async (source: RendererSource) => {
-    const context = { width: source.width, height: source.height, scale: baseScale, settings, source };
+  const render = async (source: RendererSource, ink?: RendererInk) => {
+    const context = { width: source.width, height: source.height, scale: baseScale, settings, source, ink };
     return runRenderer(renderer, context, signal);
   };
 
@@ -476,7 +497,14 @@ async function renderWith(
   const channels = await preparedSources(bitmap, dataUrl, signal);
   const suffixFor = (layerCount: number, index: number, layerIndex: number) =>
     layerCount === 1 ? `${index}` : `${index}-${layerIndex}`;
-  const perChannel = await Promise.all(channels.map((channel) => render(channel.source)));
+  // Each ink is told which it is, so it can offset its pattern from the
+  // others' rather than every pen tracing the same lines or dots.
+  const offset = bitmap.bitmapSeparationOffset !== false;
+  const perChannel = await Promise.all(
+    channels.map((channel, index) =>
+      render(channel.source, { index, count: channels.length, label: channel.label, color: channel.color, offset }),
+    ),
+  );
 
   // A renderer may itself split a channel into several layers, so the ink
   // channel and the renderer's own layer both contribute to the name and

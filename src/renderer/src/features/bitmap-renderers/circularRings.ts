@@ -37,7 +37,10 @@ export const circularRingsRenderer = defineToneSpineRenderer({
   fields: [spacingField("Ring spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 4, toothWidthMM: 6, amplitudeMM: 1.5 },
   *strands(geometry) {
-    for (let radius = geometry.spacing; radius <= geometry.maxRadius; radius += geometry.spacing) {
+    // Separated inks start a fraction of the spacing further out each, so
+    // their rings interleave (rotating a ring would change nothing).
+    const first = geometry.spacing * (1 + geometry.inkFraction);
+    for (let radius = first; radius <= geometry.maxRadius; radius += geometry.spacing) {
       yield ringStrand(radius, geometry);
     }
   },
