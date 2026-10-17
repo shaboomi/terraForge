@@ -53,10 +53,15 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Point-budget and upload-retry tests too slow for CI under coverage | `9979102` |
 | Unused-variable lint enabled; it surfaced jog tooltips never shown, an e2e assertion never made (and a 30 s stall), and a test fake never restored | `f38b51b` |
 
-### Still open
+### Decided
 
-- **15** — decisions needed: RGB separation puts most ink where the image is white; auto levels runs per ink under separation.
-- **Point limit** — decision needed on the 200,000-point per-strand cap (a 1 mm spiral on a large photo reaches it; the user is warned).
+| Item | Decision | Commit |
+|---|---|---|
+| 15. RGB separation | Offer both: "RGB (light inks on dark paper)" (the original, unchanged for saved drawings) and a new "RGB (white paper)" | `ca89254` |
+| 15. Auto levels under separation | Keep per ink — each pen used to its full range, at the cost of exact colour balance. Noted in code | (this commit) |
+| Point limit | Per-strand cap dropped; only the 3M render-wide budget remains | `2cfdcf3` |
+
+Nothing from the review remains open.
 
 Checked and not needed: the G-code toolpath overlay. With a ~0.5 mm raster-line job over a 560 mm bed, panning, zooming and dragging stayed at ~60 fps (worst frame 50 ms); it already draws from cached `Path2D`s with level-of-detail culling.
 

@@ -421,6 +421,11 @@ async function preparedSources(
   if (preparedCache?.dataUrl === dataUrl && preparedCache.key === key) return preparedCache.sources;
 
   const smoothed = await smoothedSources(bitmap, dataUrl, tone.smoothingMM, signal);
+  // Levels apply to each ink separately, by design: auto levels stretches
+  // every ink to its own full range, making the most of each pen at the cost
+  // of exact colour balance (a faint ink is boosted to full strength).
+  // Measuring one range across all inks would keep the balance instead; that
+  // was considered and decided against.
   const sources = smoothed.map((channel) => ({ ...channel, source: levelSource(channel.source, tone) }));
   preparedCache = { dataUrl, key, sources };
   return sources;
