@@ -1,5 +1,5 @@
 import type { BitmapRendererSettings, RendererContext } from "../../../../types";
-import type { SpineStrand } from "./toneSpine/engine";
+import { MAX_RENDER_POINTS, type SpineStrand } from "./toneSpine/engine";
 import {
   amplitudeField,
   defineToneSpineRenderer,
@@ -10,8 +10,10 @@ import {
 
 export const SPIRAL_AMPLITUDE_RENDERER_ID = "spiral-amplitude";
 
-/** Safety cap on base points, ahead of the engine's own per-strand cap. */
-const MAX_SPIRAL_POINTS = 500_000;
+/** Safety cap on base points: the render-wide budget, so the spiral is never
+ * cut short sooner than any other renderer would be. Only extreme settings
+ * (a tooth width of a fraction of a millimetre over a large image) reach it. */
+const MAX_SPIRAL_POINTS = MAX_RENDER_POINTS;
 
 /**
  * Base points of one continuous Archimedean spiral centred at the origin,

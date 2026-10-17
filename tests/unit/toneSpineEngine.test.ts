@@ -294,6 +294,21 @@ describe("renderToneSpine", () => {
     expect(truncated).toBe(false);
   });
 
+  it("lets a single strand use the whole render budget, with no smaller per-strand cap", () => {
+    // One straight strand whose tiny tooth width needs ~250,000 drawn points
+    // — more than the old 200,000 per-strand cap, well under the render budget.
+    const strand = [
+      { x: 0, y: 5, nx: 0, ny: 1 },
+      { x: 1000, y: 5, nx: 0, ny: 1 },
+    ];
+    const white: RendererSource = { width: 1000, height: 10, values: new Uint8Array(10_000).fill(255) };
+
+    const { d, truncated } = renderToneSpine([strand], { toothWidth: 0.016, amplitude: 1, waveform: "triangle", image: white });
+
+    expect(truncated).toBe(false);
+    expect((d.match(/[ML]/g) ?? []).length).toBeGreaterThan(200_000);
+  });
+
   it("stops at one point budget shared by every strand, and says it did", () => {
     // Many strands, each well under the per-strand cap, that together far
     // exceed a whole-render budget. A small budget keeps this quick: the

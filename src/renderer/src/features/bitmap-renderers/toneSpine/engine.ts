@@ -62,8 +62,10 @@ export interface ToneModulationOptions {
  * 3: no internal tone smoothing, levels or contrast — the pipeline shapes
  *    the source instead (see `toneAdjust.ts`).
  * 4: one point budget per render across all strands (`MAX_RENDER_POINTS`).
+ * 5: no separate per-strand cap — a dense single strand (a spiral) is no
+ *    longer cut short below the render budget.
  */
-export const TONE_SPINE_ENGINE_VERSION = 4;
+export const TONE_SPINE_ENGINE_VERSION = 5;
 
 function format(value: number): string {
   return Number(value.toFixed(2)).toString();
@@ -181,17 +183,13 @@ function peakClipBreakpointPhases(waveform: WaveformId, drive: number): number[]
  */
 const FREQUENCY_GAIN = 2;
 
-/** A safety net mirroring the original spiral renderer's own point cap, now
- * shared by every spine — sub-sampling for a smooth waveform multiplies a
- * spine's point count, so this bounds the output regardless of shape. */
-const MAX_STRAND_POINTS = 200_000;
-
 /**
- * The most points one whole render may draw, across all its strands. A
- * per-strand cap alone leaves a many-strand renderer (fine rings, dense
- * lines) unbounded until the path-length check rejects the entire render;
- * this stops it early instead, keeping what was drawn and saying so. At
- * roughly a dozen characters a point, it sits well inside that check.
+ * The most points one whole render may draw, across all its strands — the
+ * only point limit. It stops a runaway render early, keeping what was drawn
+ * and saying so, well inside the path-length check (at roughly a dozen
+ * characters a point). There is deliberately no separate per-strand cap: it
+ * cut a dense spiral — one strand — short while rings at the same density,
+ * spread over many strands, drew in full.
  */
 export const MAX_RENDER_POINTS = 3_000_000;
 
@@ -281,7 +279,7 @@ function breakpointCrossings(phaseBefore: number, phaseAfter: number, phases: nu
  */
 export function modulateStrand(points: SpineStrand, options: ToneModulationOptions, budget?: PointBudget): string {
   if (points.length === 0) return "";
-  const pointLimit = Math.min(MAX_STRAND_POINTS, budget?.remaining ?? Infinity);
+  const pointLimit = budget?.remaining ?? MAX_RENDER_POINTS;
   const {
     toothWidth,
     amplitude,
