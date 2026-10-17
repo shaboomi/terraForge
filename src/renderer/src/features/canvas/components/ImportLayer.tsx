@@ -1,4 +1,5 @@
-import { type SvgImport, type SvgPath } from "../../../../../types";
+import { type SvgImport } from "../../../../../types";
+import { BitmapPreviewRasterizer, isInkPathVisible } from "../bitmapPreview/previewRasterizer";
 import { MM_TO_PX, PAD } from "../constants";
 
 interface ImportLayerProps {
@@ -6,23 +7,6 @@ interface ImportLayerProps {
   selected: boolean;
   onImportMouseDown: (e: React.MouseEvent, id: string) => void;
   getBedY: (mm: number) => number;
-}
-
-/** Mirrors the outline-visibility rules `vectorObjectsForImport`/`drawImportsLayer`
- * already apply for regular SVG paths, so a separated bitmap's ink-channel
- * "By Colour" show/hide toggles (which set `strokeEnabled`, not `visible`)
- * actually affect the canvas preview instead of being silently ignored. */
-function isInkPathVisible(imp: SvgImport, path: SvgPath): boolean {
-  if (path.visible === false) return false;
-  if ((imp.strokeEnabled ?? true) === false) return false;
-  if ((path.strokeEnabled ?? true) === false) return false;
-  const sourceOutlineVisible =
-    typeof path.sourceOutlineVisible === "boolean"
-      ? path.sourceOutlineVisible
-      : path.outlineVisible !== false;
-  const generatedStrokeEnabled =
-    path.generatedStrokeEnabled ?? imp.generatedStrokeForNoStroke ?? false;
-  return sourceOutlineVisible || generatedStrokeEnabled;
 }
 
 export function ImportLayer({
@@ -59,7 +43,11 @@ export function ImportLayer({
         onClick={(e) => e.stopPropagation()}
         style={{ cursor: "grab" }}
       >
-        {imp.kind === "bitmap" && imp.bitmapDataUrl && (
+        {/* Where it can, the canvas overlay draws bitmap imports from
+            rasterised images (see previewRasterizer.ts) — stroking a dense
+            preview path here made every pan, zoom and drag re-rasterise it.
+            This SVG version remains for environments without that support. */}
+        {imp.kind === "bitmap" && imp.bitmapDataUrl && !BitmapPreviewRasterizer.isSupported() && (
           <>
             {imp.bitmapSourceVisible !== false && (
               <image
