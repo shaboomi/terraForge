@@ -5,7 +5,8 @@ type SeparationMode = NonNullable<SvgImport["bitmapSeparationMode"]>;
 
 const MODE_OPTIONS: { value: SeparationMode; label: string }[] = [
   { value: "none", label: "None" },
-  { value: "rgb", label: "RGB" },
+  { value: "rgb", label: "RGB (light inks on dark paper)" },
+  { value: "rgb-white", label: "RGB (white paper)" },
   { value: "cmy", label: "CMY" },
   { value: "cmyk", label: "CMYK" },
   { value: "custom", label: "Custom palette" },

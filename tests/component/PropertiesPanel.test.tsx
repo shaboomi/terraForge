@@ -108,6 +108,9 @@ describe("PropertiesPanel", () => {
 
     const mode = screen.getByRole("combobox", { name: "Colour separation mode" });
     expect(mode).toHaveValue("none");
+    // RGB comes in both paper variants, each saying which it is for.
+    expect(screen.getByRole("option", { name: "RGB (light inks on dark paper)" })).toHaveValue("rgb");
+    expect(screen.getByRole("option", { name: "RGB (white paper)" })).toHaveValue("rgb-white");
     expect(screen.queryByRole("button", { name: /add colour/i })).not.toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "custom" } });

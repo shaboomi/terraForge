@@ -35,7 +35,13 @@ function densityToLuminanceInPlace(
   return { width, height, values: density };
 }
 
-/** Each primary is its own ink; density = how much of that primary is present. */
+/**
+ * Red, green and blue as light inks on dark paper — additive, like light:
+ * each ink's density is how much of its primary the pixel has, so white
+ * gets all three at full strength and black gets none. Right for light,
+ * metallic or gel inks on black card; on white paper it inverts the image,
+ * which is what `separateRGBOnWhite` is for.
+ */
 export function separateRGB(image: BitmapColorData): SeparatedChannel[] {
   const pixelCount = image.width * image.height;
   const channels: [string, string, number][] = [
@@ -48,6 +54,41 @@ export function separateRGB(image: BitmapColorData): SeparatedChannel[] {
     for (let i = 0; i < pixelCount; i++) density[i] = image.rgba[i * 4 + offset];
     return { label, color, luminance: densityToLuminanceInPlace(density, image.width, image.height) };
   });
+}
+
+/**
+ * Red, green and blue pens on white paper. On paper an ink works by
+ * absorbing light: a red pen reflects red and absorbs green and blue. So
+ * each primary the pixel is missing has to be absorbed by the two inks that
+ * absorb it — missing green by red and blue ink, and so on — which solves
+ * to each ink's density being half of (the two primaries it absorbs, less
+ * the one it doesn't). White needs no ink, a pure red only the red pen, and
+ * black all three at half strength.
+ *
+ * Red, green and blue pens cannot mix every colour on paper: a yellow, for
+ * instance, comes out as a dull mix of red and green. For the widest range on
+ * white paper, CMY/CMYK remain the better choice.
+ */
+export function separateRGBOnWhite(image: BitmapColorData): SeparatedChannel[] {
+  const pixelCount = image.width * image.height;
+  const red = new Uint8Array(pixelCount);
+  const green = new Uint8Array(pixelCount);
+  const blue = new Uint8Array(pixelCount);
+  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+  for (let i = 0; i < pixelCount; i++) {
+    const offset = i * 4;
+    const missingRed = 255 - image.rgba[offset];
+    const missingGreen = 255 - image.rgba[offset + 1];
+    const missingBlue = 255 - image.rgba[offset + 2];
+    red[i] = clamp((missingGreen + missingBlue - missingRed) / 2);
+    green[i] = clamp((missingRed + missingBlue - missingGreen) / 2);
+    blue[i] = clamp((missingRed + missingGreen - missingBlue) / 2);
+  }
+  return [
+    { label: "Red", color: "#ff0000", luminance: densityToLuminanceInPlace(red, image.width, image.height) },
+    { label: "Green", color: "#00ff00", luminance: densityToLuminanceInPlace(green, image.width, image.height) },
+    { label: "Blue", color: "#0000ff", luminance: densityToLuminanceInPlace(blue, image.width, image.height) },
+  ];
 }
 
 /** Standard subtractive complement of RGB: density(C) = 255-R, etc. */

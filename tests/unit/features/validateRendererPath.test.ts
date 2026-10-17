@@ -153,6 +153,18 @@ describe("materializeBitmapLayers output checking", () => {
     expect((await materializeBitmapLayers(bitmap)).warnings).toEqual(["Cut short"]);
   });
 
+  it("separates for red, green and blue pens on white paper as three coloured inks", async () => {
+    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
+
+    const { paths } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb-white" });
+
+    expect(paths.map((path) => [path.label, path.strokeColor])).toEqual([
+      ["Red", "#ff0000"],
+      ["Green", "#00ff00"],
+      ["Blue", "#0000ff"],
+    ]);
+  });
+
   it("names the ink a warning came from under colour separation, once per distinct warning", async () => {
     (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
 

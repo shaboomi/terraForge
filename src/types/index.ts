@@ -577,7 +577,11 @@ export interface SvgImport {
    * and populates `paths` with one synthesized path per ink (see
    * BitmapRendererDefinition/colourSeparation.ts).
    */
-  bitmapSeparationMode?: "none" | "rgb" | "cmy" | "cmyk" | "custom";
+  /**
+   * How a bitmap is split into ink layers. "rgb" is red, green and blue
+   * light inks on dark paper; "rgb-white" the same pens on white paper.
+   */
+  bitmapSeparationMode?: "none" | "rgb" | "rgb-white" | "cmy" | "cmyk" | "custom";
   /** Custom palette swatches, used only when bitmapSeparationMode is "custom". */
   bitmapSeparationPalette?: { label: string; color: string }[];
   /** Position of the SVG's bottom-left corner on the bed (mm) */

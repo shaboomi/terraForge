@@ -4,6 +4,7 @@ import {
   separateCMYK,
   separateCustomPalette,
   separateRGB,
+  separateRGBOnWhite,
 } from "../../src/renderer/src/features/bitmap-renderers/colourSeparation";
 import type { BitmapColorData } from "../../src/renderer/src/features/bitmap-renderers/bitmapImage";
 
@@ -18,6 +19,59 @@ function uniformImage(r: number, g: number, b: number, width = 2, height = 2): B
   }
   return { width, height, rgba };
 }
+
+describe("separateRGBOnWhite", () => {
+  /** Ink density (0 = none, 255 = full) per channel, for a uniform colour. */
+  const inks = (r: number, g: number, b: number) =>
+    separateRGBOnWhite(uniformImage(r, g, b)).map((channel) => 255 - channel.luminance.values[0]);
+
+  it("puts no ink on white paper where the image is white", () => {
+    expect(inks(255, 255, 255)).toEqual([0, 0, 0]);
+  });
+
+  it("draws a pure primary with that primary's pen alone", () => {
+    expect(inks(255, 0, 0)).toEqual([255, 0, 0]);
+    expect(inks(0, 255, 0)).toEqual([0, 255, 0]);
+    expect(inks(0, 0, 255)).toEqual([0, 0, 255]);
+  });
+
+  it("builds black and greys from all three pens equally", () => {
+    const [r, g, b] = inks(0, 0, 0);
+    expect(r).toBe(g);
+    expect(g).toBe(b);
+    expect(r).toBeGreaterThan(120);
+    const grey = inks(128, 128, 128);
+    expect(new Set(grey).size).toBe(1);
+    expect(grey[0]).toBeLessThan(r);
+  });
+
+  it("absorbs each missing primary with the two inks that absorb it, for colours the pens can mix", () => {
+    // A red pen absorbs green and blue, and so on: the inks covering each
+    // primary should add up to how much of it the pixel lacks.
+    for (const [R, G, B] of [[200, 90, 40], [120, 170, 200], [100, 100, 20]]) {
+      const [r, g, b] = inks(R, G, B);
+      expect(g + b, `red missing for ${R},${G},${B}`).toBeCloseTo(255 - R, -1);
+      expect(r + b, `green missing for ${R},${G},${B}`).toBeCloseTo(255 - G, -1);
+      expect(r + g, `blue missing for ${R},${G},${B}`).toBeCloseTo(255 - B, -1);
+    }
+  });
+
+  it("draws a colour the pens cannot mix as the nearest mix they can, never negative ink", () => {
+    // A strong cyan would need negative red ink; red is left off instead.
+    const [r, g, b] = inks(30, 160, 220);
+    expect(r).toBe(0);
+    expect(g).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(g);
+  });
+
+  it("labels and colours its channels like the dark-paper mode", () => {
+    expect(separateRGBOnWhite(uniformImage(0, 0, 0)).map((c) => [c.label, c.color])).toEqual([
+      ["Red", "#ff0000"],
+      ["Green", "#00ff00"],
+      ["Blue", "#0000ff"],
+    ]);
+  });
+});
 
 describe("separateRGB", () => {
   it("gives full ink (luminance 0) for a pixel's own primary and no ink for the others", () => {

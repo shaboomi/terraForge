@@ -2,7 +2,13 @@ import type { RendererDot, RendererSource, SvgImport, SvgPath } from "../../../.
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
-import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
+import {
+  separateCMY,
+  separateCMYK,
+  separateCustomPalette,
+  separateRGB,
+  separateRGBOnWhite,
+} from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { runRenderer, smoothInWorker } from "./rendererPool";
 import type { ValidatedLayer } from "./validatePath";
@@ -387,6 +393,7 @@ async function smoothedSources(
     const colorData = await decodeBitmapColor(dataUrl);
     const channels =
       mode === "rgb" ? separateRGB(colorData)
+      : mode === "rgb-white" ? separateRGBOnWhite(colorData)
       : mode === "cmy" ? separateCMY(colorData)
       : mode === "cmyk" ? separateCMYK(colorData)
       : separateCustomPalette(colorData, bitmap.bitmapSeparationPalette ?? []);
