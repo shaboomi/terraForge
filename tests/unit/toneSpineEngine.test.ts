@@ -213,6 +213,32 @@ describe("modulateStrand tone shaping", () => {
   });
 });
 
+describe("modulateStrand tone → frequency", () => {
+  // A long straight strand, sampled densely, over an image that is uniformly
+  // light or uniformly dark; count waveform teeth by the drawn points.
+  const strand = Array.from({ length: 401 }, (_, x) => ({ x: x * 0.5, y: 5, nx: 0, ny: -1 }));
+  const uniform = (value: number): RendererSource => ({ width: 200, height: 10, values: new Uint8Array(2000).fill(value) });
+  const points = (value: number, frequencyGain?: number) =>
+    (modulateStrand(strand, { toothWidth: 10, amplitude: 2, waveform: "triangle", image: uniform(value), frequencyGain }).match(/[ML]/g) ?? [])
+      .length;
+
+  it("cycles 1 + gain times as fast in fully dark areas as in light ones", () => {
+    // Triangle draws four points per cycle; white has none to modulate but
+    // still advances phase at the light-area rate.
+    const light = points(255, 2);
+    const dark = points(0, 2);
+    expect(dark / light).toBeCloseTo(3, 0);
+  });
+
+  it("keeps the tooth width fixed everywhere at 0", () => {
+    expect(points(0, 0)).toBe(points(255, 0));
+  });
+
+  it("defaults to the gain every drawing used before it was a setting", () => {
+    expect(points(0)).toBe(points(0, 2));
+  });
+});
+
 describe("modulateStrand stroke start", () => {
   const dark: RendererSource = { width: 100, height: 20, values: new Uint8Array(2000).fill(0) };
   const waveforms = ["triangle", "square", "sawtooth", "sine"] as const;

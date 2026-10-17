@@ -32,6 +32,7 @@ describe("generateSpiralAmplitudePath", () => {
       toothWidthMM: 9,
       amplitudeMM: 10,
       waveform: "triangle",
+      toneFrequency: 2,
       angleDeg: 0,
       originXPct: 50,
       originYPct: 50,

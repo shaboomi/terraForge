@@ -16,7 +16,7 @@ import {
   peakClipField,
 } from "../sharedFields";
 import type { BitmapRendererDefinition } from "../types";
-import { renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./engine";
+import { DEFAULT_FREQUENCY_GAIN, renderToneSpine, TONE_SPINE_ENGINE_VERSION, type SpineStrand } from "./engine";
 import { waveformField } from "./fields";
 import { DEFAULT_WAVEFORM, type WaveformId } from "./waveforms";
 
@@ -60,8 +60,16 @@ export function spacingField(label: string, ariaLabel?: string): BitmapRendererN
   return { type: "number", key: "spacingMM", label, ariaLabel, min: 0.1, max: 50, step: 0.1 };
 }
 
+/** The waveform's cycle length where the image is light; darker areas cycle
+ * faster, by the shared "Tone → frequency" setting. */
 export function toothWidthField(ariaLabel?: string): BitmapRendererNumberFieldSchema {
-  return { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", ariaLabel, min: 0.1, max: 50, step: 0.1 };
+  return { type: "number", key: "toothWidthMM", label: "Light tooth (mm)", ariaLabel, min: 0.1, max: 50, step: 0.1 };
+}
+
+/** How much faster the waveform cycles in dark areas — see
+ * `ToneModulationOptions.frequencyGain`. 0 keeps the tooth width fixed. */
+function toneFrequencyField(): BitmapRendererNumberFieldSchema {
+  return { type: "number", key: "toneFrequency", label: "Tone → frequency", min: 0, max: 4, step: 0.1 };
 }
 
 export function amplitudeField(ariaLabel?: string): BitmapRendererNumberFieldSchema {
@@ -108,6 +116,7 @@ export function defineToneSpineRenderer(
   const fields: BitmapRendererFieldSchema[] = [
     ...spec.fields.map(withoutUndefined),
     waveformField(),
+    toneFrequencyField(),
     angleField(),
     ...originFields(),
     clipToImageField(),
@@ -116,6 +125,7 @@ export function defineToneSpineRenderer(
   const defaults: BitmapRendererSettings = {
     ...spec.defaults,
     waveform: DEFAULT_WAVEFORM,
+    toneFrequency: DEFAULT_FREQUENCY_GAIN,
     angleDeg: DEFAULT_ANGLE_DEG,
     originXPct: DEFAULT_ORIGIN_PCT,
     originYPct: DEFAULT_ORIGIN_PCT,
@@ -159,6 +169,7 @@ export function defineToneSpineRenderer(
       image: source,
       clipToImage: settings.clipToImage as boolean,
       peakClipPct: settings.peakClipPct as number,
+      frequencyGain: settings.toneFrequency as number,
     });
     if (truncated) warnings.push(TRUNCATED_WARNING);
     return { layers: [{ d }], warnings };

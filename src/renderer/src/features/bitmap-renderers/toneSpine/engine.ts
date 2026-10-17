@@ -50,6 +50,14 @@ export interface ToneModulationOptions {
    * no-op — today's exact shape.
    */
   peakClipPct?: number;
+  /**
+   * How much faster the waveform cycles where the image is dark: a fully
+   * dark area runs at `1 + frequencyGain` times the light-area rate, so tone
+   * drives frequency as well as amplitude and dark regions read as busier
+   * rather than just bigger — closer to hand-engraved tone lines. 0 keeps
+   * the tooth width fixed everywhere. Defaults to `DEFAULT_FREQUENCY_GAIN`.
+   */
+  frequencyGain?: number;
 }
 
 /**
@@ -174,14 +182,10 @@ function peakClipBreakpointPhases(waveform: WaveformId, drive: number): number[]
 }
 
 /**
- * How much faster the waveform cycles in fully-dark areas than fully-light
- * ones — tone now drives both amplitude (always has) and frequency, so a
- * dark region reads as busier/denser rather than just bigger, closer to how
- * organic hand-engraved tone lines behave. An internal tuning constant
- * rather than a user field, to keep this a quality fix rather than new
- * configuration surface.
+ * The default for `ToneModulationOptions.frequencyGain`: in a fully dark
+ * area the waveform cycles three times as fast as in a fully light one.
  */
-const FREQUENCY_GAIN = 2;
+export const DEFAULT_FREQUENCY_GAIN = 2;
 
 /**
  * The most points one whole render may draw, across all its strands — the
@@ -287,6 +291,7 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
     image,
     clipToImage = true,
     peakClipPct = 100,
+    frequencyGain = DEFAULT_FREQUENCY_GAIN,
   } = options;
   // 1–100%: dividing by a smaller drive pushes the raw -1..1 waveform value
   // past ±1 sooner, so the subsequent clamp flattens it there instead of
@@ -380,7 +385,7 @@ export function modulateStrand(points: SpineStrand, options: ToneModulationOptio
       if (commands.length >= pointLimit) return false;
     }
     const phaseBefore = phase;
-    phase += (walkedLength / safeToothWidth) * (1 + FREQUENCY_GAIN * toneDark);
+    phase += (walkedLength / safeToothWidth) * (1 + frequencyGain * toneDark);
     const phaseSpan = phase - phaseBefore;
     const crossings = [
       ...breakpointCrossings(phaseBefore, phase, jumpPhases).map((boundary) => ({ boundary, isJump: true })),

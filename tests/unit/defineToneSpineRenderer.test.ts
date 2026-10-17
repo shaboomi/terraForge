@@ -28,6 +28,7 @@ describe("defineToneSpineRenderer", () => {
     expect(lineRenderer().fields.map((field) => field.key)).toEqual([
       "spacingMM",
       "waveform",
+      "toneFrequency",
       "angleDeg",
       "originXPct",
       "originYPct",
