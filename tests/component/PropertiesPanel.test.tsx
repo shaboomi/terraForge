@@ -78,11 +78,14 @@ describe("PropertiesPanel", () => {
       name: "Spiral spacing",
     });
     fireEvent.change(spacing, { target: { value: "2.5" } });
+    // Saved under spiral's old "amplitude" key; the edit stores it under the
+    // current one, value intact.
     expect(useCanvasStore.getState().imports[0].bitmapRendererSettings).toMatchObject({
       spacingMM: 2.5,
       toothWidthMM: 1,
-      amplitude: 1.5,
+      amplitudeMM: 1.5,
     });
+    expect(useCanvasStore.getState().imports[0].bitmapRendererSettings).not.toHaveProperty("amplitude");
     expect(screen.getByRole("checkbox", { name: "Show source bitmap" })).toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: "Show source bitmap" }));
     expect(useCanvasStore.getState().imports[0].bitmapSourceVisible).toBe(false);

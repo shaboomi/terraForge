@@ -3,7 +3,7 @@ import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
 import { bitmapRendererStamp, bitmapRenderSignature } from "../../bitmap-renderers/bitmapImage";
 import { rerenderBitmap, useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
-import { coerceSettings } from "../../bitmap-renderers/coerceSettings";
+import { rendererSettings } from "../../bitmap-renderers/coerceSettings";
 import {
   bitmapRenderers,
   findBitmapRenderer,
@@ -51,7 +51,7 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
     : getBitmapRenderer(undefined, pluginManifests);
   // Shown exactly as the renderer will receive them, so an out-of-range or
   // missing saved value displays as the value actually being rendered.
-  const settings = renderer ? coerceSettings(renderer.fields, renderer.defaults, imp.bitmapRendererSettings) : {};
+  const settings = renderer ? rendererSettings(renderer, imp.bitmapRendererSettings) : {};
 
   // Rendering itself is owned by the bitmap render service, not this panel,
   // so a change still renders if the import is deselected before it lands.

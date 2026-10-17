@@ -4,7 +4,7 @@ import type {
   BitmapRendererSettings,
   RendererContext,
 } from "../../../../../types";
-import { coerceSettings } from "../coerceSettings";
+import { coerceSettings, migrateSettings } from "../coerceSettings";
 import {
   angleField,
   clipToImageField,
@@ -64,8 +64,8 @@ export function toothWidthField(ariaLabel?: string): BitmapRendererNumberFieldSc
   return { type: "number", key: "toothWidthMM", label: "Tooth width (mm)", ariaLabel, min: 0.1, max: 50, step: 0.1 };
 }
 
-export function amplitudeField(key = "amplitudeMM", ariaLabel?: string): BitmapRendererNumberFieldSchema {
-  return { type: "number", key, label: "Amplitude (mm)", ariaLabel, min: 0, max: 50, step: 0.1 };
+export function amplitudeField(ariaLabel?: string): BitmapRendererNumberFieldSchema {
+  return { type: "number", key: "amplitudeMM", label: "Amplitude (mm)", ariaLabel, min: 0, max: 50, step: 0.1 };
 }
 
 /** Removes `ariaLabel: undefined` so field objects stay identical to hand-written ones. */
@@ -88,8 +88,8 @@ export interface ToneSpineRendererSpec {
   fields: BitmapRendererFieldSchema[];
   /** Defaults for `fields`; the shared controls' defaults are added. */
   defaults: BitmapRendererSettings;
-  /** Settings key holding the amplitude in mm. */
-  amplitudeKey?: string;
+  /** Settings keys this renderer has renamed, old → new — see `BitmapRendererDefinition.renamedSettings`. */
+  renamedSettings?: Record<string, string>;
   /** The renderer's base curves, which the engine then tone-modulates. */
   strands(geometry: SpineGeometry, settings: BitmapRendererSettings): Iterable<SpineStrand>;
 }
@@ -105,7 +105,6 @@ export interface ToneSpineRendererSpec {
 export function defineToneSpineRenderer(
   spec: ToneSpineRendererSpec,
 ): BitmapRendererDefinition & { render: (context: RendererContext) => ToneSpineResult } {
-  const amplitudeKey = spec.amplitudeKey ?? "amplitudeMM";
   const fields: BitmapRendererFieldSchema[] = [
     ...spec.fields.map(withoutUndefined),
     waveformField(),
@@ -129,7 +128,7 @@ export function defineToneSpineRenderer(
     if (!source || width < 1 || height < 1 || source.values.length === 0) return { layers: [{ d: "" }], warnings: [] };
     const warnings: string[] = [];
 
-    const settings = coerceSettings(fields, defaults, rawSettings);
+    const settings = coerceSettings(fields, defaults, migrateSettings(rawSettings, spec.renamedSettings));
     const pixelsPerMM = 1 / Math.max(scale, 0.001);
     const toothWidth = (settings.toothWidthMM as number) * pixelsPerMM;
     const originX = ((settings.originXPct as number) / 100) * source.width;
@@ -155,7 +154,7 @@ export function defineToneSpineRenderer(
 
     const { d, truncated } = renderToneSpine(spec.strands(geometry, settings), {
       toothWidth,
-      amplitude: (settings[amplitudeKey] as number) * pixelsPerMM,
+      amplitude: (settings.amplitudeMM as number) * pixelsPerMM,
       waveform: settings.waveform as WaveformId,
       image: source,
       clipToImage: settings.clipToImage as boolean,
@@ -173,6 +172,7 @@ export function defineToneSpineRenderer(
     version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.${spec.revision}`,
     defaults,
     fields,
+    renamedSettings: spec.renamedSettings,
     render,
   };
 }

@@ -1,6 +1,6 @@
 import type { RendererDot, RendererSource, SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
-import { coerceSettings } from "./coerceSettings";
+import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
@@ -360,7 +360,7 @@ async function renderWith(
   dataUrl: string,
   signal: AbortSignal | undefined,
 ): Promise<MaterializedBitmap> {
-  const settings = coerceSettings(renderer.fields, renderer.defaults, bitmap.bitmapRendererSettings);
+  const settings = rendererSettings(renderer, bitmap.bitmapRendererSettings);
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
 

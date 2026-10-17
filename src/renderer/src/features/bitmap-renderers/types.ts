@@ -17,6 +17,12 @@ export interface BitmapRendererDefinition {
   source: NonNullable<BitmapPluginManifest["source"]>;
   defaults: BitmapRendererSettings;
   /**
+   * Settings keys this renderer has renamed, old → new. Applied when saved
+   * settings are read (`rendererSettings`), so a drawing saved under the old
+   * key keeps its value rather than falling back to the default.
+   */
+  renamedSettings?: Record<string, string>;
+  /**
    * Identifies this renderer's output behaviour. Change it whenever the same
    * settings would now produce different geometry — an algorithm fix, a new
    * default curve — so drawings rendered with the old behaviour are offered a

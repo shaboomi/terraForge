@@ -1,4 +1,5 @@
 import type { BitmapRendererFieldSchema, BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererDefinition } from "./types";
 
 function isSettingValue(value: unknown): value is number | boolean | string {
   if (typeof value === "number") return Number.isFinite(value);
@@ -76,4 +77,30 @@ export function coerceSettings(
   }
 
   return result;
+}
+
+/**
+ * Carries values saved under a renamed key over to the new key — unless the
+ * new key is already set, which is the newer value — and drops the old one.
+ */
+export function migrateSettings(
+  settings: Record<string, unknown> | undefined,
+  renamed: Record<string, string> | undefined,
+): Record<string, unknown> | undefined {
+  if (!settings || !renamed) return settings;
+  const migrated = { ...settings };
+  for (const [from, to] of Object.entries(renamed)) {
+    if (!(from in migrated)) continue;
+    if (!(to in migrated)) migrated[to] = migrated[from];
+    delete migrated[from];
+  }
+  return migrated;
+}
+
+/** The settings `renderer` receives for a saved bag: migrated, then coerced. */
+export function rendererSettings(
+  renderer: Pick<BitmapRendererDefinition, "fields" | "defaults" | "renamedSettings">,
+  saved: Record<string, unknown> | undefined,
+): BitmapRendererSettings {
+  return coerceSettings(renderer.fields, renderer.defaults, migrateSettings(saved, renderer.renamedSettings));
 }

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { coerceSettings } from "@renderer/features/bitmap-renderers/coerceSettings";
+import {
+  coerceSettings,
+  migrateSettings,
+  rendererSettings,
+} from "@renderer/features/bitmap-renderers/coerceSettings";
 import { clearBitmapDecodeCache, materializeBitmapLayers } from "@renderer/features/bitmap-renderers/bitmapImage";
 import { bitmapRenderers } from "@renderer/features/bitmap-renderers/registry";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
@@ -67,6 +71,30 @@ describe("coerceSettings", () => {
     expect(result.hidden).toBe(3);
     expect(result).not.toHaveProperty("junk");
     expect(result).not.toHaveProperty("gone");
+  });
+});
+
+describe("migrateSettings / rendererSettings", () => {
+  const renamed = { amplitude: "amplitudeMM" };
+
+  it("moves a value saved under a renamed key to the new key, dropping the old one", () => {
+    expect(migrateSettings({ spacingMM: 3, amplitude: 4 }, renamed)).toEqual({ spacingMM: 3, amplitudeMM: 4 });
+  });
+
+  it("keeps the new key's value when both are present — it is the newer one", () => {
+    expect(migrateSettings({ amplitude: 4, amplitudeMM: 7 }, renamed)).toEqual({ amplitudeMM: 7 });
+  });
+
+  it("leaves settings alone when nothing was renamed", () => {
+    const settings = { spacingMM: 3 };
+    expect(migrateSettings(settings, undefined)).toBe(settings);
+    expect(migrateSettings(settings, renamed)).toEqual(settings);
+  });
+
+  it("gives a renderer its saved value under the new key, not the default", () => {
+    const spiral = bitmapRenderers.find((renderer) => renderer.id === "spiral-amplitude")!;
+    expect(rendererSettings(spiral, { amplitude: 4 })).toMatchObject({ amplitudeMM: 4 });
+    expect(rendererSettings(spiral, { amplitude: 4 })).not.toHaveProperty("amplitude");
   });
 });
 

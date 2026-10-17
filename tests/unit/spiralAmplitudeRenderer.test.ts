@@ -30,7 +30,7 @@ describe("generateSpiralAmplitudePath", () => {
     expect(spiralAmplitudeDefaults).toEqual({
       spacingMM: 8,
       toothWidthMM: 9,
-      amplitude: 10,
+      amplitudeMM: 10,
       waveform: "triangle",
       angleDeg: 0,
       originXPct: 50,
@@ -38,6 +38,14 @@ describe("generateSpiralAmplitudePath", () => {
       clipToImage: true,
       peakClipPct: 100,
     });
+  });
+
+  it("reads a drawing saved under the old 'amplitude' key exactly as under 'amplitudeMM'", () => {
+    const source = { width: 60, height: 40, values: new Uint8Array(2400).map((_, i) => (i * 37) % 256) };
+    const settings = { spacingMM: 3, toothWidthMM: 2 };
+    expect(generateSpiralAmplitudePath(ctx(source, { ...settings, amplitude: 4 }, 1))).toBe(
+      generateSpiralAmplitudePath(ctx(source, { ...settings, amplitudeMM: 4 }, 1)),
+    );
   });
 
   it("crosses the baseline between fixed-width positive and negative pulses", () => {

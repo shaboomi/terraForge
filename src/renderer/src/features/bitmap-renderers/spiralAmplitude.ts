@@ -48,14 +48,15 @@ export const spiralAmplitudeRenderer = defineToneSpineRenderer({
   id: SPIRAL_AMPLITUDE_RENDERER_ID,
   label: "Spiral amplitude",
   revision: 1,
-  // Spiral predates the `amplitudeMM` key every later renderer uses.
-  amplitudeKey: "amplitude",
+  // Spiral once stored amplitude under "amplitude", before every renderer
+  // settled on "amplitudeMM"; drawings saved then are read under the new key.
+  renamedSettings: { amplitude: "amplitudeMM" },
   fields: [
     spacingField("Spacing (mm)", "Spiral spacing"),
     toothWidthField("Tooth width"),
-    amplitudeField("amplitude", "Bitmap amplitude"),
+    amplitudeField("Bitmap amplitude"),
   ],
-  defaults: { spacingMM: 8, toothWidthMM: 9, amplitude: 10 },
+  defaults: { spacingMM: 8, toothWidthMM: 9, amplitudeMM: 10 },
   strands: (geometry) => [spiralStrand(geometry)],
 });
 
