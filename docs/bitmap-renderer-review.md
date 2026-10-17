@@ -38,6 +38,9 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 11. Plugin id collisions | Fixed — plugin ids must be namespaced (`acme.halftone`); un-namespaced ids are reserved for built-ins | `05092e7` |
 | A6. Tidy-ups | Done — `source` on definitions, cached plugin definitions, re-export layers removed | `21bb773` |
 | 13. Radial burst centre pile-up | Fixed — rays added as the burst spreads, at a set spacing, from a small clear centre | `720e325` |
+| 13. Spiral `amplitude` key | Fixed — stored as `amplitudeMM`; old drawings migrated on read (`renamedSettings`), output unchanged | `0166942` |
+| 13. Box / polygon spacing | Fixed — boxes are equal-gap offsets of the image rectangle (and now reach every corner when rotated); polygons spaced edge-to-edge | `3dc96ae` |
+| 14. Decode limits | Fixed — images over 10 px/mm at their placed size are stored smaller; import decodes once | `a459cae` |
 
 ### Found and fixed after the review
 
@@ -48,14 +51,14 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Re-render settle delay 400 ms → 150 ms, now that superseded renders are aborted | `ff2eda6` |
 | Dense previews re-rasterised as SVG on every pan/zoom/drag (~0.5 s a frame) — now drawn from worker-rasterised images | `6b44522` |
 | Point-budget and upload-retry tests too slow for CI under coverage | `9979102` |
+| Unused-variable lint enabled; it surfaced jog tooltips never shown, an e2e assertion never made (and a 30 s stall), and a test fake never restored | `f38b51b` |
 
 ### Still open
 
-- **13** — spiral's `amplitude` key differs from every other renderer's `amplitudeMM` (needs a load-time migration); concentric boxes honour spacing on one axis only; polygon spacing is by circumradius.
-- **14** — no size cap when decoding very large images (full-resolution RGBA on the main thread); an import decodes the image twice.
 - **15** — decisions needed: RGB separation puts most ink where the image is white; auto levels runs per ink under separation.
 - **Point limit** — decision needed on the 200,000-point per-strand cap (a 1 mm spiral on a large photo reaches it; the user is warned).
-- **G-code toolpath overlay** — likely has the same per-frame redraw cost the bitmap previews had; not yet measured.
+
+Checked and not needed: the G-code toolpath overlay. With a ~0.5 mm raster-line job over a 560 mm bed, panning, zooming and dragging stayed at ~60 fps (worst frame 50 ms); it already draws from cached `Path2D`s with level-of-detail culling.
 
 ---
 
