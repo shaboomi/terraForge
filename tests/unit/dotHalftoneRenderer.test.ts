@@ -30,6 +30,8 @@ describe("dotHalftoneRenderer", () => {
       const numbers = (dot.d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
       const xs = numbers.filter((_, i) => i % 2 === 0);
       const ys = numbers.filter((_, i) => i % 2 === 1);
+      // Edge dots are clipped, so only whole dots have the centre mid-outline.
+      if (Math.min(...xs, ...ys) <= 0 || Math.max(...xs, ...ys) >= 40) continue;
       // Inside the dot's own bounding box, at its middle.
       expect(dot.x).toBeCloseTo((Math.min(...xs) + Math.max(...xs)) / 2, 1);
       expect(dot.y).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 1);
@@ -42,6 +44,39 @@ describe("dotHalftoneRenderer", () => {
 });
 
 describe("generateHalftoneDots", () => {
+  describe("at the image edge", () => {
+    const source = { width: 40, height: 30, values: new Uint8Array(1200).fill(0) };
+    const outline = (d: string) => {
+      const numbers = (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      return { xs: numbers.filter((_, i) => i % 2 === 0), ys: numbers.filter((_, i) => i % 2 === 1) };
+    };
+
+    it("keeps every dot inside the image, even at the largest dot scale", () => {
+      const dots = generateHalftoneDots(ctx(source, { ...dotHalftoneDefaults, spacingMM: 5, dotScale: 3, angleDeg: 17 }));
+      expect(dots.length).toBeGreaterThan(0);
+      for (const dot of dots) {
+        const { xs, ys } = outline(dot.d);
+        expect(Math.min(...xs)).toBeGreaterThanOrEqual(0);
+        expect(Math.max(...xs)).toBeLessThanOrEqual(40);
+        expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+        expect(Math.max(...ys)).toBeLessThanOrEqual(30);
+        expect(dot.d).toMatch(/Z$/);
+      }
+    });
+
+    it("clips a dot at the edge rather than dropping it, and taps it inside the image", () => {
+      const dots = generateHalftoneDots(ctx(source, { ...dotHalftoneDefaults, spacingMM: 5, dotScale: 3 }));
+      const clipped = dots.filter((dot) => outline(dot.d).xs.some((x) => x === 0 || x === 40));
+      expect(clipped.length).toBeGreaterThan(0);
+      for (const dot of dots) {
+        expect(dot.x).toBeGreaterThanOrEqual(0);
+        expect(dot.x).toBeLessThanOrEqual(40);
+        expect(dot.y).toBeGreaterThanOrEqual(0);
+        expect(dot.y).toBeLessThanOrEqual(30);
+      }
+    });
+  });
+
   it("returns no path for an empty image", () => {
     const path = generateDotHalftonePath(
       ctx({ width: 0, height: 0, values: new Uint8Array() }, dotHalftoneDefaults),

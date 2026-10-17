@@ -35,17 +35,49 @@ function format(value: number): string {
   return Number(value.toFixed(2)).toString();
 }
 
-/** One dot's closed polyline-circle outline. Polylines rather than arcs so
- * every downstream consumer (hatch fill, G-code) handles it as-is. */
-function circlePath(cx: number, cy: number, radius: number): string {
-  const points: string[] = [];
-  for (let i = 0; i < DOT_SEGMENTS; i++) {
-    const theta = (i / DOT_SEGMENTS) * Math.PI * 2;
-    const x = cx + radius * Math.cos(theta);
-    const y = cy + radius * Math.sin(theta);
-    points.push(`${i === 0 ? "M" : "L"}${format(x)} ${format(y)}`);
+type Point = { x: number; y: number };
+
+/**
+ * Clips a convex polygon to the `[0,width] x [0,height]` rectangle
+ * (Sutherland–Hodgman, one edge at a time). A dot is always convex, so the
+ * result is a single convex polygon — still one closed, fillable dot.
+ */
+function clipToRect(polygon: Point[], width: number, height: number): Point[] {
+  const edges: [(p: Point) => number][] = [[(p) => p.x], [(p) => width - p.x], [(p) => p.y], [(p) => height - p.y]];
+  let output = polygon;
+  for (const [inside] of edges) {
+    const input = output;
+    output = [];
+    for (let i = 0; i < input.length; i++) {
+      const current = input[i];
+      const previous = input[(i + input.length - 1) % input.length];
+      const dCurrent = inside(current);
+      const dPrevious = inside(previous);
+      if (dCurrent >= 0 !== dPrevious >= 0) {
+        const t = dPrevious / (dPrevious - dCurrent);
+        output.push({ x: previous.x + (current.x - previous.x) * t, y: previous.y + (current.y - previous.y) * t });
+      }
+      if (dCurrent >= 0) output.push(current);
+    }
+    if (output.length === 0) break;
   }
-  return `${points.join(" ")} Z`;
+  return output;
+}
+
+/**
+ * One dot's closed polyline-circle outline, clipped to the image so a dot at
+ * the edge — or any dot, with a dot scale above 1 — never spills past it.
+ * Polylines rather than arcs so every downstream consumer (hatch fill,
+ * G-code) handles it as-is. Null if nothing of it lies inside the image.
+ */
+function circlePath(cx: number, cy: number, radius: number, width: number, height: number): string | null {
+  const circle = Array.from({ length: DOT_SEGMENTS }, (_, i) => {
+    const theta = (i / DOT_SEGMENTS) * Math.PI * 2;
+    return { x: cx + radius * Math.cos(theta), y: cy + radius * Math.sin(theta) };
+  });
+  const clipped = clipToRect(circle, width, height);
+  if (clipped.length < 3) return null;
+  return `${clipped.map((p, i) => `${i === 0 ? "M" : "L"}${format(p.x)} ${format(p.y)}`).join(" ")} Z`;
 }
 
 /**
@@ -80,9 +112,8 @@ export function generateHalftoneDots({ source, settings: rawSettings, scale, wid
   const vCoords = corners.map((c) => (c.x - originX) * v.x + (c.y - originY) * v.y);
   // Padded by one column/row: the hex offset shifts alternate rows by half a
   // cell, so a loop range sized only for the unoffset grid can clip them
-  // short — a cell that lands outside the image samples as white and is
-  // skipped below anyway, so the padding costs nothing but a few wasted
-  // lookups.
+  // short — a cell that lands outside the image is skipped below, so the
+  // padding costs nothing but a few wasted iterations.
   const iMin = Math.ceil(Math.min(...uCoords) / spacing) - 1;
   const iMax = Math.floor(Math.max(...uCoords) / spacing) + 1;
   const jMin = Math.ceil(Math.min(...vCoords) / rowSpacing) - 1;
@@ -94,13 +125,17 @@ export function generateHalftoneDots({ source, settings: rawSettings, scale, wid
     for (let i = iMin; i <= iMax; i++) {
       const cx = originX + (i + rowOffset) * spacing * u.x + j * rowSpacing * v.x;
       const cy = originY + (i + rowOffset) * spacing * u.y + j * rowSpacing * v.y;
+      // A cell centred outside the image is not part of the picture; its
+      // tone would only be the image edge blended with the white beyond.
+      if (cx < 0 || cy < 0 || cx > source.width || cy > source.height) continue;
       const toneDark = 1 - luminanceAt(source, cx, cy) / 255;
       if (toneDark < MIN_DOT_TONE) continue;
       // Ink is a dot's *area*, so it is the area that must track tone: a
       // radius proportional to tone gives area ∝ tone², printing a 50% grey
       // as 25% ink and crushing every midtone toward white.
       const radius = maxRadius * Math.sqrt(toneDark);
-      dots.push({ d: circlePath(cx, cy, radius), x: Number(format(cx)), y: Number(format(cy)) });
+      const d = circlePath(cx, cy, radius, source.width, source.height);
+      if (d) dots.push({ d, x: Number(format(cx)), y: Number(format(cy)) });
     }
   }
 
@@ -112,7 +147,8 @@ export const dotHalftoneRenderer: BitmapRendererDefinition = {
   label: "Dot halftone",
   // 2: dot area, rather than radius, proportional to tone.
   // 3: each dot's tap point is its exact centre, not its vertex average.
-  version: "3",
+  // 4: dots stay inside the image — clipped at the edge, none centred outside.
+  version: "4",
   defaults: dotHalftoneDefaults,
   fields: HALFTONE_FIELDS,
   // Returned as dots, so each is filled or plot-tapped on its own.
