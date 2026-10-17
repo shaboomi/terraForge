@@ -25,7 +25,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 5. Settings not coerced | Fixed — `coerceSettings` (per-renderer clamp code removed in A1) | `4f48b99` |
 | 6. Clip entry/exit | Fixed — entry in `c36a718`, exit in `3d45296` | `3d45296` |
 | 7. Tone smoothing lag | Fixed by A3 — engine EMA replaced by a symmetric source blur | `6dddf4f` |
-| 9. Halftone tone curve | Area fix done (`f5ffab7`); tone controls via A3; edge overflow still open | `f5ffab7` |
+| 9. Halftone tone curve | Done — dot area tracks tone (`f5ffab7`), tone controls via A3, dots clipped to the image (`8f90620`) | `8f90620` |
 | 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | `3c96690` |
 | A3. Tone preprocessing | Done — `toneAdjust.ts`; per-import Tone section for every renderer and plugin; auto levels still per ink channel under separation (issue 15) | `6dddf4f` |
 | A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | `0fb3342` |
@@ -34,8 +34,28 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 10. Fragile dot splitting | Fixed in A5 — dots are data (`{ d, x, y }`), nothing is parsed | `754c875` |
 | 14. Import ignored `paths` | Fixed in A5; decode limits still open | `754c875` |
 | A5. Structured result | Done, kept as API version 1 (unreleased) — `{ layers, warnings }`, dot layers; docs and examples checked | `754c875` |
-| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated). Decode and tone preparation still run on the main thread | `7c47b8a` |
-| Everything else | Open | — |
+| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated); output validation (`9dbe59b`) and tone smoothing (`2dafb6e`) moved into the pool too. Decoding still runs on the main thread | `7c47b8a` |
+| 11. Plugin id collisions | Fixed — plugin ids must be namespaced (`acme.halftone`); un-namespaced ids are reserved for built-ins | `05092e7` |
+| A6. Tidy-ups | Done — `source` on definitions, cached plugin definitions, re-export layers removed | `21bb773` |
+| 13. Radial burst centre pile-up | Fixed — rays added as the burst spreads, at a set spacing, from a small clear centre | `720e325` |
+
+### Found and fixed after the review
+
+| Item | Commit |
+|---|---|
+| Dev hot reload left the render service orphaned (status stuck on "Ready") and renderer edits forced full page reloads | `6785973` |
+| Tone edits re-ran the blur even when only contrast/levels changed; validation ran on the UI thread | `9dbe59b` |
+| Re-render settle delay 400 ms → 150 ms, now that superseded renders are aborted | `ff2eda6` |
+| Dense previews re-rasterised as SVG on every pan/zoom/drag (~0.5 s a frame) — now drawn from worker-rasterised images | `6b44522` |
+| Point-budget and upload-retry tests too slow for CI under coverage | `9979102` |
+
+### Still open
+
+- **13** — spiral's `amplitude` key differs from every other renderer's `amplitudeMM` (needs a load-time migration); concentric boxes honour spacing on one axis only; polygon spacing is by circumradius.
+- **14** — no size cap when decoding very large images (full-resolution RGBA on the main thread); an import decodes the image twice.
+- **15** — decisions needed: RGB separation puts most ink where the image is white; auto levels runs per ink under separation.
+- **Point limit** — decision needed on the 200,000-point per-strand cap (a 1 mm spiral on a large photo reaches it; the user is warned).
+- **G-code toolpath overlay** — likely has the same per-frame redraw cost the bitmap previews had; not yet measured.
 
 ---
 
