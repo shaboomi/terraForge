@@ -28,7 +28,7 @@ import { parseGcode } from "../../../utils/gcodeParser";
 import { importPdf } from "../../../utils/pdfImport";
 import {
   bitmapRenderSignature,
-  dataUrlFromBytes,
+  loadBitmapForImport,
   materializeBitmapLayers,
 } from "../../bitmap-renderers/bitmapImage";
 import { getBitmapRenderer } from "../../bitmap-renderers/registry";
@@ -413,29 +413,29 @@ export function useImportActions() {
     const name = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") ?? "bitmap";
     upsertTask({ id: taskId, type: "svg-parse", label: `Importing ${name}…`, progress: null, status: "running" });
     try {
-      const bitmapDataUrl = dataUrlFromBytes(
+      // The fit scale has to be known before the renderer runs, not just for
+      // display afterwards: every tone-spine/halftone renderer's point count
+      // scales with the import's physical size, and an oversized default
+      // produces an unworkable amount of preview geometry. It also decides
+      // whether a very high-resolution image is stored smaller.
+      const {
+        dataUrl: bitmapDataUrl,
+        width: imageWidth,
+        height: imageHeight,
+        baseScale,
+      } = await loadBitmapForImport(
         await window.terraForge.fs.readFileBinary(filePath),
         mimeType,
+        (naturalWidth, naturalHeight) =>
+          computeBitmapFitScale({
+            naturalWidth,
+            naturalHeight,
+            bedW: activeMachineConfig?.bedWidth ?? 220,
+            bedH: activeMachineConfig?.bedHeight ?? 200,
+            pageTemplate,
+            pageSizes,
+          }),
       );
-      // Needed before the renderer runs, not just for display afterwards:
-      // the fit-capped scale below depends on the image's native pixel size,
-      // and every tone-spine/halftone renderer's point count scales with the
-      // import's physical size — an oversized default produces an unworkable
-      // amount of preview geometry, so the cap has to land before materialize.
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const element = new Image();
-        element.onload = () => resolve(element);
-        element.onerror = () => reject(new Error("Could not decode bitmap image."));
-        element.src = bitmapDataUrl;
-      });
-      const baseScale = computeBitmapFitScale({
-        naturalWidth: image.naturalWidth,
-        naturalHeight: image.naturalHeight,
-        bedW: activeMachineConfig?.bedWidth ?? 220,
-        bedH: activeMachineConfig?.bedHeight ?? 200,
-        pageTemplate,
-        pageSizes,
-      });
       const importId = uuid();
       const defaultRenderer = getBitmapRenderer(undefined);
       const bitmapRendererSettings = { ...defaultRenderer.defaults };
@@ -447,13 +447,13 @@ export function useImportActions() {
         bitmapBaseScale: baseScale,
       };
       const { bitmapRendererPath, paths, rendererVersion, warnings } = await materializeBitmapLayers(renderInputs);
-      const objW = image.naturalWidth * baseScale;
-      const objH = image.naturalHeight * baseScale;
+      const objW = imageWidth * baseScale;
+      const objH = imageHeight * baseScale;
       const origin = activeMachineConfig?.origin ?? "bottom-left";
       const imp: SvgImport = {
         id: importId, name, kind: "bitmap", paths, x: origin.includes("right") ? (activeMachineConfig?.bedWidth ?? 220) - objW : 0,
         y: origin.includes("top") ? -objH : 0, scale: baseScale, rotation: 0, visible: true,
-        svgWidth: image.naturalWidth, svgHeight: image.naturalHeight, viewBoxX: 0, viewBoxY: 0,
+        svgWidth: imageWidth, svgHeight: imageHeight, viewBoxX: 0, viewBoxY: 0,
         bitmapDataUrl, bitmapMimeType: mimeType, bitmapRendererId: defaultRenderer.id,
         bitmapRendererSettings, bitmapRendererPath, bitmapBaseScale: baseScale, bitmapOpacity: 0.25,
         // Stamped now so selecting the new import does not immediately

@@ -63,6 +63,72 @@ async function decodeToImageData(dataUrl: string): Promise<ImageData> {
   return decoded;
 }
 
+/**
+ * Source pixels per millimetre worth keeping, at the size an image is placed
+ * at: 0.1mm a pixel, the finest line a pen draws — and finer than the default
+ * tone smoothing (0.5mm) lets through anyway. Anything beyond it only costs
+ * memory and time in every decode and render. A typical 12MP photo placed
+ * across a bed is under it; it bites on very high-resolution images.
+ */
+export const MAX_SOURCE_PX_PER_MM = 10;
+
+export interface LoadedBitmap {
+  dataUrl: string;
+  /** Pixel size of `dataUrl` — after any downscale. */
+  width: number;
+  height: number;
+  /** Millimetres per pixel of `dataUrl` at the placed size. */
+  baseScale: number;
+}
+
+function loadImageElement(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("Could not decode bitmap image."));
+    element.src = dataUrl;
+  });
+}
+
+/**
+ * Reads an image file for import, decoding it once. `fitScale` chooses the
+ * placed size (mm per pixel) from the image's pixel size.
+ *
+ * An image with more than `MAX_SOURCE_PX_PER_MM` at that size is redrawn
+ * smaller, at the same physical size, and the smaller image is what gets
+ * stored: every later decode and render then works at a resolution the pen
+ * can use, rather than decoding a full-resolution RGBA copy (hundreds of MB
+ * for a very large photo) on the UI thread each time.
+ *
+ * The decoded pixels are left in the decode cache, so the import's first
+ * render does not decode the image a second time.
+ */
+export async function loadBitmapForImport(
+  bytes: Uint8Array,
+  mimeType: string,
+  fitScale: (width: number, height: number) => number,
+): Promise<LoadedBitmap> {
+  const original = dataUrlFromBytes(bytes, mimeType);
+  const image = await loadImageElement(original);
+  const scale = fitScale(image.naturalWidth, image.naturalHeight);
+  const shrink = Math.min(1, MAX_SOURCE_PX_PER_MM * scale);
+  const width = Math.max(1, Math.round(image.naturalWidth * shrink));
+  const height = Math.max(1, Math.round(image.naturalHeight * shrink));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Could not read bitmap image pixels.");
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, width, height);
+
+  const downscaled = width !== image.naturalWidth || height !== image.naturalHeight;
+  const dataUrl = downscaled ? canvas.toDataURL(mimeType, 0.92) : original;
+  decodeCache = { dataUrl, image: context.getImageData(0, 0, width, height) };
+  return { dataUrl, width, height, baseScale: (scale * image.naturalWidth) / width };
+}
+
 export async function decodeBitmapLuminance(dataUrl: string): Promise<RendererSource> {
   const { data, width, height } = await decodeToImageData(dataUrl);
   const values = new Uint8Array(width * height);
