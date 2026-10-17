@@ -122,6 +122,11 @@ function blur(values: Float32Array, width: number, height: number, radius: numbe
   return current;
 }
 
+/** The blur radius, in source pixels, a smoothing setting comes to; below 1 there is no blur. */
+export function smoothingRadius(smoothingMM: number, pixelsPerMM: number): number {
+  return Math.round(smoothingMM * pixelsPerMM);
+}
+
 /**
  * The smoothing half of tone shaping: a blur sized in mm. `pixelsPerMM`
  * converts it into source pixels; three passes of a box of radius r spread
@@ -134,7 +139,7 @@ function blur(values: Float32Array, width: number, height: number, radius: numbe
  * when those alone change.
  */
 export function smoothSource(source: RendererSource, smoothingMM: number, pixelsPerMM: number): RendererSource {
-  const radius = Math.round(smoothingMM * pixelsPerMM);
+  const radius = smoothingRadius(smoothingMM, pixelsPerMM);
   if (radius < 1) return source;
   const blurred = blur(Float32Array.from(source.values), source.width, source.height, radius);
   const values = new Uint8Array(blurred.length);

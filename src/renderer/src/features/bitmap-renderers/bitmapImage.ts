@@ -1,10 +1,10 @@
 import type { RendererDot, SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
-import { levelSource, resolveToneSettings, smoothSource } from "./toneAdjust";
+import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
 import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
-import { runRenderer } from "./rendererPool";
+import { runRenderer, smoothInWorker } from "./rendererPool";
 import type { ValidatedLayer } from "./validatePath";
 import type { BitmapRendererDefinition, RendererSource } from "./types";
 
@@ -298,16 +298,25 @@ let preparedCache: { dataUrl: string; key: string; sources: PreparedSource[] } |
  */
 let smoothedCache: { dataUrl: string; key: string; sources: PreparedSource[] } | null = null;
 
-async function smoothedSources(bitmap: MaterializableBitmap, dataUrl: string, smoothingMM: number): Promise<PreparedSource[]> {
+async function smoothedSources(
+  bitmap: MaterializableBitmap,
+  dataUrl: string,
+  smoothingMM: number,
+  signal: AbortSignal | undefined,
+): Promise<PreparedSource[]> {
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
   const key = JSON.stringify([mode, mode === "custom" ? bitmap.bitmapSeparationPalette ?? [] : null, smoothingMM, baseScale]);
   if (smoothedCache?.dataUrl === dataUrl && smoothedCache.key === key) return smoothedCache.sources;
 
-  const smooth = (source: RendererSource) => smoothSource(source, smoothingMM, 1 / baseScale);
+  // The blur runs in the worker pool; with no blur to do, skip the trip.
+  const smooth = (source: RendererSource) =>
+    smoothingRadius(smoothingMM, 1 / baseScale) < 1
+      ? Promise.resolve(source)
+      : smoothInWorker(source, smoothingMM, 1 / baseScale, signal);
   let sources: PreparedSource[];
   if (mode === "none") {
-    sources = [{ label: "", color: "", source: smooth(await decodeBitmapLuminance(dataUrl)) }];
+    sources = [{ label: "", color: "", source: await smooth(await decodeBitmapLuminance(dataUrl)) }];
   } else {
     const colorData = await decodeBitmapColor(dataUrl);
     const channels =
@@ -315,14 +324,20 @@ async function smoothedSources(bitmap: MaterializableBitmap, dataUrl: string, sm
       : mode === "cmy" ? separateCMY(colorData)
       : mode === "cmyk" ? separateCMYK(colorData)
       : separateCustomPalette(colorData, bitmap.bitmapSeparationPalette ?? []);
-    sources = channels.map(({ label, color, luminance }) => ({ label, color, source: smooth(luminance) }));
+    sources = await Promise.all(
+      channels.map(async ({ label, color, luminance }) => ({ label, color, source: await smooth(luminance) })),
+    );
   }
 
   smoothedCache = { dataUrl, key, sources };
   return sources;
 }
 
-async function preparedSources(bitmap: MaterializableBitmap, dataUrl: string): Promise<PreparedSource[]> {
+async function preparedSources(
+  bitmap: MaterializableBitmap,
+  dataUrl: string,
+  signal: AbortSignal | undefined,
+): Promise<PreparedSource[]> {
   const tone = resolveToneSettings(bitmap);
   const key = JSON.stringify([
     bitmap.bitmapSeparationMode ?? "none",
@@ -332,7 +347,7 @@ async function preparedSources(bitmap: MaterializableBitmap, dataUrl: string): P
   ]);
   if (preparedCache?.dataUrl === dataUrl && preparedCache.key === key) return preparedCache.sources;
 
-  const smoothed = await smoothedSources(bitmap, dataUrl, tone.smoothingMM);
+  const smoothed = await smoothedSources(bitmap, dataUrl, tone.smoothingMM, signal);
   const sources = smoothed.map((channel) => ({ ...channel, source: levelSource(channel.source, tone) }));
   preparedCache = { dataUrl, key, sources };
   return sources;
@@ -355,7 +370,7 @@ async function renderWith(
   };
 
   if (mode === "none") {
-    const [{ source }] = await preparedSources(bitmap, dataUrl);
+    const [{ source }] = await preparedSources(bitmap, dataUrl, signal);
     const { layers, warnings } = await render(source);
 
     // One unnamed stroke keeps the single-path representation; anything else
@@ -380,7 +395,7 @@ async function renderWith(
     };
   }
 
-  const channels = await preparedSources(bitmap, dataUrl);
+  const channels = await preparedSources(bitmap, dataUrl, signal);
   const suffixFor = (layerCount: number, index: number, layerIndex: number) =>
     layerCount === 1 ? `${index}` : `${index}-${layerIndex}`;
   const perChannel = await Promise.all(channels.map((channel) => render(channel.source)));

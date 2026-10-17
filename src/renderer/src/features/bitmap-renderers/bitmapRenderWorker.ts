@@ -1,13 +1,19 @@
 /**
- * Web Worker entry for in-tree bitmap renderers — see `rendererPool.ts`.
+ * Web Worker entry for the bitmap pool — in-tree renders and tone smoothing;
+ * see `rendererPool.ts`.
  *
- *   IN  → RenderRequest { id, rendererId, context }
- *   OUT ← RenderReply   { id, ok: true, output } | { id, ok: false, message }
+ *   IN  → PoolRequest  (RenderRequest | SmoothRequest)
+ *   OUT ← PoolReply    { id, ok: true, output } | { id, ok: false, message }
  */
-import { handleRenderRequest, type RenderRequest } from "./renderRequest";
+import { handlePoolRequest, type PoolRequest } from "./renderRequest";
 
-self.onmessage = async (event: MessageEvent<RenderRequest>) => {
-  self.postMessage(await handleRenderRequest(event.data));
+self.onmessage = async (event: MessageEvent<PoolRequest>) => {
+  const reply = await handlePoolRequest(event.data);
+  // A smoothed image is megabytes and is not used here again: hand its
+  // buffer over rather than copy it.
+  const transfer =
+    reply.ok && event.data.kind === "smooth" ? [(reply.output as { values: Uint8Array }).values.buffer] : [];
+  (self as unknown as Worker).postMessage(reply, transfer);
 };
 
 // Dev-only, and never true inside a worker at runtime: marks this module as

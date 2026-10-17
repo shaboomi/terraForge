@@ -1,11 +1,17 @@
-import type { RendererContext } from "../../../../types";
+import type { RendererContext, RendererSource } from "../../../../types";
 import { bitmapRenderers } from "./registry";
-import { handleRenderRequest, type RenderReply, type RenderRequest } from "./renderRequest";
+import {
+  handleRenderRequest,
+  handleSmoothRequest,
+  type PoolReply,
+  type PoolRequest,
+} from "./renderRequest";
 import type { BitmapRendererDefinition } from "./types";
 import { validateRendererOutput, type ValidatedOutput } from "./validatePath";
 
 /**
- * Runs in-tree renderers off the main thread. A large spiral or fine ring
+ * Runs in-tree renderers — and tone smoothing — off the main thread. A
+ * large spiral or fine ring
  * render takes long enough to freeze the UI outright when run inline; in a
  * worker the app stays responsive, a colour separation's channels render in
  * parallel, and a render that has been superseded can be stopped rather than
@@ -16,8 +22,8 @@ import { validateRendererOutput, type ValidatedOutput } from "./validatePath";
  */
 
 interface Task {
-  request: RenderRequest;
-  resolve: (output: ValidatedOutput) => void;
+  request: PoolRequest;
+  resolve: (output: never) => void;
   reject: (err: unknown) => void;
   signal?: AbortSignal;
   onAbort?: () => void;
@@ -43,11 +49,11 @@ function spawn(slot?: Slot): Slot {
   const worker = new Worker(new URL("./bitmapRenderWorker.ts", import.meta.url), { type: "module" });
   const target: Slot = slot ?? { worker, task: null };
   target.worker = worker;
-  worker.onmessage = (event: MessageEvent<RenderReply>) => {
+  worker.onmessage = (event: MessageEvent<PoolReply>) => {
     const task = target.task;
     if (!task || task.request.id !== event.data.id) return;
     finish(target);
-    if (event.data.ok) task.resolve(event.data.output);
+    if (event.data.ok) task.resolve(event.data.output as never);
     else task.reject(new Error(event.data.message));
   };
   // An error escaping the handler means the worker itself broke: fail its
@@ -90,26 +96,17 @@ function dispatch(): void {
 }
 
 /**
- * Renders with an in-tree renderer, in a worker when available, returning
- * its validated output. Aborting
- * `signal` rejects with an `AbortError` and, if the render is already
- * running, terminates its worker so the work actually stops.
+ * Runs one request in the pool. Aborting `signal` rejects with an
+ * `AbortError` and, if the request is already running, terminates its worker
+ * so the work actually stops. Where workers do not exist, `inline` runs
+ * instead.
  */
-export function runInTreeRenderer(
-  renderer: BitmapRendererDefinition,
-  context: RendererContext,
-  signal?: AbortSignal,
-): Promise<ValidatedOutput> {
+function runTask<T>(request: PoolRequest, signal: AbortSignal | undefined, inline: () => Promise<T>): Promise<T> {
   if (signal?.aborted) return Promise.reject(abortError());
-  if (typeof Worker === "undefined") {
-    return handleRenderRequest({ id: 0, rendererId: renderer.id, context }).then((reply) => {
-      if (!reply.ok) throw new Error(reply.message);
-      return reply.output;
-    });
-  }
+  if (typeof Worker === "undefined") return inline();
 
-  return new Promise<ValidatedOutput>((resolve, reject) => {
-    const task: Task = { request: { id: nextId++, rendererId: renderer.id, context }, resolve, reject, signal };
+  return new Promise<T>((resolve, reject) => {
+    const task: Task = { request, resolve: resolve as (output: never) => void, reject, signal };
     if (signal) {
       task.onAbort = () => {
         const queued = queue.indexOf(task);
@@ -123,6 +120,39 @@ export function runInTreeRenderer(
     queue.push(task);
     dispatch();
   });
+}
+
+/** Unwraps a handler's reply for the inline (no-worker) path. */
+function unwrap<T>(reply: { ok: true; output: T } | { ok: false; message: string }): T {
+  if (!reply.ok) throw new Error(reply.message);
+  return reply.output;
+}
+
+/**
+ * Renders with an in-tree renderer, in a worker when available, returning
+ * its validated output. Abortable — see `runTask`.
+ */
+export function runInTreeRenderer(
+  renderer: BitmapRendererDefinition,
+  context: RendererContext,
+  signal?: AbortSignal,
+): Promise<ValidatedOutput> {
+  const request: PoolRequest = { id: nextId++, kind: "render", rendererId: renderer.id, context };
+  return runTask(request, signal, async () => unwrap(await handleRenderRequest({ id: 0, rendererId: renderer.id, context })));
+}
+
+/**
+ * Tone smoothing (see `smoothSource`) in a worker when available, so a
+ * large photo's blur never stalls the UI. Abortable — see `runTask`.
+ */
+export function smoothInWorker(
+  source: RendererSource,
+  smoothingMM: number,
+  pixelsPerMM: number,
+  signal?: AbortSignal,
+): Promise<RendererSource> {
+  const request: PoolRequest = { id: nextId++, kind: "smooth", source, smoothingMM, pixelsPerMM };
+  return runTask(request, signal, async () => unwrap(handleSmoothRequest({ ...request, kind: "smooth" })));
 }
 
 /**

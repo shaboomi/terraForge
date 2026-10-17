@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleRenderRequest, type RenderRequest } from "@renderer/features/bitmap-renderers/renderRequest";
-import { resetRendererPool, runInTreeRenderer } from "@renderer/features/bitmap-renderers/rendererPool";
+import {
+  handlePoolRequest,
+  handleRenderRequest,
+  type PoolRequest,
+} from "@renderer/features/bitmap-renderers/renderRequest";
+import { resetRendererPool, runInTreeRenderer, smoothInWorker } from "@renderer/features/bitmap-renderers/rendererPool";
+import { smoothSource } from "@renderer/features/bitmap-renderers/toneAdjust";
 import { rasterLinesRenderer } from "@renderer/features/bitmap-renderers/rasterLines";
 import { validateRendererOutput } from "@renderer/features/bitmap-renderers/validatePath";
 import type { RendererContext } from "@types/index";
@@ -14,15 +19,15 @@ class FakeWorker {
   static instances: FakeWorker[] = [];
   onmessage: ((event: { data: unknown }) => void) | null = null;
   onerror: ((event: { message: string; preventDefault: () => void }) => void) | null = null;
-  received: RenderRequest[] = [];
+  received: PoolRequest[] = [];
   terminated = false;
-  private held: RenderRequest[] = [];
+  private held: PoolRequest[] = [];
 
   constructor() {
     FakeWorker.instances.push(this);
   }
 
-  postMessage(request: RenderRequest) {
+  postMessage(request: PoolRequest) {
     this.received.push(request);
     this.held.push(request);
   }
@@ -35,7 +40,7 @@ class FakeWorker {
   async release() {
     const requests = this.held.splice(0);
     for (const request of requests) {
-      const reply = await handleRenderRequest(request);
+      const reply = await handlePoolRequest(request);
       if (!this.terminated) this.onmessage?.({ data: reply });
     }
   }
@@ -145,6 +150,40 @@ describe("runInTreeRenderer", () => {
     vi.stubGlobal("Worker", undefined);
 
     await expect(runInTreeRenderer(rasterLinesRenderer, context)).resolves.toEqual(expected());
+  });
+});
+
+describe("smoothInWorker", () => {
+  const spiky = () => {
+    const values = new Uint8Array(400).fill(128);
+    values[210] = 0;
+    return { width: 20, height: 20, values };
+  };
+
+  it("smooths in a worker, with the same result as smoothing inline", async () => {
+    const pending = smoothInWorker(spiky(), 1, 2);
+    expect(busy()).toHaveLength(1);
+    await Promise.all(live().map((worker) => worker.release()));
+
+    expect(await pending).toEqual(smoothSource(spiky(), 1, 2));
+  });
+
+  it("is cancelled like a render, stopping its worker", async () => {
+    const controller = new AbortController();
+    const pending = smoothInWorker(spiky(), 1, 2, controller.signal);
+    const [worker] = busy();
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(worker.terminated).toBe(true);
+  });
+
+  it("smooths inline where workers do not exist", async () => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal("Worker", undefined);
+
+    await expect(smoothInWorker(spiky(), 1, 2)).resolves.toEqual(smoothSource(spiky(), 1, 2));
   });
 });
 
