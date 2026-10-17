@@ -58,7 +58,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Item | Decision | Commit |
 |---|---|---|
 | 15. RGB separation | Offer both: "RGB (light inks on dark paper)" (the original, unchanged for saved drawings) and a new "RGB (white paper)" | `ca89254` |
-| 15. Auto levels under separation | Keep per ink — each pen used to its full range, at the cost of exact colour balance. Noted in code | (this commit) |
+| 15. Auto levels under separation | Keep per ink — each pen used to its full range, at the cost of exact colour balance. Noted in code | `43feba1` |
 | Point limit | Per-strand cap dropped; only the 3M render-wide budget remains | `2cfdcf3` |
 
 Nothing from the review remains open.
