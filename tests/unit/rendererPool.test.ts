@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleRenderRequest, type RenderRequest } from "@renderer/features/bitmap-renderers/renderRequest";
 import { resetRendererPool, runInTreeRenderer } from "@renderer/features/bitmap-renderers/rendererPool";
 import { rasterLinesRenderer } from "@renderer/features/bitmap-renderers/rasterLines";
+import { validateRendererOutput } from "@renderer/features/bitmap-renderers/validatePath";
 import type { RendererContext } from "@types/index";
 
 /**
@@ -47,6 +48,9 @@ class FakeWorker {
 const live = () => FakeWorker.instances.filter((worker) => !worker.terminated);
 const busy = () => live().filter((worker) => worker.received.length > 0);
 
+/** What the pool should hand back: the renderer's own output, validated. */
+const expected = () => validateRendererOutput(rasterLinesRenderer.render(context), rasterLinesRenderer.id);
+
 const context: RendererContext = {
   width: 30,
   height: 20,
@@ -67,11 +71,11 @@ afterEach(() => {
 });
 
 describe("runInTreeRenderer", () => {
-  it("renders in a worker, with exactly the output an inline render gives", async () => {
+  it("renders in a worker, returning the renderer's output already validated", async () => {
     const pending = runInTreeRenderer(rasterLinesRenderer, context);
     await Promise.all(live().map((worker) => worker.release()));
 
-    expect(await pending).toEqual(rasterLinesRenderer.render(context));
+    expect(await pending).toEqual(expected());
     expect(FakeWorker.instances.length).toBeGreaterThan(0);
   });
 
@@ -113,7 +117,7 @@ describe("runInTreeRenderer", () => {
 
     const next = runInTreeRenderer(rasterLinesRenderer, context);
     await Promise.all(live().map((w) => w.release()));
-    await expect(next).resolves.toEqual(rasterLinesRenderer.render(context));
+    await expect(next).resolves.toEqual(expected());
   });
 
   it("rejects at once for a signal that is already aborted", async () => {
@@ -140,7 +144,7 @@ describe("runInTreeRenderer", () => {
     vi.unstubAllGlobals();
     vi.stubGlobal("Worker", undefined);
 
-    await expect(runInTreeRenderer(rasterLinesRenderer, context)).resolves.toEqual(rasterLinesRenderer.render(context));
+    await expect(runInTreeRenderer(rasterLinesRenderer, context)).resolves.toEqual(expected());
   });
 });
 

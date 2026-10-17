@@ -1,7 +1,8 @@
-import type { RendererContext, RendererOutput } from "../../../../types";
+import type { RendererContext } from "../../../../types";
 import { bitmapRenderers } from "./registry";
-import type { RenderReply, RenderRequest } from "./renderRequest";
+import { handleRenderRequest, type RenderReply, type RenderRequest } from "./renderRequest";
 import type { BitmapRendererDefinition } from "./types";
+import { validateRendererOutput, type ValidatedOutput } from "./validatePath";
 
 /**
  * Runs in-tree renderers off the main thread. A large spiral or fine ring
@@ -16,7 +17,7 @@ import type { BitmapRendererDefinition } from "./types";
 
 interface Task {
   request: RenderRequest;
-  resolve: (output: RendererOutput) => void;
+  resolve: (output: ValidatedOutput) => void;
   reject: (err: unknown) => void;
   signal?: AbortSignal;
   onAbort?: () => void;
@@ -89,7 +90,8 @@ function dispatch(): void {
 }
 
 /**
- * Renders with an in-tree renderer, in a worker when available. Aborting
+ * Renders with an in-tree renderer, in a worker when available, returning
+ * its validated output. Aborting
  * `signal` rejects with an `AbortError` and, if the render is already
  * running, terminates its worker so the work actually stops.
  */
@@ -97,11 +99,16 @@ export function runInTreeRenderer(
   renderer: BitmapRendererDefinition,
   context: RendererContext,
   signal?: AbortSignal,
-): Promise<RendererOutput> {
+): Promise<ValidatedOutput> {
   if (signal?.aborted) return Promise.reject(abortError());
-  if (typeof Worker === "undefined") return Promise.resolve(renderer.render(context));
+  if (typeof Worker === "undefined") {
+    return handleRenderRequest({ id: 0, rendererId: renderer.id, context }).then((reply) => {
+      if (!reply.ok) throw new Error(reply.message);
+      return reply.output;
+    });
+  }
 
-  return new Promise<RendererOutput>((resolve, reject) => {
+  return new Promise<ValidatedOutput>((resolve, reject) => {
     const task: Task = { request: { id: nextId++, rendererId: renderer.id, context }, resolve, reject, signal };
     if (signal) {
       task.onAbort = () => {
@@ -119,7 +126,8 @@ export function runInTreeRenderer(
 }
 
 /**
- * Runs any renderer: in-tree ones in the worker pool, plugins directly (a
+ * Runs any renderer and returns its validated output: in-tree ones in the
+ * worker pool (validated there, off the UI thread), plugins directly (a
  * plugin already runs in its own sandbox process). A plugin render cannot be
  * stopped mid-flight, but once `signal` is aborted its result is refused all
  * the same, so a superseded render never reaches the document.
@@ -128,11 +136,11 @@ export async function runRenderer(
   renderer: BitmapRendererDefinition,
   context: RendererContext,
   signal?: AbortSignal,
-): Promise<RendererOutput> {
+): Promise<ValidatedOutput> {
   if (bitmapRenderers.includes(renderer)) return runInTreeRenderer(renderer, context, signal);
   const output = await renderer.render(context);
   if (signal?.aborted) throw abortError();
-  return output;
+  return validateRendererOutput(output, renderer.id);
 }
 
 /** Terminates every worker and forgets queued work. For tests. */

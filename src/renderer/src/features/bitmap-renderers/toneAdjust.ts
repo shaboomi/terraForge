@@ -123,41 +123,54 @@ function blur(values: Float32Array, width: number, height: number, radius: numbe
 }
 
 /**
- * Applies tone shaping to a renderer's source: blur first (so auto levels
- * measures the image, not its noise), then auto levels, then contrast.
- * Returns the input unchanged when every setting is neutral, and never
- * mutates it otherwise.
+ * The smoothing half of tone shaping: a blur sized in mm. `pixelsPerMM`
+ * converts it into source pixels; three passes of a box of radius r spread
+ * like a Gaussian with sigma ≈ r, so the setting reads as that sigma. Returns
+ * the input unchanged below one pixel of blur, and never mutates it.
  *
- * `pixelsPerMM` converts the mm-denominated smoothing into source pixels.
- * Three passes of a box of radius r spread like a Gaussian with sigma ≈ r,
- * so the setting reads as that sigma.
+ * Kept separate from `levelSource` because it is by far the costlier half —
+ * hundreds of milliseconds on a large photo against a single lookup pass —
+ * so the pipeline caches its result and re-runs only levels and contrast
+ * when those alone change.
  */
-export function prepareSource(source: RendererSource, tone: ToneSettings, pixelsPerMM: number): RendererSource {
-  const radius = Math.round(tone.smoothingMM * pixelsPerMM);
-  const needsBlur = radius >= 1;
-  if (!needsBlur && !tone.autoLevels && tone.contrast === 1) return source;
+export function smoothSource(source: RendererSource, smoothingMM: number, pixelsPerMM: number): RendererSource {
+  const radius = Math.round(smoothingMM * pixelsPerMM);
+  if (radius < 1) return source;
+  const blurred = blur(Float32Array.from(source.values), source.width, source.height, radius);
+  const values = new Uint8Array(blurred.length);
+  for (let i = 0; i < blurred.length; i++) values[i] = Math.round(blurred[i]);
+  return { width: source.width, height: source.height, values };
+}
 
-  const { width, height } = source;
-  let values: Uint8Array = source.values;
+/**
+ * The levels half of tone shaping: auto levels, then contrast, folded into a
+ * single lookup table since both are per-value. Returns the input unchanged
+ * when both are neutral, and never mutates it.
+ */
+export function levelSource(source: RendererSource, { autoLevels, contrast }: Pick<ToneSettings, "autoLevels" | "contrast">): RendererSource {
+  if (!autoLevels && contrast === 1) return source;
 
-  if (needsBlur) {
-    const blurred = blur(Float32Array.from(source.values), width, height, radius);
-    values = new Uint8Array(blurred.length);
-    for (let i = 0; i < blurred.length; i++) values[i] = Math.round(blurred[i]);
-  }
-
-  // Levels and contrast are both per-value, so they fold into one lookup.
-  const { low, high } = tone.autoLevels ? levelsRange(values) : { low: 0, high: 255 };
+  const { low, high } = autoLevels ? levelsRange(source.values) : { low: 0, high: 255 };
   const span = high > low ? high - low : 0;
   const lut = new Uint8Array(256);
   for (let v = 0; v < 256; v++) {
     // A flat image has no range to stretch, so it is left as it is.
     const levelled = span ? Math.min(1, Math.max(0, (v - low) / span)) : v / 255;
-    const contrasted = Math.min(1, Math.max(0, (levelled - 0.5) * tone.contrast + 0.5));
+    const contrasted = Math.min(1, Math.max(0, (levelled - 0.5) * contrast + 0.5));
     lut[v] = Math.round(contrasted * 255);
   }
 
-  const output = values === source.values ? new Uint8Array(values.length) : values;
-  for (let i = 0; i < values.length; i++) output[i] = lut[values[i]];
-  return { width, height, values: output };
+  const values = new Uint8Array(source.values.length);
+  for (let i = 0; i < values.length; i++) values[i] = lut[source.values[i]];
+  return { width: source.width, height: source.height, values };
+}
+
+/**
+ * Applies tone shaping to a renderer's source: blur first (so auto levels
+ * measures the image, not its noise), then auto levels, then contrast.
+ * Returns the input unchanged when every setting is neutral, and never
+ * mutates it otherwise.
+ */
+export function prepareSource(source: RendererSource, tone: ToneSettings, pixelsPerMM: number): RendererSource {
+  return levelSource(smoothSource(source, tone.smoothingMM, pixelsPerMM), tone);
 }
