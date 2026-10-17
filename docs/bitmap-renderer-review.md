@@ -60,7 +60,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 15. RGB separation | Offer both: "RGB (light inks on dark paper)" (the original, unchanged for saved drawings) and a new "RGB (white paper)" | `ca89254` |
 | 15. Auto levels under separation | Keep per ink — each pen used to its full range, at the cost of exact colour balance. Noted in code | `43feba1` |
 | Point limit | Per-strand cap dropped; only the 3M render-wide budget remains | `2cfdcf3` |
-| 13. "Tooth width" vs tone-driven frequency | New shared "Tone → frequency" setting (0 = fixed tooth width; default 2 = previous behaviour, so drawings are unchanged); the width field is now "Light tooth (mm)" | (this commit) |
+| 13. "Tooth width" vs tone-driven frequency | New shared "Tone → frequency" setting (0 = fixed tooth width; default 2 = previous behaviour, so drawings are unchanged); the width field is now "Light tooth (mm)" | `ca7d481` |
 | 8. Early size estimate | Dropped — the render-wide budget and truncation warning cover it, renders are cancellable, and an estimate can't be made reliably for plugins | — |
 
 Nothing from the review remains open (rechecked item by item against each issue's text).
