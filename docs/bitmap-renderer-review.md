@@ -61,7 +61,15 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 15. Auto levels under separation | Keep per ink — each pen used to its full range, at the cost of exact colour balance. Noted in code | `43feba1` |
 | Point limit | Per-strand cap dropped; only the 3M render-wide budget remains | `2cfdcf3` |
 
-Nothing from the review remains open.
+### Still open
+
+- **13 — "Tooth width" no longer matches** — tone also raises the waveform's frequency (`FREQUENCY_GAIN = 2`), so a black region's tooth is a third of the set width. Needs a decision: rename the field, or expose the gain as a setting.
+- **8 — early size estimate** — the third remediation (estimate output size from the settings before rendering) was not done. The budget and truncation warning cover the failure; recommended to drop. Needs a decision.
+
+### Done but not listed above
+
+- **16 — test gaps** — each fix for issues 1–5 and 10 landed with property-style tests that fail on the previous code.
+- **14 — luminance not cached** — covered by the smoothed/prepared source caches (`9dbe59b`).
 
 Checked and not needed: the G-code toolpath overlay. With a ~0.5 mm raster-line job over a 560 mm bed, panning, zooming and dragging stayed at ~60 fps (worst frame 50 ms); it already draws from cached `Path2D`s with level-of-detail culling.
 
