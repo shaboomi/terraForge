@@ -5,16 +5,17 @@ import { useCanvasStore } from "../../store/canvasStore";
 import { bitmapRenderSignature, materializeBitmapLayers } from "./bitmapImage";
 
 /**
- * How long a bitmap's settings must stay unchanged before a re-render is
- * worth starting. A render can be a round trip into a plugin's sandboxed
- * host, so it should happen once the user has settled on a value rather than
- * for every value they pass through on the way there.
+ * How long a bitmap's settings must stay unchanged before a re-render starts
+ * — long enough to absorb a slider drag or a burst of key repeats, short
+ * enough that a single change feels immediate.
  *
- * This has to outlast the gap between successive presses of a number field's
- * spinner, not just the events of a single slider drag — at 200ms a steadily
- * clicked spinner rendered on every click.
+ * It was 400ms, sized so a spinner clicked steadily (~250ms apart) did not
+ * render on every click. That cost every change 400ms of waiting, and the
+ * reason has gone: a render superseded by the next change is now aborted (its
+ * worker stopped), and renderer-setting and contrast changes reuse the cached
+ * source preparation, so a render the user moves past wastes little.
  */
-export const RENDER_DEBOUNCE_MS = 400;
+export const RENDER_DEBOUNCE_MS = 150;
 
 /**
  * How long the rendering state stays reported *after* the new output has

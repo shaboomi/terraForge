@@ -15,6 +15,7 @@ import {
 } from "@renderer/features/bitmap-renderers/bitmapImage";
 import {
   flushBitmapRenders,
+  RENDER_DEBOUNCE_MS,
   rerenderBitmap,
   startBitmapRenderService,
   useBitmapRenderStatusStore,
@@ -236,6 +237,21 @@ describe("background rendering", () => {
     useCanvasStore.getState().updateImport("bmp-1", { bitmapRendererSettings: { spacingMM: 10 } });
 
     expect(signal!.aborted).toBe(true);
+  });
+
+  it("starts each settled change straight away, cancelling a render it supersedes", async () => {
+    // A slow render: still running when the next change settles.
+    materialize.mockReturnValue(new Promise(() => {}));
+    useCanvasStore.setState({ imports: [renderedImport()] });
+
+    useCanvasStore.getState().updateImport("bmp-1", { bitmapRendererSettings: { spacingMM: 9 } });
+    await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS + 10);
+    useCanvasStore.getState().updateImport("bmp-1", { bitmapRendererSettings: { spacingMM: 10 } });
+    await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS + 10);
+
+    expect(materialize).toHaveBeenCalledTimes(2);
+    expect(materialize.mock.calls[0][1]!.signal!.aborted).toBe(true);
+    expect(materialize.mock.calls[1][1]!.signal!.aborted).toBe(false);
   });
 
   it("drops a pending render when its import is removed", async () => {

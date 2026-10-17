@@ -3,7 +3,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { BitmapRendererSection } from "@renderer/features/properties-panel/components/BitmapRendererSection";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
 import { useCanvasStore } from "@renderer/store/canvasStore";
-import { startBitmapRenderService } from "@renderer/features/bitmap-renderers/bitmapRenderService";
+import {
+  MIN_RENDERING_VISIBLE_MS,
+  RENDER_DEBOUNCE_MS,
+  startBitmapRenderService,
+} from "@renderer/features/bitmap-renderers/bitmapRenderService";
 import type { SvgImport } from "@types/index";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
@@ -168,8 +172,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
   it("renders once for a run of rapid changes, not once per change", async () => {
     renderPanel(bitmapImport({ bitmapRenderSignature: "stale" }));
 
-    // Four spinner clicks 250ms apart — comfortably slower than the old 200ms
-    // debounce, which rendered on every one of them.
+    // Four changes, each arriving before the previous one has settled.
     for (const spacingMM of [9, 10, 11, 12]) {
       replaceImport(
         bitmapImport({
@@ -177,11 +180,11 @@ describe("BitmapRendererSection re-render behaviour", () => {
           bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
         }),
       );
-      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS - 50); });
     }
     expect(materialize).not.toHaveBeenCalled();
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS); });
     expect(materialize).toHaveBeenCalledTimes(1);
   });
 
@@ -193,7 +196,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
     // The change is registered but nothing has started yet.
     expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
-    await act(async () => { await vi.advanceTimersByTimeAsync(399); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS - 1); });
     expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
     expect(materialize).not.toHaveBeenCalled();
 
@@ -208,17 +211,17 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
     // A plain advance, not a stepped one: collapsing the debounce and the
     // render into a single batch is exactly what used to hide this state.
-    await act(async () => { await vi.advanceTimersByTimeAsync(450); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS + 50); });
     expect(screen.getByRole("status")).toHaveTextContent("Status: Rendering");
 
     // The result is applied straight away — only the label waits.
     expect(storedImport().bitmapRendererPath).toBe("M1 1");
 
     // Still held well after the render itself finished.
-    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(MIN_RENDERING_VISIBLE_MS - 150); });
     expect(screen.getByRole("status")).toHaveTextContent("Status: Rendering");
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
     expect(screen.getByRole("status")).toHaveTextContent("Status: Ready");
   });
 
@@ -252,7 +255,7 @@ describe("BitmapRendererSection re-render behaviour", () => {
           bitmapRendererSettings: { spacingMM, toothWidthMM: 9, amplitude: 10 },
         }),
       );
-      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(RENDER_DEBOUNCE_MS - 50); });
       expect(screen.getByRole("status")).toHaveTextContent("Status: Pending");
     }
     expect(materialize).not.toHaveBeenCalled();
