@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  bipolarToothPulse,
   generateSpiralAmplitudePath,
-  luminanceAt,
   spiralAmplitudeDefaults,
 } from "../../src/renderer/src/features/bitmap-renderers/spiralAmplitude";
+import { luminanceAt } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/sampling";
+import { bipolarToothPulse } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/waveforms";
 import type {
   BitmapRendererSettings,
   RendererContext,

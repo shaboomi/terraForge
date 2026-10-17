@@ -1,5 +1,5 @@
-import type { RendererSource } from "./types";
 import type { BitmapColorData } from "./bitmapImage";
+import type { RendererSource } from "../../../../types";
 
 export interface SeparatedChannel {
   label: string;
@@ -14,7 +14,7 @@ export interface CustomPaletteSwatch {
 
 /**
  * Renderers read `RendererSource` as standard photographic luminance — 0 is
- * black/needs-ink, 255 is white/no-ink (see spiralAmplitude's `luminanceAt`).
+ * black/needs-ink, 255 is white/no-ink (see `toneSpine/sampling`'s `luminanceAt`).
  * Separation instead reasons in ink "density" (0 = no ink, 255 = full ink)
  * since that's how each mode below is naturally expressed, so every mode
  * converts through this at the end to hand renderers the convention they

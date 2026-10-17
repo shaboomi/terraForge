@@ -1,4 +1,4 @@
-import type { BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererSettings, RendererContext } from "../../../../types";
 import type { SpineStrand } from "./toneSpine/engine";
 import {
   amplitudeField,
@@ -7,17 +7,8 @@ import {
   toothWidthField,
   type SpineGeometry,
 } from "./toneSpine/defineToneSpineRenderer";
-import { luminanceAt } from "./toneSpine/sampling";
-import { bipolarToothPulse } from "./toneSpine/waveforms";
-import type { RendererContext, RendererSource, BitmapRendererDefinition } from "./types";
 
 export const SPIRAL_AMPLITUDE_RENDERER_ID = "spiral-amplitude";
-
-export type { RendererSource, RendererContext, BitmapRendererDefinition };
-
-// Re-exported for the existing unit tests and any other module that imported
-// these directly from this file before they moved into the shared engine.
-export { bipolarToothPulse, luminanceAt };
 
 /** Safety cap on base points, ahead of the engine's own per-strand cap. */
 const MAX_SPIRAL_POINTS = 500_000;

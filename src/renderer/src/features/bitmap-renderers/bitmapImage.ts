@@ -1,4 +1,4 @@
-import type { RendererDot, SvgImport, SvgPath } from "../../../../types";
+import type { RendererDot, RendererSource, SvgImport, SvgPath } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { coerceSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
@@ -6,7 +6,7 @@ import { separateCMY, separateCMYK, separateCustomPalette, separateRGB } from ".
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { runRenderer, smoothInWorker } from "./rendererPool";
 import type { ValidatedLayer } from "./validatePath";
-import type { BitmapRendererDefinition, RendererSource } from "./types";
+import type { BitmapRendererDefinition } from "./types";
 
 export function dataUrlFromBytes(bytes: Uint8Array, mimeType: string): string {
   const chunkSize = 0x8000;

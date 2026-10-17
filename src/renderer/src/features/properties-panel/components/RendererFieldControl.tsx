@@ -6,7 +6,7 @@ import {
   RotateCcw,
   RotateCw,
 } from "lucide-react";
-import type { BitmapRendererFieldSchema, BitmapRendererIconName } from "../../bitmap-renderers/types";
+import type { BitmapRendererFieldSchema, BitmapRendererIconName } from "../../../../../types";
 
 const FIELD_ICONS: Record<BitmapRendererIconName, typeof RotateCw> = {
   "rotate-cw": RotateCw,

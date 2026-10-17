@@ -1,8 +1,8 @@
-import type { BitmapRendererFieldSchema, BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererFieldSchema, BitmapRendererSettings, RendererContext, RendererDot } from "../../../../types";
 import { coerceSettings } from "./coerceSettings";
 import { angleField, DEFAULT_ANGLE_DEG, DEFAULT_ORIGIN_PCT, originFields } from "./sharedFields";
 import { luminanceAt } from "./toneSpine/sampling";
-import type { BitmapRendererDefinition, RendererContext, RendererDot } from "./types";
+import type { BitmapRendererDefinition } from "./types";
 
 export const DOT_HALFTONE_RENDERER_ID = "dot-halftone";
 const DEFAULT_DOT_SCALE = 1;
@@ -145,6 +145,7 @@ export function generateHalftoneDots({ source, settings: rawSettings, scale, wid
 export const dotHalftoneRenderer: BitmapRendererDefinition = {
   id: DOT_HALFTONE_RENDERER_ID,
   label: "Dot halftone",
+  source: "required",
   // 2: dot area, rather than radius, proportional to tone.
   // 3: each dot's tap point is its exact centre, not its vertex average.
   // 4: dots stay inside the image — clipped at the edge, none centred outside.

@@ -1,4 +1,4 @@
-import type { BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererSettings, RendererContext } from "../../../../types";
 import type { SpineStrand } from "./toneSpine/engine";
 import {
   amplitudeField,
@@ -7,7 +7,6 @@ import {
   toothWidthField,
 } from "./toneSpine/defineToneSpineRenderer";
 import { clipLineToRect } from "./toneSpine/lineFamily";
-import type { RendererContext } from "./types";
 
 export const RADIAL_BURST_RENDERER_ID = "radial-burst";
 

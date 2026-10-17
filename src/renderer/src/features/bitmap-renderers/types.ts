@@ -1,36 +1,20 @@
 import type {
+  BitmapPluginManifest,
   BitmapRendererFieldSchema,
-  BitmapRendererIconName,
   BitmapRendererSettings,
   RendererContext,
   RendererOutput,
 } from "../../../../types";
 
-// The field-schema contract (BitmapRendererFieldSchema and its number/boolean/
-// select variants, BitmapRendererIconName, BitmapLuminance) lives in the
-// shared src/types/index.ts because it also has to cross the main/preload/
-// renderer IPC boundary for externally-installed plugins (see
-// BitmapPluginManifest). Re-exported here so existing renderer-local imports
-// don't need to change.
-export type {
-  RendererSource,
-  RendererContext,
-  RendererLayer,
-  RendererDot,
-  RendererResult,
-  RendererOutput,
-  BitmapRendererFieldSchema,
-  BitmapRendererIconName,
-  BitmapRendererBooleanFieldSchema,
-  BitmapRendererNumberFieldSchema,
-  BitmapRendererNumberPreset,
-  BitmapRendererSelectFieldSchema,
-  BitmapRendererSelectOption,
-} from "../../../../types";
-
+/** A renderer as the app uses it — in-tree, or built from a plugin's manifest. */
 export interface BitmapRendererDefinition {
   id: string;
   label: string;
+  /**
+   * Whether it needs a source image — the same declaration a plugin makes in
+   * its manifest. Only renderers that can take one are offered for a bitmap.
+   */
+  source: NonNullable<BitmapPluginManifest["source"]>;
   defaults: BitmapRendererSettings;
   /**
    * Identifies this renderer's output behaviour. Change it whenever the same

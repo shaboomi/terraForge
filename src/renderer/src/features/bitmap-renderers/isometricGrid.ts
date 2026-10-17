@@ -1,4 +1,4 @@
-import type { BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererSettings, RendererContext } from "../../../../types";
 import {
   amplitudeField,
   defineToneSpineRenderer,
@@ -6,7 +6,6 @@ import {
   toothWidthField,
 } from "./toneSpine/defineToneSpineRenderer";
 import { generateLineFamilyStrands } from "./toneSpine/lineFamily";
-import type { RendererContext } from "./types";
 
 export const ISOMETRIC_GRID_RENDERER_ID = "isometric-grid";
 

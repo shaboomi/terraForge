@@ -1,4 +1,4 @@
-import type { BitmapRendererSettings } from "../../../../types";
+import type { BitmapRendererSettings, RendererContext } from "../../../../types";
 import type { SpineStrand } from "./toneSpine/engine";
 import {
   amplitudeField,
@@ -6,7 +6,6 @@ import {
   spacingField,
   toothWidthField,
 } from "./toneSpine/defineToneSpineRenderer";
-import type { RendererContext } from "./types";
 
 export const CONCENTRIC_BOXES_RENDERER_ID = "concentric-boxes";
 

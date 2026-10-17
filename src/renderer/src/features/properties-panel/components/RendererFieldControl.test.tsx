@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
+import type { BitmapRendererNumberFieldSchema } from "../../../../../types";
 import { render, screen } from "@testing-library/react";
 import { RendererFieldControl } from "./RendererFieldControl";
-import type { BitmapRendererNumberFieldSchema } from "../../bitmap-renderers/types";
 
 /**
  * A collaborator reported a slider's right edge drawing off the panel. The

@@ -8,7 +8,7 @@ import {
   RENDER_DEBOUNCE_MS,
   startBitmapRenderService,
 } from "@renderer/features/bitmap-renderers/bitmapRenderService";
-import type { SvgImport } from "@types/index";
+import type { BitmapPluginManifest, SvgImport } from "@types/index";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
   const actual =
@@ -283,6 +283,27 @@ describe("BitmapRendererSection re-render behaviour", () => {
     const grid = screen.getByLabelText("Spiral spacing").closest("div.grid")!;
     const children = Array.from(grid.parentElement!.children);
     expect(children.indexOf(warning)).toBeGreaterThan(children.indexOf(grid));
+  });
+
+  it("offers bitmap-capable plugins, but not generators or ids clashing with a built-in", () => {
+    const manifest = (id: string, source?: "required" | "optional" | "none") =>
+      ({ id, label: id, apiVersion: 1, defaults: {}, fields: [], source }) as BitmapPluginManifest;
+    useBitmapPluginStore.setState({
+      plugins: [
+        manifest("acme.tracer", "required"),
+        manifest("acme.hybrid", "optional"),
+        manifest("acme.spirograph", "none"),
+        manifest("spiral-amplitude", "required"),
+      ],
+    });
+    const imp = bitmapImport();
+    renderPanel({ ...imp, bitmapRenderSignature: bitmapRenderSignature(imp) });
+
+    const options = Array.from(screen.getByLabelText("Bitmap renderer").querySelectorAll("option")).map((o) => o.value);
+    expect(options).toContain("acme.tracer");
+    expect(options).toContain("acme.hybrid");
+    expect(options).not.toContain("acme.spirograph");
+    expect(options.filter((value) => value === "spiral-amplitude")).toHaveLength(1);
   });
 
   describe("tone", () => {

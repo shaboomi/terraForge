@@ -21,11 +21,26 @@ export const bitmapRenderers: BitmapRendererDefinition[] = [
   dotHalftoneRenderer,
 ];
 
+/** One definition per manifest object: a manifest is replaced, never edited,
+ * when plugins are rescanned, so its identity is a safe cache key — and the
+ * panel looks renderers up on every render. */
+const pluginDefinitions = new WeakMap<BitmapPluginManifest, BitmapRendererDefinition>();
+
 /** Wraps an installed plugin's manifest into the same definition shape an in-tree renderer uses. */
 export function pluginRendererFromManifest(manifest: BitmapPluginManifest): BitmapRendererDefinition {
+  let definition = pluginDefinitions.get(manifest);
+  if (!definition) {
+    definition = buildPluginDefinition(manifest);
+    pluginDefinitions.set(manifest, definition);
+  }
+  return definition;
+}
+
+function buildPluginDefinition(manifest: BitmapPluginManifest): BitmapRendererDefinition {
   return {
     id: manifest.id,
     label: manifest.label,
+    source: manifest.source ?? "required",
     version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,

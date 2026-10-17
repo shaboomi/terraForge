@@ -63,6 +63,17 @@ describe("pluginRendererFromManifest", () => {
     expect(typeof renderer.render).toBe("function");
   });
 
+  it("builds one definition per manifest, so repeated lookups do not rebuild it", () => {
+    expect(pluginRendererFromManifest(pluginManifest)).toBe(pluginRendererFromManifest(pluginManifest));
+    // A rescan replaces the manifest object, and with it the definition.
+    expect(pluginRendererFromManifest({ ...pluginManifest })).not.toBe(pluginRendererFromManifest(pluginManifest));
+  });
+
+  it("carries the manifest's source declaration, defaulting to required", () => {
+    expect(pluginRendererFromManifest(pluginManifest).source).toBe("required");
+    expect(pluginRendererFromManifest({ ...pluginManifest, source: "none" }).source).toBe("none");
+  });
+
   it("versions a plugin by its source hash", () => {
     expect(pluginRendererFromManifest({ ...pluginManifest, sourceHash: "abc" }).version).toBe("plugin:abc");
   });
@@ -71,6 +82,10 @@ describe("pluginRendererFromManifest", () => {
 describe("bitmapRenderers", () => {
   it("still ships spiral-amplitude in-tree", () => {
     expect(bitmapRenderers.some((r) => r.id === SPIRAL_AMPLITUDE_RENDERER_ID)).toBe(true);
+  });
+
+  it("declares every in-tree renderer as needing a source image", () => {
+    expect(bitmapRenderers.every((renderer) => renderer.source === "required")).toBe(true);
   });
 
   it("gives every in-tree renderer a version, so changed output can be detected", () => {
