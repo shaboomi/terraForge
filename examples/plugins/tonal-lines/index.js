@@ -38,7 +38,7 @@ function toneAt(source, x, y) {
   return source.values[sy * source.width + sx] ?? 255;
 }
 
-module.exports.render = function render({ source, settings, width, height, scale }) {
+module.exports.render = function render({ source, settings, width, height, scale, ink }) {
   // `scale` is millimetres per output unit. Settings are in millimetres, so
   // divide by it to work in the same units the returned path uses.
   const unitsPerMM = 1 / Math.max(scale, 1e-6);
@@ -58,8 +58,13 @@ module.exports.render = function render({ source, settings, width, height, scale
   const step = Math.max(penStep, wavelength / 8);
   const decimals = coordinateDecimals(scale);
 
+  // Under colour separation this runs once per ink. Shifting each ink's lines
+  // across by a share of the spacing lays the inks side by side instead of
+  // every pen tracing the same lines; ink 0 stays where it would be anyway.
+  const inkShift = ink && ink.offset ? (ink.index / ink.count) * spacing : 0;
+
   const commands = [];
-  for (let across = spacing / 2; across < acrossMax; across += spacing) {
+  for (let across = spacing / 2 + inkShift; across < acrossMax; across += spacing) {
     let penDown = false;
     for (let along = 0; along <= alongMax; along += step) {
       const x = vertical ? across : along;

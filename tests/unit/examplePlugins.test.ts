@@ -168,6 +168,19 @@ describe("example plugins", () => {
 
       expect(output.length).toBeLessThan(allDark.length);
     });
+    it("shifts each separated ink's lines across, and only when asked", async () => {
+      const plugin = await loadExample(find("example.tonal-lines"));
+      const settings = { spacingMM: 4, amplitudeMM: 0, direction: "horizontal", skipWhite: false };
+      const dark = source(40, 40, () => 0);
+      const firstLineY = (inkArg?: object) =>
+        Number(String(plugin.render({ width: 40, height: 40, scale: 1, settings, source: dark, ink: inkArg })).match(/^M[\d.]+ ([\d.]+)/)![1]);
+      const ink = (index: number, offset: boolean) => ({ index, count: 4, label: "", color: "#000000", offset });
+
+      expect(firstLineY(ink(0, true))).toBe(firstLineY());
+      expect(firstLineY(ink(1, true))).toBe(firstLineY() + 1); // a quarter of 4mm spacing
+      expect(firstLineY(ink(2, true))).toBe(firstLineY() + 2);
+      expect(firstLineY(ink(2, false))).toBe(firstLineY());
+    });
   });
 
   describe("spirograph (needs no source image)", () => {
