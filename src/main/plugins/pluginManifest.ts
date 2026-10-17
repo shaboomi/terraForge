@@ -32,6 +32,8 @@ export interface PluginDiscoveryResult {
 }
 
 const ICON_NAMES = new Set<string>(BITMAP_RENDERER_ICON_NAMES);
+/** Two or more dot-separated parts, no whitespace: "acme.halftone". */
+const NAMESPACED_ID = /^[^.\s]+(\.[^.\s]+)+$/;
 const NUMBER_CONTROLS = new Set(["input", "slider"]);
 const SOURCE_MODES = new Set(["required", "optional", "none"]);
 const SELECT_CONTROLS = new Set(["dropdown", "icon-buttons"]);
@@ -180,6 +182,12 @@ function validateManifestShape(raw: unknown, folder: string): string | null {
   if (!isRecord(raw)) return "manifest.json is not an object";
   const m = raw;
   if (!isNonEmptyString(m.id)) return "manifest.id is required";
+  // Built-in renderers use plain ids ("spiral-amplitude"). Requiring a
+  // namespace keeps every plugin out of that space — including ids a future
+  // built-in might take — rather than letting a clash silently hide one.
+  if (!NAMESPACED_ID.test(m.id)) {
+    return 'manifest.id must be namespaced, like "yourname.my-renderer" — ids without a "." are reserved for built-in renderers';
+  }
   if (!isNonEmptyString(m.label)) return "manifest.label is required";
   if (typeof m.apiVersion !== "number" || !SUPPORTED_API_VERSIONS.includes(m.apiVersion)) {
     return `manifest.apiVersion must be one of ${SUPPORTED_API_VERSIONS.join(", ")}`;

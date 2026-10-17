@@ -69,7 +69,7 @@ and dot-directories are skipped, and symlinks are ignored rather than followed.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Unique identifier. Saved with any drawing that uses your renderer, so **never change it** — an existing drawing referencing a missing id reports the renderer as uninstalled rather than silently substituting another. |
+| `id` | yes | Unique identifier, **namespaced** with a `.` — for example `yourname.halftone`. Ids without a `.` are reserved for built-in renderers. Saved with any drawing that uses your renderer, so **never change it** — an existing drawing referencing a missing id reports the renderer as uninstalled rather than silently substituting another. |
 | `label` | yes | Name shown in the Renderer list. |
 | `apiVersion` | yes | Currently `1`. |
 | `entry` | yes | Your entry module, relative to the plugin folder. Must resolve inside it. |

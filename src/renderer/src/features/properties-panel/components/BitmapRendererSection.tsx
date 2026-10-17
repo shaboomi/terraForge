@@ -36,7 +36,11 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
   // here and quietly ignore the picture, which is worse than not being listed.
   const allRenderers = [
     ...bitmapRenderers,
-    ...pluginManifests.filter((manifest) => manifest.source !== "none").map(pluginRendererFromManifest),
+    ...pluginManifests
+      // Discovery rejects ids that could clash with a built-in; this guards the
+      // list regardless, since a duplicate would also break its React keys.
+      .filter((manifest) => manifest.source !== "none" && !bitmapRenderers.some((r) => r.id === manifest.id))
+      .map(pluginRendererFromManifest),
   ];
 
   // An unset renderer id defaults (new import); a set-but-unresolvable id

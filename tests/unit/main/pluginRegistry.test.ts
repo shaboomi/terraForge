@@ -4,9 +4,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { BitmapPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
 
-const manifestFor = (id: string) => ({
-  id,
-  label: id,
+/** A minimal valid manifest; `name` is namespaced into a plugin id. */
+const manifestFor = (name: string) => ({
+  id: `test.${name}`,
+  label: name,
   apiVersion: 1,
   entry: "index.js",
   defaults: {},
@@ -75,8 +76,8 @@ describe("BitmapPluginRegistry", () => {
     expect(registry.list()).toHaveLength(1);
     expect(registry.lastErrors()).toHaveLength(1);
     expect(registry.lastErrors()[0]).toMatchObject({ folder: "bad" });
-    expect(registry.find("good")).toBeDefined();
-    expect(registry.find("bad")).toBeUndefined();
+    expect(registry.find("test.good")).toBeDefined();
+    expect(registry.find("test.bad")).toBeUndefined();
   });
 
   it("clears stale errors once the offending plugin is fixed", async () => {

@@ -93,6 +93,21 @@ describe("discoverBitmapPlugins", () => {
     expect(result.errors[0].folder).toBe("broken");
   });
 
+  it("rejects an id without a namespace, which could clash with a built-in renderer", async () => {
+    for (const id of ["spiral-amplitude", "halftone", ".halftone", "acme.", "acme .halftone"]) {
+      await rm(pluginsDir, { recursive: true, force: true });
+      await writePlugin(pluginsDir, "plugin", { ...validManifest, id });
+      const result = await discoverBitmapPlugins(pluginsDir);
+      expect(result.plugins, id).toEqual([]);
+      expect(result.errors[0]?.message, id).toMatch(/must be namespaced/);
+    }
+  });
+
+  it("accepts a namespaced id, however deep", async () => {
+    await writePlugin(pluginsDir, "plugin", { ...validManifest, id: "com.example.halftone" });
+    expect((await discoverBitmapPlugins(pluginsDir)).errors).toEqual([]);
+  });
+
   it("rejects an unsupported apiVersion", async () => {
     await writePlugin(pluginsDir, "future", { ...validManifest, id: "future.plugin", apiVersion: 99 });
 
@@ -300,7 +315,7 @@ describe("discoverBitmapPlugins", () => {
       await writePlugin(
         pluginsDir,
         "candidate",
-        '{"id":"a","label":"A","apiVersion":1,"entry":"index.js","defaults":{"angle":0},' +
+        '{"id":"acme.a","label":"A","apiVersion":1,"entry":"index.js","defaults":{"angle":0},' +
           '"fields":[{"type":"number","key":"angle","label":"Angle","min":1e999,"max":10,"step":1}]}',
       );
       const result = await discoverBitmapPlugins(pluginsDir);
