@@ -3,7 +3,6 @@ import { join } from "path";
 import { discoverBitmapPlugins, type BitmapPluginRecord } from "../../src/main/plugins/pluginManifest";
 import { readPluginModules } from "../../src/main/plugins/pluginSource";
 import { validateRendererOutput } from "../../src/renderer/src/features/bitmap-renderers/validatePath";
-import { MAX_BITMAP_RENDERER_PATH_LENGTH } from "../../src/types";
 import type { RendererContext, RendererOutput } from "../../src/types";
 
 // Vitest runs from the repository root.

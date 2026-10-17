@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, fireEvent, act } from "@testing-library/react";
 import { useCanvasStore } from "@renderer/store/canvasStore";
 import { useMachineStore } from "@renderer/store/machineStore";
 import { PlotCanvas } from "@renderer/components/PlotCanvas";
@@ -47,7 +46,7 @@ describe("PlotCanvas", () => {
       constructor(cb: ResizeObserverCallback) {
         this._cb = cb;
       }
-      observe(el: Element) {
+      observe(_el: Element) {
         this._cb(
           [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
           this as unknown as ResizeObserver,
@@ -108,7 +107,7 @@ describe("PlotCanvas", () => {
       constructor(cb: ResizeObserverCallback) {
         this._cb = cb;
       }
-      observe(el: Element) {
+      observe(_el: Element) {
         this._cb(
           [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
           this as unknown as ResizeObserver,
@@ -175,7 +174,7 @@ describe("PlotCanvas", () => {
       constructor(cb: ResizeObserverCallback) {
         this._cb = cb;
       }
-      observe(el: Element) {
+      observe(_el: Element) {
         this._cb(
           [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],
           this as unknown as ResizeObserver,
@@ -315,7 +314,7 @@ describe("PlotCanvas", () => {
       bounds: { minX: 0, minY: 0, maxX: 10, maxY: 10 },
     };
     useCanvasStore.setState({ gcodeToolpath: toolpath });
-    const { container } = render(<PlotCanvas />);
+    render(<PlotCanvas />);
     // Click on a toolpath-related element to "select" it — use fireEvent on SVG
     // Since we can't easily simulate clicking the exact toolpath polyline in jsdom,
     // we'll just verify the toolpath is rendered and delete keyboard is wired up
@@ -590,6 +589,7 @@ describe("PlotCanvas", () => {
     expect(svg.getAttribute("viewBox")).not.toBe(beforeViewBox);
     expect(afterImport.x).toBe(beforeImport.x);
     expect(afterImport.y).toBe(beforeImport.y);
+    restore();
   });
 
   // ── SVG onClick deselects ──────────────────────────────────────────
@@ -974,7 +974,7 @@ describe("PlotCanvas", () => {
         this._cb = cb;
         capturedCb = cb;
       }
-      observe(el: Element) {
+      observe(_el: Element) {
         // First fire — establishes initial fit
         this._cb(
           [{ contentRect: { width: 800, height: 600 } } as ResizeObserverEntry],

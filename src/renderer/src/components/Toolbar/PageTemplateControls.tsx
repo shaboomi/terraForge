@@ -6,14 +6,12 @@ interface PageTemplateControlsProps {
   pageTemplate: PageTemplate | null;
   pageSizes: PageSize[];
   setPageTemplate: (t: PageTemplate | null) => void;
-  setPageSizes: (sizes: PageSize[]) => void;
 }
 
 export function PageTemplateControls({
   pageTemplate,
   pageSizes,
   setPageTemplate,
-  setPageSizes,
 }: PageTemplateControlsProps) {
   return (
     <div className="flex items-center gap-1">

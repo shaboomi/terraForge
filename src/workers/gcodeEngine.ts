@@ -5,7 +5,6 @@
  * Bézier/arc flattening, nearest-neighbour optimiser, and G-code emission.
  */
 
-import type { VectorObject, MachineConfig } from "../types";
 import {
   tokenizePath,
   toAbsolute,

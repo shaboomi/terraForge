@@ -8,7 +8,6 @@ interface PenControlsProps {
   penType: string;
   penDown: string;
   penUp: string;
-  step: number;
   onMovePen: (action: "up" | "down") => Promise<void>;
   onZeroZ: () => Promise<void>;
 }
@@ -22,7 +21,6 @@ export function PenControls({
   penType,
   penDown,
   penUp,
-  step,
   onMovePen,
   onZeroZ,
 }: PenControlsProps) {

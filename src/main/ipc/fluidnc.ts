@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import { join } from "path";
 import { tmpdir } from "os";
-import { readFile, writeFile, unlink } from "fs/promises";
+import { writeFile, unlink } from "fs/promises";
 import { FluidNCClient } from "../../machine/fluidnc";
 import { SerialClient } from "../../machine/serial";
 import { TaskManager } from "../../tasks/taskManager";

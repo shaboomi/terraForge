@@ -230,13 +230,14 @@ test("pressing Escape during rename cancels without changing the name", async ()
   const nameSpan = window
     .locator("span[title='Double-click to rename']")
     .first();
+  // Read before editing: the span is replaced by the input while renaming.
+  const originalName = (await nameSpan.textContent()) ?? "";
   await nameSpan.dblclick();
 
   const renameInput = window
     .locator("input.bg-app.border.border-accent")
     .first();
   await renameInput.waitFor({ timeout: 3000 });
-  const originalName = await nameSpan.textContent().catch(() => "renamed");
   await renameInput.fill("should-not-save");
   await window.keyboard.press("Escape");
 
@@ -245,6 +246,7 @@ test("pressing Escape during rename cancels without changing the name", async ()
   await expect(window.locator("text=should-not-save")).not.toBeVisible({
     timeout: 2000,
   });
+  await expect(nameSpan).toHaveText(originalName);
 });
 
 // ─── Group 7: Delete import ───────────────────────────────────────────────────

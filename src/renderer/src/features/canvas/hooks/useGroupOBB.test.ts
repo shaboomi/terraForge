@@ -98,7 +98,7 @@ describe("useGroupOBB", () => {
 
       const { containerRef, vpRef } = makeRefs();
       const updateImport = vi.fn();
-      const { result, rerender } = renderHook(
+      const { result } = renderHook(
         ({ all }: { all: boolean }) =>
           useGroupOBB(containerRef, vpRef, updateImport, true, 630, all, null),
         { initialProps: { all: true } },

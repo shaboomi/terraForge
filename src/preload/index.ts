@@ -6,8 +6,6 @@ import type {
   MachineStatus,
   RemoteFile,
   BackgroundTask,
-  VectorObject,
-  GcodeOptions,
   BitmapPluginScan,
   BitmapPluginExampleInstall,
   RendererOutput,

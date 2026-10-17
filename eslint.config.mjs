@@ -28,6 +28,19 @@ export default [
       },
     },
     rules: {
+      // Unused imports, variables and parameters are an error: they are
+      // either dead code or — as several turned out to be when this was
+      // enabled — a value someone meant to use (a tooltip never shown, an
+      // assertion never made). Prefix with "_" for an intentional placeholder.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
       // Non-blocking baseline guidance for broader codebase complexity.
       complexity: ["warn", 25],
       "max-lines-per-function": [

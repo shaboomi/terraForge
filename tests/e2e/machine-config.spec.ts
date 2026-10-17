@@ -16,7 +16,7 @@
  * machine-selector `<select>`.
  */
 import { test, expect } from "@playwright/test";
-import { launchApp, closeApp, mockSaveDialog, mockOpenDialog } from "./helpers";
+import { launchApp, closeApp, mockSaveDialog } from "./helpers";
 import type { ElectronApplication, Page } from "playwright";
 import * as path from "path";
 import * as os from "os";
