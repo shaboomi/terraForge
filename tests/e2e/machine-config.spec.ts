@@ -40,7 +40,7 @@ const sidebarEntry = (page: Page, name: string) =>
 async function openMachineConfigs(page: Page): Promise<void> {
   const dlg = dialog(page);
   if ((await dlg.count()) === 0) {
-    await page.locator("button[aria-label='Machine settings']").click();
+    await page.locator("button[aria-label='Machine and application settings']").click();
     await dlg.waitFor({ timeout: 5000 });
   }
 

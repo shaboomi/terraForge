@@ -87,7 +87,7 @@ test("Jog button is visible", async () => {
 });
 
 test("settings gear button is present", async () => {
-  const btn = window.locator("button[title='Machine settings']");
+  const btn = window.locator("button[title='Machine and application settings']");
   await expect(btn).toBeVisible();
 });
 
