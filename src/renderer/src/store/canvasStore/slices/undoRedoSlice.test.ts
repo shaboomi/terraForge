@@ -107,4 +107,22 @@ describe("undoRedoSlice", () => {
     expect(store.getState().undoStack).toHaveLength(1);
     expect(store.getState().undoStack[0][0].x).toBe(0);
   });
+
+  it("keeps a gesture's snapshot as it was when the imports are edited in place afterwards", () => {
+    const store = makeStore();
+    store.setState({
+      imports: [{ id: "i1", x: 0, y: 0, scale: 1, rotation: 0 }] as any,
+    });
+    store.getState().snapshotForGesture();
+    store.setState((state) => {
+      state.imports[0].x = 10;
+    });
+    store.getState().commitGesture();
+
+    expect(store.getState().undoStack[0][0].x).toBe(0);
+    store.getState().undo();
+    expect(store.getState().imports[0].x).toBe(0);
+    store.getState().redo();
+    expect(store.getState().imports[0].x).toBe(10);
+  });
 });

@@ -15,7 +15,8 @@ export { generateCopyName };
 export const useCanvasStore = create<CanvasState>()(
   immer((set, get) => {
     const pushUndo = () => {
-      const snap = structuredClone(get().imports);
+      // Not a copy: immer state is never changed in place (see undoRedoSlice).
+      const snap = get().imports;
       set((state) => {
         state.undoStack.push(snap);
         if (state.undoStack.length > 50)

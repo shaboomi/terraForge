@@ -182,6 +182,21 @@ describe("BitmapPreviewRasterizer", () => {
     expect(rasters()[0]).toMatchObject({ mask: false, blend: "darken", layers: [{ d: "M0 0 L1 1", color: "#00ffff" }] });
   });
 
+  it("sends each run of one ink's paths as a single layer, so a halftone's dots are not stroked one by one", () => {
+    const path = (id: string, d: string, strokeColor: string) =>
+      ({ id, d, strokeColor, visible: true }) as SvgImport["paths"][number];
+    const imp = bitmapImport({
+      bitmapRendererPath: "",
+      paths: [path("c1", "M0 0 L1 1", "#00ffff"), path("c2", "M2 2 L3 3", "#00ffff"), path("m1", "M4 4 L5 5", "#ff00ff")],
+    });
+    rasterizer.draw(fakeContext(0.1), imp, false);
+
+    expect(rasters()[0].layers).toEqual([
+      { d: "M0 0 L1 1 M2 2 L3 3", color: "#00ffff" },
+      { d: "M4 4 L5 5", color: "#ff00ff" },
+    ]);
+  });
+
   it("draws strokes at the pen's real width, so zoomed out shows the plot's true coverage", () => {
     // 0.25 mm per source pixel; a 0.5 mm pen is 2 source pixels wide whatever the zoom.
     rasterizer.draw(fakeContext(0.1), bitmapImport({ scale: 0.25, strokeWidthMM: 0.5 }), false);

@@ -62,6 +62,8 @@ interface Geometry {
   key: string;
   layers: { d: string; color: string | null }[];
   mask: boolean;
+  /** Some layer has no colour of its own, so draws in the fallback colour. */
+  usesFallback: boolean;
   /** For separated inks: the paper they are drawn on and how they combine there. */
   paper: { color: string; blend: "multiply" | "screen" } | null;
   /** The import fields the geometry was built from, compared by identity. */
@@ -293,9 +295,16 @@ export class BitmapPreviewRasterizer {
     let layers: Geometry["layers"] = [];
     let mask = false;
     if (imp.paths.length > 0) {
-      layers = imp.paths
-        .filter((path) => isInkPathVisible(imp, path))
-        .map((path) => ({ d: path.d, color: path.strokeColor ?? path.sourceColor ?? null }));
+      // Consecutive paths of one ink become one layer: a halftone is a path
+      // per dot, and one stroke of a few large paths is far cheaper to draw
+      // than hundreds of thousands of small ones.
+      for (const path of imp.paths) {
+        if (!isInkPathVisible(imp, path)) continue;
+        const color = path.strokeColor ?? path.sourceColor ?? null;
+        const last = layers[layers.length - 1];
+        if (last && last.color === color) last.d += ` ${path.d}`;
+        else layers.push({ d: path.d, color });
+      }
     } else if (imp.bitmapRendererPath) {
       layers = [{ d: imp.bitmapRendererPath, color: null }];
       mask = true;
@@ -308,7 +317,14 @@ export class BitmapPreviewRasterizer {
     }
     state.geometry =
       layers.length > 0
-        ? { key: `${state.id}#${this.nextGeometry++}#`, layers, mask, paper: paperFor(imp), inputs }
+        ? {
+            key: `${state.id}#${this.nextGeometry++}#`,
+            layers,
+            mask,
+            usesFallback: !mask && layers.some((layer) => layer.color === null),
+            paper: paperFor(imp),
+            inputs,
+          }
         : null;
     if (!state.geometry) {
       // Nothing to show any more: drop the images rather than leave a stale preview.
@@ -326,8 +342,7 @@ export class BitmapPreviewRasterizer {
   private styleKey(geometry: Geometry, lineWidth: number, color: string): string {
     // A single-colour preview is tinted, so its colour is not part of the
     // drawn shape; a layered one only depends on it for uncoloured layers.
-    const usesFallback = !geometry.mask && geometry.layers.some((layer) => layer.color === null);
-    return `${lineWidth}|${geometry.mask ? "mask" : "inks"}|${geometry.paper?.blend ?? ""}|${usesFallback ? color : ""}`;
+    return `${lineWidth}|${geometry.mask ? "mask" : "inks"}|${geometry.paper?.blend ?? ""}|${geometry.usesFallback ? color : ""}`;
   }
 
   /**
