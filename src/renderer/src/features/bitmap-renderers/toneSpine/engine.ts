@@ -453,9 +453,15 @@ export interface ToneSpineOutput {
   truncated: boolean;
 }
 
-/** Modulates every strand within one shared point budget. */
-export function renderToneSpine(strands: Iterable<SpineStrand>, options: ToneModulationOptions): ToneSpineOutput {
-  const budget: PointBudget = { remaining: MAX_RENDER_POINTS, truncated: false };
+/** Modulates every strand within one shared point budget — `MAX_RENDER_POINTS`
+ * unless a smaller one is given (tests use that to exercise the limit without
+ * drawing millions of points). */
+export function renderToneSpine(
+  strands: Iterable<SpineStrand>,
+  options: ToneModulationOptions,
+  maxPoints = MAX_RENDER_POINTS,
+): ToneSpineOutput {
+  const budget: PointBudget = { remaining: maxPoints, truncated: false };
   const segments: string[] = [];
   for (const strand of strands) {
     if (budget.remaining <= 0) {

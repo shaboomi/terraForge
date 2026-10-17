@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_RENDER_POINTS,
   modulateStrand,
   renderToneSpine,
 } from "../../src/renderer/src/features/bitmap-renderers/toneSpine/engine";
@@ -297,13 +296,21 @@ describe("renderToneSpine", () => {
 
   it("stops at one point budget shared by every strand, and says it did", () => {
     // Many strands, each well under the per-strand cap, that together far
-    // exceed the whole-render budget.
-    const strand = Array.from({ length: 2_001 }, (_, i) => ({ x: (i % 10) * 0.001, y: 5, nx: 0, ny: 1 }));
-    const strands = Array.from({ length: Math.ceil(MAX_RENDER_POINTS / 2_000) + 50 }, () => strand);
+    // exceed a whole-render budget. A small budget keeps this quick: the
+    // real one is millions of points, too slow to draw under coverage in CI.
+    const budget = 5_000;
+    const strand = Array.from({ length: 201 }, (_, i) => ({ x: (i % 10) * 0.001, y: 5, nx: 0, ny: 1 }));
+    const strands = Array.from({ length: 100 }, () => strand);
+    const options = { toothWidth: 1, amplitude: 0.5, waveform: "sine" as const, image };
 
-    const { d, truncated } = renderToneSpine(strands, { toothWidth: 1, amplitude: 0.5, waveform: "sine", image });
+    const { d, truncated } = renderToneSpine(strands, options, budget);
 
     expect(truncated).toBe(true);
-    expect((d.match(/[ML]/g) ?? []).length).toBeLessThanOrEqual(MAX_RENDER_POINTS);
+    const points = (d.match(/[ML]/g) ?? []).length;
+    expect(points).toBeLessThanOrEqual(budget);
+    // It used the budget rather than stopping early.
+    expect(points).toBeGreaterThan(budget * 0.9);
+    // And the same strands fit easily within the real limit.
+    expect(renderToneSpine(strands, options).truncated).toBe(false);
   });
 });
