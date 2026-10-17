@@ -55,23 +55,45 @@ function boxStrand(
 }
 
 /**
- * Concentric rectangles, aspect-matched to the image and rotated by
- * `angleDeg` around the origin, spaced evenly outward until they cover the
- * farthest image corner — each box its own strand.
+ * Concentric rectangles shaped like the image and rotated by `angleDeg`
+ * around the origin, each its own strand, out until one covers the whole
+ * image.
+ *
+ * Each box is `spacingMM` larger than the one inside it on all four sides —
+ * the family of inward offsets of the image's own rectangle — so the line
+ * spacing reads the same horizontally and vertically. Scaling boxes by the
+ * image's aspect instead kept the setting on one axis only: a portrait three
+ * times taller than wide got gaps three times the setting vertically.
  */
 export const concentricBoxesRenderer = defineToneSpineRenderer({
   id: CONCENTRIC_BOXES_RENDERER_ID,
   label: "Concentric boxes",
-  revision: 1,
+  // 2: equal spacing on all four sides, rather than aspect-scaled boxes.
+  revision: 2,
   fields: [spacingField("Box spacing (mm)"), toothWidthField(), amplitudeField()],
   defaults: { spacingMM: 4, toothWidthMM: 6, amplitudeMM: 1.5 },
-  *strands({ originX, originY, spacing, angleRad, targetSegmentLength, maxRadius, width, height }) {
-    const aspect = height / width;
+  *strands({ originX, originY, spacing, angleRad, targetSegmentLength, width, height }) {
+    // The innermost "box" is the line the image's offsets shrink to: as long
+    // as the image's longer side exceeds its shorter one.
+    const baseHalfWidth = Math.max(0, (width - height) / 2);
+    const baseHalfHeight = Math.max(0, (height - width) / 2);
+
+    // How large a box must be to contain the whole image: the image corners'
+    // furthest reach along each of the box's own (rotated) axes.
+    const corners = [
+      { x: 0, y: 0 },
+      { x: width, y: 0 },
+      { x: 0, y: height },
+      { x: width, y: height },
+    ].map(({ x, y }) => rotate(x - originX, y - originY, -angleRad));
+    const coverHalfWidth = Math.max(...corners.map((c) => Math.abs(c.x)));
+    const coverHalfHeight = Math.max(...corners.map((c) => Math.abs(c.y)));
+
     for (let k = 1; ; k++) {
-      const halfWidth = k * spacing;
-      const halfHeight = k * spacing * aspect;
-      if (Math.hypot(halfWidth, halfHeight) > maxRadius) break;
+      const halfWidth = baseHalfWidth + k * spacing;
+      const halfHeight = baseHalfHeight + k * spacing;
       yield boxStrand(originX, originY, halfWidth, halfHeight, angleRad, targetSegmentLength);
+      if (halfWidth >= coverHalfWidth && halfHeight >= coverHalfHeight) break;
     }
   },
 });

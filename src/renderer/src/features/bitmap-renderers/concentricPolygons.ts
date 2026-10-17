@@ -51,14 +51,20 @@ function polygonStrand(
 }
 
 /**
- * Concentric regular polygons (triangle up to 12-gon) spaced evenly outward
- * from the origin by circumradius, out to the far image corner — each
- * polygon its own strand. `angleDeg` rotates every polygon's vertex phase.
+ * Concentric regular polygons (triangle up to 12-gon), out to the far image
+ * corner — each polygon its own strand. `angleDeg` rotates every polygon's
+ * vertex phase.
+ *
+ * Spaced so the gap between neighbouring polygons' parallel edges — what the
+ * eye reads as line spacing — is `spacingMM`. Stepping the circumradius by
+ * the spacing instead left edges only `spacing · cos(π/n)` apart: half the
+ * setting for triangles.
  */
 export const concentricPolygonsRenderer = defineToneSpineRenderer({
   id: CONCENTRIC_POLYGONS_RENDERER_ID,
   label: "Concentric polygons",
-  revision: 1,
+  // 2: spaced edge-to-edge rather than corner-to-corner.
+  revision: 2,
   fields: [
     spacingField("Ring spacing (mm)"),
     toothWidthField(),
@@ -68,7 +74,9 @@ export const concentricPolygonsRenderer = defineToneSpineRenderer({
   defaults: { spacingMM: 4, toothWidthMM: 6, amplitudeMM: 1.5, sides: 6 },
   *strands(geometry, settings) {
     const sides = Math.round(settings.sides as number);
-    for (let radius = geometry.spacing; radius <= geometry.maxRadius; radius += geometry.spacing) {
+    // Circumradius per unit of apothem (the centre-to-edge distance).
+    const step = geometry.spacing / Math.cos(Math.PI / sides);
+    for (let radius = step; radius * Math.cos(Math.PI / sides) <= geometry.maxRadius; radius += step) {
       yield polygonStrand(radius, sides, geometry);
     }
   },

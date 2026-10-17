@@ -82,3 +82,34 @@ describe("generateConcentricPolygonsPath", () => {
     expect(path).toMatch(/^M/);
   });
 });
+
+/** Each subpath's points, from a path drawn with no amplitude. */
+const subpaths = (d: string) =>
+  d.split(/(?=M)/).map((sub) => {
+    const n = (sub.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    return n.filter((_, i) => i % 2 === 0).map((x, i) => ({ x, y: n[2 * i + 1] }));
+  });
+
+describe("polygon spacing", () => {
+  for (const sides of [3, 6, 12]) {
+    it(`spaces ${sides}-gons so the gap between parallel edges is the setting`, () => {
+      const source = { width: 300, height: 300, values: new Uint8Array(90_000).fill(255) };
+      const d = generateConcentricPolygonsPath(
+        ctx(source, { ...concentricPolygonsDefaults, sides, spacingMM: 10, amplitudeMM: 0 }),
+      );
+      // Each polygon's apothem: the closest its outline comes to the centre.
+      // A polygon crossing the image edge is drawn as several pieces sharing
+      // one apothem, so count each apothem once.
+      const apothems = subpaths(d)
+        .map((points) => Math.min(...points.map((p) => Math.hypot(p.x - 150, p.y - 150))))
+        .filter((apothem) => apothem < 140)
+        .sort((a, b) => a - b)
+        .filter((apothem, i, all) => i === 0 || apothem - all[i - 1] > 1);
+
+      expect(apothems.length).toBeGreaterThan(3);
+      for (let i = 1; i < apothems.length; i++) {
+        expect(apothems[i] - apothems[i - 1]).toBeCloseTo(10, 0);
+      }
+    });
+  }
+});

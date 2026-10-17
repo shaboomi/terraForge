@@ -58,3 +58,42 @@ describe("generateConcentricBoxesPath", () => {
     expect(rotated).not.toBe(unrotated);
   });
 });
+
+/** Each subpath's points, from a path drawn with no amplitude. */
+const subpaths = (d: string) =>
+  d.split(/(?=M)/).map((sub) => {
+    const n = (sub.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    return n.filter((_, i) => i % 2 === 0).map((x, i) => ({ x, y: n[2 * i + 1] }));
+  });
+
+describe("box spacing", () => {
+  it("is the same horizontally and vertically, even on a tall image", () => {
+    // Portrait, 3x taller than wide; 1px = 1mm; white so nothing is displaced.
+    const source = { width: 100, height: 300, values: new Uint8Array(30_000).fill(255) };
+    const d = generateConcentricBoxesPath(ctx(source, { ...concentricBoxesDefaults, spacingMM: 10, amplitudeMM: 0 }));
+    // Boxes small enough to lie wholly inside the image, innermost first.
+    const boxes = subpaths(d)
+      .map((points) => ({
+        halfWidth: (Math.max(...points.map((p) => p.x)) - Math.min(...points.map((p) => p.x))) / 2,
+        halfHeight: (Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y))) / 2,
+      }))
+      .filter((box) => box.halfWidth < 49)
+      .sort((a, b) => a.halfWidth - b.halfWidth);
+
+    expect(boxes.length).toBeGreaterThan(2);
+    for (let i = 1; i < boxes.length; i++) {
+      expect(boxes[i].halfWidth - boxes[i - 1].halfWidth).toBeCloseTo(10, 1);
+      expect(boxes[i].halfHeight - boxes[i - 1].halfHeight).toBeCloseTo(10, 1);
+    }
+  });
+
+  it("still reaches every corner of the image when rotated", () => {
+    const source = { width: 120, height: 80, values: new Uint8Array(9_600).fill(255) };
+    const d = generateConcentricBoxesPath(ctx(source, { ...concentricBoxesDefaults, spacingMM: 7, amplitudeMM: 0, angleDeg: 30 }));
+    const points = subpaths(d).flat();
+    for (const corner of [{ x: 0, y: 0 }, { x: 120, y: 0 }, { x: 0, y: 80 }, { x: 120, y: 80 }]) {
+      const nearest = Math.min(...points.map((p) => Math.hypot(p.x - corner.x, p.y - corner.y)));
+      expect(nearest, `corner ${corner.x},${corner.y}`).toBeLessThan(7);
+    }
+  });
+});
