@@ -4,6 +4,8 @@ import type { SvgImport } from "../../../../../types";
 
 function makeMockCtx() {
   return {
+    fillRect: vi.fn(),
+    fillStyle: "",
     save: vi.fn(),
     restore: vi.fn(),
     setTransform: vi.fn(),
@@ -158,5 +160,79 @@ describe("drawImportsLayer", () => {
     });
     expect(ctx.fillRect).not.toHaveBeenCalled();
     expect(strokes[0]).toBe("#3a6aaa");
+  });
+
+  describe("paths and colours", () => {
+    /** Draws and returns [strokeStyle, path data] for each stroke. */
+    const strokes = (imports: SvgImport[], extra: Partial<Parameters<typeof drawImportsLayer>[0]> = {}) => {
+      const made = new Map<object, string>();
+      vi.stubGlobal(
+        "Path2D",
+        class {
+          constructor(d?: string) {
+            made.set(this, d ?? "");
+          }
+        },
+      );
+      const ctx = makeMockCtx();
+      const out: [string, string][] = [];
+      ctx.stroke.mockImplementation((path: object) => out.push([ctx.strokeStyle, made.get(path) ?? ""]));
+      drawImportsLayer({
+        ctx: ctx as unknown as CanvasRenderingContext2D,
+        dpr: 1,
+        vp: { zoom: 1, panX: 0, panY: 0 },
+        imports,
+        layerGroups: [],
+        selectedImportId: null,
+        allImportsSelected: false,
+        selectedGroupId: null,
+        isBottom: true,
+        canvasH: 1000,
+        respectSvgColorsOnCanvas: false,
+        cache: new Map(),
+        ...extra,
+      });
+      vi.unstubAllGlobals();
+      return out;
+    };
+    const path = (id: string, extra: Partial<SvgImport["paths"][number]> = {}) =>
+      ({ id, d: `M${id}`, svgSource: "", visible: true, ...extra }) as SvgImport["paths"][number];
+
+    it("leaves out paths on hidden layers, and hidden paths", () => {
+      const imp = makeBaseImport({
+        layers: [
+          { id: "shown", name: "Shown", visible: true },
+          { id: "hidden", name: "Hidden", visible: false },
+        ] as SvgImport["layers"],
+        paths: [path("1", { layer: "shown" }), path("2", { layer: "hidden" }), path("3", { visible: false })],
+      });
+      expect(strokes([imp])[0][1]).toBe("M1");
+    });
+
+    it("draws a grouped import in its group's colour, brighter when the group is selected", () => {
+      const imp = makeBaseImport({ paths: [path("1")] });
+      const group = { id: "g", name: "G", color: "#204060", importIds: [imp.id] };
+      expect(strokes([imp], { layerGroups: [group] })[0][0]).toBe("#204060");
+      expect(strokes([imp], { layerGroups: [group], selectedGroupId: "g" })[0][0]).not.toBe("#204060");
+    });
+
+    it("draws hatching beside outlines, each by its own colour when SVG colours are shown", () => {
+      const imp = makeBaseImport({
+        paths: [path("1", { strokeColor: "#111111", fillColor: "#222222", hatchLines: ["M9 9 L10 10"] })],
+      });
+      expect(strokes([imp], { respectSvgColorsOnCanvas: true })).toEqual([
+        ["#111111", "M1"],
+        ["#222222", "M9 9 L10 10"],
+      ]);
+    });
+
+    it("hands a bitmap to the preview rasterizer, with the page's paper and pen", () => {
+      const draw = vi.fn();
+      const bitmapPreviews = { draw, prune: vi.fn() } as never;
+      const bitmap = makeBaseImport({ kind: "bitmap" });
+      const page = { paper: "#ffffff", pen: "#000000", rect: { x: 0, y: 0, w: 1, h: 1 } };
+      strokes([bitmap], { bitmapPreviews, page, selectedImportId: bitmap.id });
+      expect(draw).toHaveBeenCalledWith(expect.anything(), bitmap, true, { paper: "#ffffff", pen: "#000000" });
+    });
   });
 });

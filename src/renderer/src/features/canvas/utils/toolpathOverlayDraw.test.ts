@@ -136,3 +136,60 @@ describe("drawToolpathLayer pen colour", () => {
     expect(draw({ useMetadataColors: true, penColor: "#202020" })).toEqual(["#ff0000", "#00ff00"]);
   });
 });
+
+describe("drawToolpathLayer plot progress", () => {
+  const base = {
+    gcodeToolpath: { cutPaths: [], rapidPaths: new Float32Array(0) } as unknown as GcodeToolpath,
+    toolpathSelected: false,
+    toolpathOpacity: 1,
+    transform: { a: 1, d: 1, e: 0, f: 0, sx: 1 },
+    physW: 100,
+    physH: 100,
+    vpZoom: 1,
+    bedXMin: 0,
+    bedXMax: 100,
+    bedYMin: 0,
+    bedYMax: 100,
+  };
+
+  it("draws completed cuts and rapids, reusing each Path2D until its text changes", () => {
+    const built: string[] = [];
+    vi.stubGlobal(
+      "Path2D",
+      class {
+        constructor(d: string) {
+          built.push(d);
+        }
+      },
+    );
+    const ppCutsCache = { text: "", path: null };
+    const ppRapidsCache = { text: "", path: null };
+    const draw = (cuts: string) => {
+      const ctx = { ...makeMockCtx(), shadowBlur: 0, shadowColor: "" };
+      drawToolpathLayer({ ...base, ctx: ctx as unknown as CanvasRenderingContext2D, plotProgressCuts: cuts, plotProgressRapids: "M0 0 L5 5", ppCutsCache, ppRapidsCache });
+      return ctx.stroke.mock.calls.length;
+    };
+    expect(draw("M0 0 L1 1")).toBeGreaterThanOrEqual(2);
+    draw("M0 0 L1 1");
+    draw("M0 0 L2 2");
+    expect(built).toEqual(["M0 0 L5 5", "M0 0 L1 1", "M0 0 L2 2"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("skips progress whose path data the canvas rejects", () => {
+    vi.stubGlobal(
+      "Path2D",
+      class {
+        constructor() {
+          throw new Error("bad path");
+        }
+      },
+    );
+    const ctx = makeMockCtx();
+    const ppCutsCache = { text: "", path: null };
+    drawToolpathLayer({ ...base, ctx: ctx as unknown as CanvasRenderingContext2D, plotProgressCuts: "nonsense", plotProgressRapids: null, ppCutsCache, ppRapidsCache: { text: "", path: null } });
+    expect(ctx.stroke).not.toHaveBeenCalled();
+    expect(ppCutsCache).toEqual({ text: "nonsense", path: null });
+    vi.unstubAllGlobals();
+  });
+});
