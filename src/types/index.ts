@@ -678,6 +678,17 @@ export interface PageTemplate {
   landscape: boolean;
   /** Margin in mm drawn as a second inset overlay inside the page boundary. */
   marginMM: number;
+  /**
+   * The paper's colour, as CSS hex — shown on the canvas, and what colour
+   * separation unmixes inks against. Absent means white.
+   */
+  paperColor?: string;
+  /**
+   * The pen drawn with, as CSS hex: the preview colour of everything without
+   * an ink colour of its own (SVG paths, unseparated bitmaps) while a page is
+   * shown. Absent means black.
+   */
+  penColor?: string;
 }
 
 /** Built-in page sizes used as defaults when no custom page-sizes.json exists. */

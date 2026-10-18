@@ -93,3 +93,46 @@ describe("drawToolpathLayer", () => {
     expect(ctx.strokeHistory).not.toContain("#4a5568");
   });
 });
+
+describe("drawToolpathLayer pen colour", () => {
+  const toolpath = {
+    cutPaths: [new Float32Array([0, 0, 1, 1]), new Float32Array([2, 2, 3, 3])],
+    cutPathColors: ["#ff0000", "#00ff00"],
+    rapidPaths: new Float32Array(0),
+    rapidColors: [],
+  } as unknown as GcodeToolpath;
+  const draw = (options: { useMetadataColors: boolean; penColor?: string | null; selected?: boolean }) => {
+    const ctx = makeMockCtx();
+    drawToolpathLayer({
+      ctx: ctx as unknown as CanvasRenderingContext2D,
+      gcodeToolpath: toolpath,
+      toolpathSelected: options.selected ?? false,
+      useMetadataColors: options.useMetadataColors,
+      penColor: options.penColor,
+      toolpathOpacity: 1,
+      plotProgressCuts: null,
+      plotProgressRapids: null,
+      ppCutsCache: { text: "", path: null },
+      ppRapidsCache: { text: "", path: null },
+      transform: { a: 1, d: 1, e: 0, f: 0, sx: 1 },
+      physW: 100,
+      physH: 100,
+      vpZoom: 1,
+      bedXMin: 0,
+      bedXMax: 100,
+      bedYMin: 0,
+      bedYMax: 100,
+    });
+    return [...new Set(ctx.strokeHistory)];
+  };
+
+  it("draws every cut in the page's pen when not coloured by source", () => {
+    expect(draw({ useMetadataColors: false, penColor: "#202020" })).toEqual(["#202020"]);
+    expect(draw({ useMetadataColors: false, penColor: "#202020", selected: true })).not.toEqual(["#202020"]);
+  });
+
+  it("keeps the default cyan without a page, and source colours when asked for", () => {
+    expect(draw({ useMetadataColors: false })).toEqual(["#0ea5e9"]);
+    expect(draw({ useMetadataColors: true, penColor: "#202020" })).toEqual(["#ff0000", "#00ff00"]);
+  });
+});

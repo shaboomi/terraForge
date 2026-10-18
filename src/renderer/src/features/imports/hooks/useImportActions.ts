@@ -29,8 +29,10 @@ import { importPdf } from "../../../utils/pdfImport";
 import {
   bitmapRenderSignature,
   loadBitmapForImport,
+  bitmapSurface,
   materializeBitmapLayers,
 } from "../../bitmap-renderers/bitmapImage";
+import { pageColors } from "../../../utils/paper";
 import { getBitmapRenderer } from "../../bitmap-renderers/registry";
 import { computeBitmapFitScale } from "../../properties-panel/utils/pageBounds";
 import {
@@ -446,7 +448,8 @@ export function useImportActions() {
         bitmapRendererSettings,
         bitmapBaseScale: baseScale,
       };
-      const { bitmapRendererPath, paths, rendererVersion, warnings } = await materializeBitmapLayers(renderInputs);
+      const surface = bitmapSurface(undefined, pageColors(useCanvasStore.getState().pageTemplate));
+      const { bitmapRendererPath, paths, rendererVersion, warnings } = await materializeBitmapLayers(renderInputs, { surface });
       const objW = imageWidth * baseScale;
       const objH = imageHeight * baseScale;
       const origin = activeMachineConfig?.origin ?? "bottom-left";
@@ -458,7 +461,7 @@ export function useImportActions() {
         bitmapRendererSettings, bitmapRendererPath, bitmapBaseScale: baseScale, bitmapOpacity: 0.25,
         // Stamped now so selecting the new import does not immediately
         // re-render geometry that was just produced.
-        bitmapRenderSignature: bitmapRenderSignature(renderInputs),
+        bitmapRenderSignature: bitmapRenderSignature(renderInputs, surface),
         bitmapRendererVersion: rendererVersion,
         bitmapRenderWarnings: warnings?.length ? warnings : undefined,
         bitmapSourceVisible: true,

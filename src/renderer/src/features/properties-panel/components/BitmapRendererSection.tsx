@@ -1,7 +1,9 @@
 import type { BitmapRendererSettings, SvgImport } from "../../../../../types";
 import { ErrorBoundary } from "../../../components/ErrorBoundary";
 import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
-import { bitmapRendererStamp, bitmapRenderSignature } from "../../bitmap-renderers/bitmapImage";
+import { bitmapRendererStamp, bitmapRenderSignature, bitmapSurface } from "../../bitmap-renderers/bitmapImage";
+import { useCanvasStore } from "../../../store/canvasStore";
+import { pageColors } from "../../../utils/paper";
 import { rerenderBitmap, useBitmapRenderState } from "../../bitmap-renderers/bitmapRenderService";
 import { rendererSettings } from "../../bitmap-renderers/coerceSettings";
 import {
@@ -56,6 +58,8 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
   // Rendering itself is owned by the bitmap render service, not this panel,
   // so a change still renders if the import is deselected before it lands.
   const { status: serviceStatus, error: renderError } = useBitmapRenderState(imp.id);
+  const pageTemplate = useCanvasStore((state) => state.pageTemplate);
+  const page = pageColors(pageTemplate);
 
   // Output whose settings are current but which an older version of the
   // renderer produced. It is not replaced automatically — that would change
@@ -64,7 +68,7 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
   const outdated =
     !!renderer &&
     serviceStatus === "idle" &&
-    imp.bitmapRenderSignature === bitmapRenderSignature(imp) &&
+    imp.bitmapRenderSignature === bitmapRenderSignature(imp, bitmapSurface(imp.bitmapSeparationMode, page)) &&
     imp.bitmapRendererVersion !== bitmapRendererStamp(renderer, imp.bitmapSeparationMode);
   const renderStatus: keyof typeof RENDER_STATUS_LABEL = outdated ? "outdated" : serviceStatus;
 

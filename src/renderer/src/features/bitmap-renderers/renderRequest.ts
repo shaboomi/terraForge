@@ -34,6 +34,8 @@ export interface SeparateRequest {
   image: BitmapColorData;
   mode: Exclude<SeparationMode, "none">;
   palette: CustomPaletteSwatch[];
+  /** Absent: the paper the mode is made for. */
+  paper?: string;
 }
 
 export type PoolRequest = RenderRequest | SmoothRequest | SeparateRequest;
@@ -82,9 +84,9 @@ export function handleSmoothRequest({ id, source, smoothingMM, pixelsPerMM }: Sm
 
 /** Runs colour separation for the pool: a pass over every pixel per ink,
  * and for unmixed modes a solve per palette, kept off the UI thread. */
-export function handleSeparateRequest({ id, image, mode, palette }: SeparateRequest): SeparateReply {
+export function handleSeparateRequest({ id, image, mode, palette, paper }: SeparateRequest): SeparateReply {
   try {
-    return { id, ok: true, output: separateColours(image, mode, palette) };
+    return { id, ok: true, output: separateColours(image, mode, palette, paper) };
   } catch (err) {
     return { id, ok: false, message: err instanceof Error ? err.message : String(err) };
   }

@@ -168,9 +168,10 @@ export function separateInWorker(
   image: BitmapColorData,
   mode: Exclude<SeparationMode, "none">,
   palette: CustomPaletteSwatch[],
+  paper: string | undefined,
   signal?: AbortSignal,
 ): Promise<SeparatedChannel[]> {
-  const request: PoolRequest = { id: nextId++, kind: "separate", image, mode, palette };
+  const request: PoolRequest = { id: nextId++, kind: "separate", image, mode, palette, paper };
   return runTask(request, signal, async () => unwrap(handleSeparateRequest({ ...request, kind: "separate" })));
 }
 

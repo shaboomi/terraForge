@@ -147,9 +147,9 @@ function parseHexColor(hex: string): [number, number, number] {
 export function separateCustomPalette(
   image: BitmapColorData,
   palette: CustomPaletteSwatch[],
+  paper = "#ffffff",
 ): SeparatedChannel[] {
-  const inks = palette.map((swatch) => parseHexColor(swatch.color).map((v) => v / 255) as unknown as InkColour);
-  const coverages = unmixInks(image.rgba, image.width * image.height, inks);
+  const coverages = unmixInks(image.rgba, image.width * image.height, palette.map((swatch) => inkColour(swatch.color)), inkColour(paper));
   return palette.map((swatch, index) => ({
     label: swatch.label,
     color: swatch.color,
@@ -157,12 +157,47 @@ export function separateCustomPalette(
   }));
 }
 
-/** Separates an image into the inks of `mode`. */
+function inkColour(hex: string): InkColour {
+  return parseHexColor(hex).map((v) => v / 255) as unknown as InkColour;
+}
+
+/** The paper each mode is made for, when no page says otherwise. */
+export function defaultPaperFor(mode: Exclude<SeparationMode, "none">): string {
+  return mode === "rgb" ? "#000000" : "#ffffff";
+}
+
+/** The pens each mode separates into. */
+function inksFor(mode: Exclude<SeparationMode, "none">, palette: CustomPaletteSwatch[]): CustomPaletteSwatch[] {
+  const rgb = [
+    { label: "Red", color: "#ff0000" },
+    { label: "Green", color: "#00ff00" },
+    { label: "Blue", color: "#0000ff" },
+  ];
+  const cmy = [
+    { label: "Cyan", color: "#00ffff" },
+    { label: "Magenta", color: "#ff00ff" },
+    { label: "Yellow", color: "#ffff00" },
+  ];
+  if (mode === "rgb" || mode === "rgb-white") return rgb;
+  if (mode === "cmy") return cmy;
+  if (mode === "cmyk") return [...cmy, { label: "Black", color: "#000000" }];
+  return palette;
+}
+
+/**
+ * Separates an image into the inks of `mode`, for `paper` (by default, the
+ * paper the mode is made for). On its own paper each mode keeps its exact
+ * formula; on any other paper — cream stock, black card — the mode's pens
+ * are unmixed against it, so the inks make up for the paper's own colour,
+ * and on dark paper light pens add light where the image is bright.
+ */
 export function separateColours(
   image: BitmapColorData,
   mode: Exclude<SeparationMode, "none">,
   palette: CustomPaletteSwatch[] = [],
+  paper: string = defaultPaperFor(mode),
 ): SeparatedChannel[] {
+  if (paper.toLowerCase() !== defaultPaperFor(mode)) return separateCustomPalette(image, inksFor(mode, palette), paper);
   return mode === "rgb" ? separateRGB(image)
     : mode === "rgb-white" ? separateRGBOnWhite(image)
     : mode === "cmy" ? separateCMY(image)

@@ -1,4 +1,5 @@
 import type { SvgImport, SvgPath } from "../../../../../types";
+import { isLightPaper, selectionShade, type PageColors } from "../../../utils/paper";
 import type { LocalRect, RasterReply, RasterRequest, RasterWorkerRequest } from "./rasterProtocol";
 
 /**
@@ -77,20 +78,29 @@ interface ImportState {
   detail: Slot;
   settleTimer: ReturnType<typeof setTimeout> | null;
   /** The last view this import was drawn in, for requests made once it settles. */
-  lastDraw: { transform: DOMMatrix; width: number; height: number; imp: SvgImport; selected: boolean } | null;
+  lastDraw: {
+    transform: DOMMatrix;
+    width: number;
+    height: number;
+    imp: SvgImport;
+    selected: boolean;
+    page: PageColors | null;
+  } | null;
 }
 
 /**
  * Separated inks are previewed the way they will combine on the page:
- * transparent inks on white paper filter the light, which multiplying
+ * transparent inks on light paper filter the light, which multiplying
  * approximates; light inks on dark paper add light, which screening does.
- * Anything else (a single-colour preview, or a plugin's coloured layers
- * without separation) is drawn without paper, as before.
+ * The paper is the page's when one is shown, and otherwise what the mode
+ * assumes. Anything else (a single-colour preview, or a plugin's coloured
+ * layers without separation) is drawn without paper, as before.
  */
-function paperFor(imp: SvgImport): Geometry["paper"] {
+function paperFor(imp: SvgImport, page: PageColors | null): Geometry["paper"] {
   const mode = imp.bitmapSeparationMode ?? "none";
   if (mode === "none") return null;
-  return mode === "rgb" ? { color: "#000000", blend: "screen" } : { color: "#ffffff", blend: "multiply" };
+  const color = page?.paper ?? (mode === "rgb" ? "#000000" : "#ffffff");
+  return { color, blend: isLightPaper(color) ? "multiply" : "screen" };
 }
 
 /** Which of a bitmap's separated-ink paths its preview shows. Mirrors the
@@ -172,9 +182,9 @@ export class BitmapPreviewRasterizer {
   /**
    * Draws `imp`'s source image (when shown) and preview. `ctx` must already
    * be transformed into the import's local coordinates, exactly as its
-   * vector paths would be.
+   * vector paths would be. `page` is the shown page's paper and pen, if any.
    */
-  draw(ctx: CanvasRenderingContext2D, imp: SvgImport, selected: boolean): void {
+  draw(ctx: CanvasRenderingContext2D, imp: SvgImport, selected: boolean, page: PageColors | null = null): void {
     const bounds = { x: imp.viewBoxX ?? 0, y: imp.viewBoxY ?? 0, w: imp.svgWidth, h: imp.svgHeight };
 
     if (imp.bitmapDataUrl && imp.bitmapSourceVisible !== false) {
@@ -189,10 +199,10 @@ export class BitmapPreviewRasterizer {
 
     if (imp.bitmapPreviewVisible === false) return;
     const state = this.stateFor(imp.id);
-    this.updateGeometry(state, imp);
+    this.updateGeometry(state, imp, page);
     if (!state.geometry) return;
 
-    state.lastDraw = { transform: ctx.getTransform(), width: ctx.canvas.width, height: ctx.canvas.height, imp, selected };
+    state.lastDraw = { transform: ctx.getTransform(), width: ctx.canvas.width, height: ctx.canvas.height, imp, selected, page };
     this.request(state, false);
 
     const { overview, detail } = state;
@@ -282,13 +292,13 @@ export class BitmapPreviewRasterizer {
     return state;
   }
 
-  private updateGeometry(state: ImportState, imp: SvgImport): void {
+  private updateGeometry(state: ImportState, imp: SvgImport, page: PageColors | null): void {
     // `paths` only matters when it holds the preview (separated inks, dots);
     // a single-path preview must not be redrawn because an empty array was
     // replaced by another empty array.
     const inputs =
       imp.paths.length > 0
-        ? [imp.paths, imp.strokeEnabled, imp.generatedStrokeForNoStroke, imp.bitmapSeparationMode]
+        ? [imp.paths, imp.strokeEnabled, imp.generatedStrokeForNoStroke, imp.bitmapSeparationMode, page?.paper]
         : [imp.bitmapRendererPath];
     if (state.geometry && sameInputs(state.geometry.inputs, inputs)) return;
 
@@ -322,7 +332,7 @@ export class BitmapPreviewRasterizer {
             layers,
             mask,
             usesFallback: !mask && layers.some((layer) => layer.color === null),
-            paper: paperFor(imp),
+            paper: paperFor(imp, page),
             inputs,
           }
         : null;
@@ -334,8 +344,10 @@ export class BitmapPreviewRasterizer {
     }
   }
 
-  /** The tint for a single-colour preview, and the fallback colour otherwise. */
-  private colorFor(selected: boolean): string {
+  /** The tint for a single-colour preview, and the fallback colour otherwise:
+   * the page's pen when a page is shown, shaded when selected. */
+  private colorFor(selected: boolean, page: PageColors | null): string {
+    if (page) return selected ? selectionShade(page.pen) : page.pen;
     return selected ? SELECTED_COLOR : UNSELECTED_COLOR;
   }
 
@@ -355,7 +367,7 @@ export class BitmapPreviewRasterizer {
     const geometry = state.geometry;
     if (!view || !geometry) return;
 
-    const { transform, width, height, imp, selected } = view;
+    const { transform, width, height, imp, selected, page } = view;
     const bounds = { x: imp.viewBoxX ?? 0, y: imp.viewBoxY ?? 0, w: imp.svgWidth, h: imp.svgHeight };
     const screenScale = Math.sqrt(Math.abs(transform.a * transform.d - transform.b * transform.c));
     // The pen's real width in local units (source pixels), so the preview's
@@ -363,7 +375,7 @@ export class BitmapPreviewRasterizer {
     // drew lines many times too thick when zoomed out, darkening the preview.
     const mmPerUnit = Math.sqrt(Math.abs((imp.scaleX ?? imp.scale) * (imp.scaleY ?? imp.scale))) || 1;
     const lineWidth = (imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) / mmPerUnit;
-    const color = this.colorFor(selected);
+    const color = this.colorFor(selected, page);
     const styleKey = this.styleKey(geometry, lineWidth, color);
 
     // Overview: the whole import, as sharp as the screen needs, up to a cap.

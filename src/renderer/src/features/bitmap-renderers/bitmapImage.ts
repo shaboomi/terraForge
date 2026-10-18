@@ -2,7 +2,8 @@ import type { RendererDot, RendererInk, RendererSource, SvgImport, SvgPath } fro
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
-import type { SeparationMode } from "./colourSeparation";
+import { defaultPaperFor, type SeparationMode } from "./colourSeparation";
+import { luminance, type PageColors } from "../../utils/paper";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
 import { runRenderer, separateInWorker, smoothInWorker } from "./rendererPool";
 import type { ValidatedLayer } from "./validatePath";
@@ -143,6 +144,13 @@ export async function decodeBitmapLuminance(dataUrl: string): Promise<RendererSo
   return { width, height, values };
 }
 
+/** Tones flipped, light for dark — a copy, since decoded tones are cached. */
+function invertedTones(source: RendererSource): RendererSource {
+  const values = new Uint8Array(source.values.length);
+  for (let i = 0; i < values.length; i++) values[i] = 255 - source.values[i];
+  return { ...source, values };
+}
+
 /** Full-colour decode for colour separation — unlike `decodeBitmapLuminance`,
  * keeps R/G/B rather than collapsing to a single tone. Alpha is flattened
  * onto white using the same convention as the luminance decode (transparent
@@ -234,6 +242,33 @@ type MaterializableBitmap = Pick<
 >;
 
 /**
+ * What a bitmap is drawn on, as far as its output depends on it — derived
+ * from the shown page (see `bitmapSurface`), so not stored on the import.
+ * Both are absent in the common case, which is how drawings were made before
+ * pages had colours:
+ * - `paper`: separated inks are unmixed against this paper rather than the
+ *   one their mode is made for.
+ * - `invert`: an unseparated bitmap is drawn where the image is light, not
+ *   dark — a pen lighter than its paper (white gel on black card) adds
+ *   light, so it belongs on the image's highlights.
+ */
+export interface BitmapSurface {
+  paper?: string;
+  invert?: boolean;
+}
+
+/** The surface a bitmap is rendered for, given the shown page's colours. */
+export function bitmapSurface(
+  separationMode: SvgImport["bitmapSeparationMode"],
+  page: PageColors | null | undefined,
+): BitmapSurface {
+  if (!page) return {};
+  const mode = separationMode ?? "none";
+  if (mode === "none") return luminance(page.pen) > luminance(page.paper) ? { invert: true } : {};
+  return page.paper !== defaultPaperFor(mode) ? { paper: page.paper } : {};
+}
+
+/**
  * Identifies the inputs that determine a bitmap's rendered output, so the
  * panel can tell "already rendered with exactly these settings" apart from
  * "needs rendering". Without it, merely selecting a bitmap layer re-ran the
@@ -244,7 +279,7 @@ type MaterializableBitmap = Pick<
  * for the image rather than hashing megabytes on every check. Settings keys
  * are sorted so that a bag rebuilt in a different order still compares equal.
  */
-export function bitmapRenderSignature(bitmap: MaterializableBitmap): string {
+export function bitmapRenderSignature(bitmap: MaterializableBitmap, surface: BitmapSurface = {}): string {
   const settings = bitmap.bitmapRendererSettings ?? {};
   return JSON.stringify([
     bitmap.bitmapDataUrl?.length ?? 0,
@@ -261,6 +296,9 @@ export function bitmapRenderSignature(bitmap: MaterializableBitmap): string {
     ...(bitmap.bitmapTone ? [Object.entries(bitmap.bitmapTone).sort(([a], [b]) => a.localeCompare(b))] : []),
     // Likewise only once set: absent means on.
     ...(bitmap.bitmapSeparationOffset !== undefined ? [["inkOffset", bitmap.bitmapSeparationOffset]] : []),
+    // Likewise only when the page asks for something other than the default.
+    ...(surface.paper ? [["paper", surface.paper]] : []),
+    ...(surface.invert ? [["invert", true]] : []),
   ]);
 }
 
@@ -344,7 +382,7 @@ function layerPaths(
  */
 export async function materializeBitmapLayers(
   bitmap: MaterializableBitmap,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; surface?: BitmapSurface } = {},
 ): Promise<MaterializedBitmap> {
   if (!bitmap.bitmapDataUrl) return { bitmapRendererPath: "", paths: [] };
 
@@ -361,7 +399,7 @@ export async function materializeBitmapLayers(
   }
 
   return {
-    ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl, options.signal)),
+    ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl, options.signal, options.surface ?? {})),
     rendererVersion: bitmapRendererStamp(renderer, bitmap.bitmapSeparationMode),
   };
 }
@@ -397,10 +435,18 @@ async function smoothedSources(
   dataUrl: string,
   smoothingMM: number,
   signal: AbortSignal | undefined,
+  surface: BitmapSurface,
 ): Promise<PreparedSource[]> {
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
   const mode = bitmap.bitmapSeparationMode ?? "none";
-  const key = JSON.stringify([mode, mode === "custom" ? bitmap.bitmapSeparationPalette ?? [] : null, smoothingMM, baseScale]);
+  const key = JSON.stringify([
+    mode,
+    mode === "custom" ? bitmap.bitmapSeparationPalette ?? [] : null,
+    smoothingMM,
+    baseScale,
+    surface.paper ?? null,
+    surface.invert ?? false,
+  ]);
   if (smoothedCache?.dataUrl === dataUrl && smoothedCache.key === key) return smoothedCache.sources;
 
   // The blur runs in the worker pool; with no blur to do, skip the trip.
@@ -410,10 +456,11 @@ async function smoothedSources(
       : smoothInWorker(source, smoothingMM, 1 / baseScale, signal);
   let sources: PreparedSource[];
   if (mode === "none") {
-    sources = [{ label: "", color: "", source: await smooth(await decodeBitmapLuminance(dataUrl)) }];
+    const tones = await decodeBitmapLuminance(dataUrl);
+    sources = [{ label: "", color: "", source: await smooth(surface.invert ? invertedTones(tones) : tones) }];
   } else {
     const colorData = await decodeBitmapColor(dataUrl);
-    const channels = await separateInWorker(colorData, mode, bitmap.bitmapSeparationPalette ?? [], signal);
+    const channels = await separateInWorker(colorData, mode, bitmap.bitmapSeparationPalette ?? [], surface.paper, signal);
     sources = await Promise.all(
       channels.map(async ({ label, color, luminance }) => ({ label, color, source: await smooth(luminance) })),
     );
@@ -427,6 +474,7 @@ async function preparedSources(
   bitmap: MaterializableBitmap,
   dataUrl: string,
   signal: AbortSignal | undefined,
+  surface: BitmapSurface,
 ): Promise<PreparedSource[]> {
   const tone = resolveToneSettings(bitmap);
   const key = JSON.stringify([
@@ -434,10 +482,12 @@ async function preparedSources(
     bitmap.bitmapSeparationMode === "custom" ? bitmap.bitmapSeparationPalette ?? [] : null,
     tone,
     bitmap.bitmapBaseScale ?? 25.4 / 96,
+    surface.paper ?? null,
+    surface.invert ?? false,
   ]);
   if (preparedCache?.dataUrl === dataUrl && preparedCache.key === key) return preparedCache.sources;
 
-  const smoothed = await smoothedSources(bitmap, dataUrl, tone.smoothingMM, signal);
+  const smoothed = await smoothedSources(bitmap, dataUrl, tone.smoothingMM, signal, surface);
   // Levels apply to each ink separately, by design: auto levels stretches
   // every ink to its own full range, making the most of each pen at the cost
   // of exact colour balance (a faint ink is boosted to full strength).
@@ -454,6 +504,7 @@ async function renderWith(
   bitmap: MaterializableBitmap,
   dataUrl: string,
   signal: AbortSignal | undefined,
+  surface: BitmapSurface,
 ): Promise<MaterializedBitmap> {
   const settings = rendererSettings(renderer, bitmap.bitmapRendererSettings);
   const baseScale = bitmap.bitmapBaseScale ?? 25.4 / 96;
@@ -465,7 +516,7 @@ async function renderWith(
   };
 
   if (mode === "none") {
-    const [{ source }] = await preparedSources(bitmap, dataUrl, signal);
+    const [{ source }] = await preparedSources(bitmap, dataUrl, signal, surface);
     const { layers, warnings } = await render(source);
 
     // One unnamed stroke keeps the single-path representation; anything else
@@ -490,7 +541,7 @@ async function renderWith(
     };
   }
 
-  const channels = await preparedSources(bitmap, dataUrl, signal);
+  const channels = await preparedSources(bitmap, dataUrl, signal, surface);
   const suffixFor = (layerCount: number, index: number, layerIndex: number) =>
     layerCount === 1 ? `${index}` : `${index}-${layerIndex}`;
   // Each ink is told which it is, so it can offset its pattern from the

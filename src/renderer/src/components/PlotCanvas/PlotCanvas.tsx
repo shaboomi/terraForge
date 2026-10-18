@@ -291,6 +291,8 @@ export function PlotCanvas() {
         plotProgressRapids={plotProgressRapids ?? null}
         respectSvgColorsOnCanvas={respectSvgColorsOnCanvas}
         theme={theme}
+        pageTemplate={pageTemplate}
+        pageSizes={pageSizes}
       />
 
       {/* SVG scene — bed, grid, imports */}

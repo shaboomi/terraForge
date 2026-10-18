@@ -2,7 +2,8 @@ import { create } from "zustand";
 import type { SvgImport } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { useCanvasStore } from "../../store/canvasStore";
-import { bitmapRenderSignature, materializeBitmapLayers } from "./bitmapImage";
+import { bitmapRenderSignature, bitmapSurface, materializeBitmapLayers } from "./bitmapImage";
+import { pageColors, type PageColors } from "../../utils/paper";
 
 /**
  * How long a bitmap's settings must stay unchanged before a re-render starts
@@ -100,12 +101,19 @@ const jobs = new Map<string, RenderJob>();
  * memoising on identity means a store update recomputes signatures only for
  * the imports it touched.
  */
-const signatureCache = new WeakMap<SvgImport, string>();
+let signatureCache = new WeakMap<SvgImport, string>();
+
+/**
+ * The shown page's colours, which a bitmap's output can depend on (see
+ * `bitmapSurface`). Kept here so a change can drop the signature cache: an
+ * unchanged import's signature changes with the page.
+ */
+let page: PageColors | null = pageColors(useCanvasStore.getState().pageTemplate);
 
 function signatureOf(imp: SvgImport): string {
   let signature = signatureCache.get(imp);
   if (signature === undefined) {
-    signature = bitmapRenderSignature(imp);
+    signature = bitmapRenderSignature(imp, bitmapSurface(imp.bitmapSeparationMode, page));
     signatureCache.set(imp, signature);
   }
   return signature;
@@ -157,7 +165,7 @@ async function run(importId: string, job: RenderJob): Promise<void> {
 
   let result;
   try {
-    result = await materializeBitmapLayers(imp, { signal: job.controller.signal });
+    result = await materializeBitmapLayers(imp, { signal: job.controller.signal, surface: bitmapSurface(imp.bitmapSeparationMode, page) });
   } catch (err: unknown) {
     if (!current()) return;
     job.failed = true;
@@ -293,6 +301,15 @@ export function startBitmapRenderService(): () => void {
   reconcile(useCanvasStore.getState().imports);
 
   const unsubscribeCanvas = useCanvasStore.subscribe((state, previous) => {
+    if (state.pageTemplate !== previous.pageTemplate) {
+      const next = pageColors(state.pageTemplate);
+      if (next?.paper !== page?.paper || next?.pen !== page?.pen) {
+        page = next;
+        signatureCache = new WeakMap();
+        reconcile(state.imports);
+        return;
+      }
+    }
     if (state.imports !== previous.imports) reconcile(state.imports);
   });
 

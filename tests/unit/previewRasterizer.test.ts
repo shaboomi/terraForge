@@ -205,6 +205,19 @@ describe("BitmapPreviewRasterizer", () => {
     for (const request of rasters()) expect(request.lineWidth).toBeCloseTo(2, 10);
   });
 
+  it("tints a single-colour preview with the page's pen, shaded when selected", () => {
+    const page = { paper: "#ffffff", pen: "#204080" };
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), false, page);
+    const [request] = rasters();
+    expect(request.color).toBe("#204080");
+    FakeWorker.last!.reply(request.id, request.slot);
+
+    rasterizer.draw(fakeContext(0.1), bitmapImport(), true, page);
+    const tint = FakeWorker.last!.posted.at(-1) as { type: string; color: string };
+    expect(tint.type).toBe("tint");
+    expect(tint.color).not.toBe("#204080");
+  });
+
   it("supersamples, so fine screens do not alias into bands", () => {
     rasterizer.draw(fakeContext(0.1), bitmapImport(), false);
     expect(rasters()[0].supersample).toBeGreaterThan(1);
@@ -232,6 +245,15 @@ describe("BitmapPreviewRasterizer", () => {
     it("screens light inks onto black paper", () => {
       rasterizer.draw(fakeContext(0.1), inks("rgb"), false);
       expect(rasters()[0]).toMatchObject({ paper: "#000000", blend: "screen" });
+    });
+
+    it("draws on the page's paper when a page is shown, screening onto dark paper", () => {
+      rasterizer.draw(fakeContext(0.1), inks("cmyk"), false, { paper: "#f3ecd8", pen: "#000000" });
+      rasterizer.draw(fakeContext(0.1), inks("cmyk"), false, { paper: "#141414", pen: "#ffffff" });
+      expect(rasters().map(({ paper, blend }) => [paper, blend])).toEqual([
+        ["#f3ecd8", "multiply"],
+        ["#141414", "screen"],
+      ]);
     });
 
     it("redraws when the separation mode changes the paper", () => {

@@ -1,15 +1,24 @@
 /**
- * Ink unmixing: how much of each pen to put down so that, together on white
+ * Ink unmixing: how much of each pen to put down so that, together on the
  * paper, they look most like a colour.
  *
- * Model. A pen with colour `c` (0–1 per channel) covering a fraction `d` of
- * the paper lets through `1 - d·(1 - c)` of each channel's light, and pens
- * drawn over one another multiply:
+ * Model. On light paper `p`, a pen with colour `c` (0–1 per channel, as it
+ * looks on white) covering a fraction `d` of the paper lets through
+ * `1 - d·(1 - c)` of each channel's light, and pens over one another
+ * multiply:
  *
- *   colour = Π over inks k of (1 - d_k · a_k),   a_k = 1 - c_k  (what ink k absorbs)
+ *   colour = p · Π over inks k of (1 - d_k · a_k),   a_k = 1 - c_k  (what ink k absorbs)
  *
- * — the same multiply-onto-white the canvas preview draws, so the preview
- * shows the closest match the chosen pens can make. Each colour is solved by
+ * On dark paper transparent inks would vanish; what shows there is light,
+ * opaque ink (gel, paint) adding light. That is the same model upside down —
+ * a screen blend:
+ *
+ *   1 - colour = (1 - p) · Π over inks k of (1 - d_k · c_k)
+ *
+ * Both are `target = Π(1 - d_k · a_k)` once the colour is measured against
+ * the paper, so one solver serves both. They are what the canvas preview
+ * draws (multiply onto light paper, screen onto dark), so the preview shows
+ * the closest match the chosen pens can make. Each colour is solved by
  * constrained least squares: the coverages `d` (each held to 0–1) that bring
  * the model nearest the colour, plus a small charge per unit of ink so that,
  * where several mixes match equally (more than three inks, or a black pen
@@ -33,6 +42,31 @@ const TABLE_CACHE_SIZE = 4;
 const tableCache = new Map<string, Float32Array>();
 
 export type InkColour = readonly [number, number, number];
+
+const WHITE: InkColour = [1, 1, 1];
+
+/** Light paper: inks multiply. Dark paper: inks screen. Same rule as the
+ * preview's `isLightPaper` (Rec. 709 luminance at least a half). */
+function isLight(paper: InkColour): boolean {
+  return 0.2126 * paper[0] + 0.7152 * paper[1] + 0.0722 * paper[2] >= 0.5;
+}
+
+/**
+ * The model in the solver's terms: what each ink takes away (flat, three per
+ * ink), and how to measure a colour against the paper — the fraction the
+ * inks must leave (1 = no ink needed). A paper channel with nothing to give
+ * (black in it, on light paper) cannot be changed by ink, so asks for none.
+ */
+function modelFor(inks: InkColour[], paper: InkColour) {
+  const light = isLight(paper);
+  const absorb = new Float64Array(inks.flatMap((ink) => (light ? [1 - ink[0], 1 - ink[1], 1 - ink[2]] : [...ink])));
+  const measure = (colour: number, c: number): number => {
+    const room = light ? paper[c] : 1 - paper[c];
+    if (room < 1e-3) return 1;
+    return Math.min(1, Math.max(0, (light ? colour : 1 - colour) / room));
+  };
+  return { absorb, measure };
+}
 
 /**
  * Coverages for one target colour, by coordinate descent: with the other
@@ -106,9 +140,9 @@ function costOf(target: Float64Array, absorb: Float64Array, d: Float64Array): nu
  * The neighbour's answer wins ties, so where mixes are equally good, nearby
  * colours pick the same one rather than jumping between them.
  */
-export function buildUnmixTable(inks: InkColour[]): Float32Array {
+export function buildUnmixTable(inks: InkColour[], paper: InkColour = WHITE): Float32Array {
   const n = inks.length;
-  const absorb = new Float64Array(inks.flatMap((ink) => [1 - ink[0], 1 - ink[1], 1 - ink[2]]));
+  const { absorb, measure } = modelFor(inks, paper);
   const table = new Float32Array(GRID * GRID * GRID * n);
   const d = new Float64Array(n);
   const best = new Float64Array(n);
@@ -119,9 +153,9 @@ export function buildUnmixTable(inks: InkColour[]): Float32Array {
       for (let b = 0; b < GRID; b++) {
         const cell = (r * GRID + g) * GRID + b;
         const from = b > 0 ? cell - 1 : g > 0 ? cell - GRID : r > 0 ? cell - GRID * GRID : -1;
-        target[0] = r / (GRID - 1);
-        target[1] = g / (GRID - 1);
-        target[2] = b / (GRID - 1);
+        target[0] = measure(r / (GRID - 1), 0);
+        target[1] = measure(g / (GRID - 1), 1);
+        target[2] = measure(b / (GRID - 1), 2);
         let bestCost = Infinity;
         // Start -1: the neighbour's answer (or no ink, for the first cell);
         // n: no ink; 0..n-1: that ink alone, at full coverage.
@@ -144,14 +178,19 @@ export function buildUnmixTable(inks: InkColour[]): Float32Array {
 
 /**
  * Each ink's coverage over an image, 0 (none) to 255 (full), one array per
- * ink. `rgba` is 8-bit RGBA, as decoded.
+ * ink. `rgba` is 8-bit RGBA, as decoded; `paper` defaults to white.
  */
-export function unmixInks(rgba: Uint8Array | Uint8ClampedArray, pixelCount: number, inks: InkColour[]): Uint8Array[] {
+export function unmixInks(
+  rgba: Uint8Array | Uint8ClampedArray,
+  pixelCount: number,
+  inks: InkColour[],
+  paper: InkColour = WHITE,
+): Uint8Array[] {
   const n = inks.length;
-  const key = JSON.stringify(inks);
+  const key = JSON.stringify([inks, paper]);
   let table = tableCache.get(key);
   if (!table) {
-    table = buildUnmixTable(inks);
+    table = buildUnmixTable(inks, paper);
     if (tableCache.size >= TABLE_CACHE_SIZE) tableCache.delete(tableCache.keys().next().value!);
     tableCache.set(key, table);
   }
@@ -202,12 +241,13 @@ export function unmixInks(rgba: Uint8Array | Uint8ClampedArray, pixelCount: numb
   return out;
 }
 
-/** The colour a set of coverages (0–1) makes on white paper — the model
- * `unmixInks` inverts, and the canvas preview draws. */
-export function mixInks(coverages: number[], inks: InkColour[]): [number, number, number] {
-  const colour: [number, number, number] = [1, 1, 1];
+/** The colour a set of coverages (0–1) makes on the paper (white by
+ * default) — the model `unmixInks` inverts, and the canvas preview draws. */
+export function mixInks(coverages: number[], inks: InkColour[], paper: InkColour = WHITE): [number, number, number] {
+  const light = isLight(paper);
+  const left = [1, 1, 1];
   coverages.forEach((d, k) => {
-    for (let c = 0; c < 3; c++) colour[c] *= 1 - d * (1 - inks[k][c]);
+    for (let c = 0; c < 3; c++) left[c] *= 1 - d * (light ? 1 - inks[k][c] : inks[k][c]);
   });
-  return colour;
+  return [0, 1, 2].map((c) => (light ? paper[c] * left[c] : 1 - (1 - paper[c]) * left[c])) as [number, number, number];
 }

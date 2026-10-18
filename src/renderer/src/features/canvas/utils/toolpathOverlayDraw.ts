@@ -3,6 +3,7 @@ import {
   type LayerGroup,
   type SvgImport,
 } from "../../../../../types";
+import { selectionShade, type PageColors } from "../../../utils/paper";
 import type { Vp } from "../types";
 import { LOD_PX, MM_TO_PX, PAD } from "../constants";
 import { scaleHexColor } from "./geometry";
@@ -39,6 +40,12 @@ interface DrawImportsLayerParams {
   cache: Map<string, ImportPath2DCacheEntry>;
   /** Draws bitmap imports from rasterised images; when absent, ImportLayer's SVG draws them. */
   bitmapPreviews?: BitmapPreviewRasterizer | null;
+  /**
+   * The shown page: its rectangle in canvas pixels (before the viewport),
+   * filled with its paper colour beneath every import, and the pen imports
+   * are previewed in. Null when no page is shown.
+   */
+  page?: (PageColors & { rect: { x: number; y: number; w: number; h: number } }) | null;
 }
 
 /** Sets `ctx` to map an import's local (viewBox) coordinates onto the canvas,
@@ -84,10 +91,19 @@ export function drawImportsLayer({
   respectSvgColorsOnCanvas,
   cache,
   bitmapPreviews,
+  page = null,
 }: DrawImportsLayerParams): void {
   const vpA = vp.zoom * dpr;
   const vpE = vp.panX * dpr;
   const vpF = vp.panY * dpr;
+
+  if (page) {
+    ctx.save();
+    ctx.setTransform(vpA, 0, 0, vpA, vpE, vpF);
+    ctx.fillStyle = page.paper;
+    ctx.fillRect(page.rect.x, page.rect.y, page.rect.w, page.rect.h);
+    ctx.restore();
+  }
 
   const groupColorMap = new Map<string, string>();
   for (const g of layerGroups) {
@@ -116,7 +132,7 @@ export function drawImportsLayer({
       if (bitmapPreviews) {
         ctx.save();
         applyImportTransform(ctx, imp, [vpA, vpE, vpF], isBottom, canvasH);
-        bitmapPreviews.draw(ctx, imp, isSelected(imp));
+        bitmapPreviews.draw(ctx, imp, isSelected(imp), page && { paper: page.paper, pen: page.pen });
         ctx.restore();
       }
       continue;
@@ -208,28 +224,35 @@ export function drawImportsLayer({
     const isImpSelected = isSelected(imp);
 
     ctx.save();
-    const { impSX, impSY } = applyImportTransform(ctx, imp, [vpA, vpE, vpF], isBottom, canvasH);
-    const avgImpScale = Math.sqrt(Math.abs(impSX) * Math.abs(impSY)) * vp.zoom;
+    applyImportTransform(ctx, imp, [vpA, vpE, vpF], isBottom, canvasH);
     ctx.setLineDash([]);
 
+    // On a page, everything without a colour of its own is drawn in the
+    // page's pen, as it will be plotted; otherwise in the group's colour or
+    // the default blues.
     const groupColor = groupColorMap.get(imp.id);
-    const outlineColor = groupColor
+    const penColor = page ? (isImpSelected ? selectionShade(page.pen) : page.pen) : null;
+    const outlineColor = penColor ?? (groupColor
       ? isImpSelected
         ? scaleHexColor(groupColor, 1.35)
         : groupColor
       : isImpSelected
         ? "#60a0ff"
-        : "#3a6aaa";
-    const hatchColor = groupColor
+        : "#3a6aaa");
+    const hatchColor = penColor ?? (groupColor
       ? isImpSelected
         ? groupColor
         : scaleHexColor(groupColor, 0.65)
       : isImpSelected
         ? "#4a88cc"
-        : "#2a5a8a";
+        : "#2a5a8a");
 
-    ctx.lineWidth =
-      ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * MM_TO_PX) / avgImpScale;
+    // The pen's real width, in local units: the transform scales it with the
+    // drawing, so zoomed out shows the coverage the plot will have rather
+    // than lines many times heavier than the pen. Hatching is drawn by the
+    // same pen, so at the same width.
+    const mmPerUnit = Math.sqrt(Math.abs((imp.scaleX ?? imp.scale) * (imp.scaleY ?? imp.scale))) || 1;
+    ctx.lineWidth = (imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) / mmPerUnit;
     if (respectSvgColorsOnCanvas) {
       for (const entry of impCache.outlineByColor) {
         ctx.strokeStyle = entry.color ?? outlineColor;
@@ -240,9 +263,6 @@ export function drawImportsLayer({
       ctx.stroke(impCache.outline);
     }
 
-    ctx.lineWidth =
-      ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * 0.5 * MM_TO_PX) /
-      avgImpScale;
     if (respectSvgColorsOnCanvas) {
       for (const entry of impCache.hatchByColor) {
         ctx.strokeStyle = entry.color ?? hatchColor;
@@ -261,6 +281,12 @@ interface DrawToolpathLayerParams {
   gcodeToolpath: GcodeToolpath;
   toolpathSelected: boolean;
   useMetadataColors?: boolean;
+  /**
+   * The shown page's pen: cuts are drawn in it rather than the default cyan
+   * when not coloured by their source colours (`useMetadataColors`) — G-code
+   * itself has no colour, and a plotter draws the whole file with one pen.
+   */
+  penColor?: string | null;
   toolpathOpacity: number;
   plotProgressCuts: string | null;
   plotProgressRapids: string | null;
@@ -329,6 +355,7 @@ export function drawToolpathLayer({
   gcodeToolpath,
   toolpathSelected,
   useMetadataColors = true,
+  penColor = null,
   toolpathOpacity,
   plotProgressCuts,
   plotProgressRapids,
@@ -449,7 +476,13 @@ export function drawToolpathLayer({
   };
 
   if (gcodeToolpath.cutPaths.length > 0) {
-    const defaultCutColor = toolpathSelected ? "#38bdf8" : "#0ea5e9";
+    const defaultCutColor = penColor
+      ? toolpathSelected
+        ? selectionShade(penColor)
+        : penColor
+      : toolpathSelected
+        ? "#38bdf8"
+        : "#0ea5e9";
     const cutPathColors = useMetadataColors
       ? gcodeToolpath.cutPathColors
       : null;
