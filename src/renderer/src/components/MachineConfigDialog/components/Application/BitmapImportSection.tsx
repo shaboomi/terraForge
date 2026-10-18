@@ -25,9 +25,9 @@ export function BitmapImportSection({ controller }: BitmapImportSectionProps) {
             <Badge variant="warning">Experimental</Badge>
           </div>
           <p className="text-xs text-content-faint">
-            Lets you import a photo or image and turn it into plottable geometry via a
-            renderer plugin. Large or highly-detailed renders can still make the canvas
-            sluggish to pan and zoom — off by default while that gets ironed out.
+            Lets you import a photo or image and turn it into plottable lines or dots with a
+            renderer, including colour separation into several pens. Still experimental:
+            renderers, settings and results may change between versions.
           </p>
         </div>
       </label>
