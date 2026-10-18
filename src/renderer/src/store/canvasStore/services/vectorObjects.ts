@@ -35,6 +35,9 @@ function projectPathToVectorObjects(
     viewBoxX: imp.viewBoxX,
     viewBoxY: imp.viewBoxY,
     layer: path.layer,
+    // A bitmap's paths are its inks, labelled with the ink's name; an SVG
+    // path's label is not a colour name.
+    colorName: imp.kind === "bitmap" ? path.label : undefined,
     passCount: path.passCount ?? 1,
     passMode: path.passMode ?? "repeat",
   };

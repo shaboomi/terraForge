@@ -12,6 +12,7 @@ import type { GcodePrefs } from "../../../components/GcodeOptionsDialog";
 import { normalizeSvgColor } from "../../imports/services/svgImportHelpers";
 import { vectorObjectsForImportLayer } from "../../../store/canvasStore/services/vectorObjects";
 import { flushBitmapRenders } from "../../bitmap-renderers/bitmapRenderService";
+import { colorDisplayNames, toFilenameSafe } from "../utils/colorFileNames";
 
 type GcodeProgressStage =
   | "preparing"
@@ -731,25 +732,16 @@ export function useJobActions() {
       if (!saveDir) return;
     }
 
-    const toColorFilenameBase = (color: string) => {
-      const normalized = normalizeSvgColor(color.trim());
-      const prefixed = normalized.startsWith("#")
-        ? `hex-${normalized.slice(1)}`
-        : normalized;
-      return (
-        prefixed
-          .replace(/\s+/g, "_")
-          .replace(/[^a-z0-9._-]/g, "_")
-          .replace(/^_+|_+$/g, "") || "uncolored"
-      );
-    };
+    // "cyan" or "red" where the colour has a name, rather than its hex.
+    const displayNames = colorDisplayNames(allEntries);
 
     setGenerating(true);
 
     for (const entry of allEntries) {
       const objects = entry.objects;
       const taskId = uuid();
-      const safeName = toColorFilenameBase(entry.color);
+      const displayName = displayNames.get(entry.color) ?? entry.color;
+      const safeName = toFilenameSafe(displayName);
       const defaultFilename = prefs.optimise
         ? `color_${safeName}_opt.gcode`
         : `color_${safeName}.gcode`;
@@ -757,7 +749,7 @@ export function useJobActions() {
       upsertTask({
         id: taskId,
         type: "gcode-generate",
-        label: formatGcodeProgressLabel(entry.color, "preparing"),
+        label: formatGcodeProgressLabel(displayName, "preparing"),
         progress: 0,
         status: "running",
       });
@@ -773,7 +765,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: formatGcodeProgressLabel(entry.color, msg.stage),
+              label: formatGcodeProgressLabel(displayName, msg.stage),
               progress: msg.percent,
               status: "running",
             });
@@ -782,7 +774,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: `${entry.color} ready`,
+              label: `${displayName} ready`,
               progress: 100,
               status: "completed",
             });
@@ -792,7 +784,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: `${entry.color} failed`,
+              label: `${displayName} failed`,
               progress: null,
               status: "error",
             });
@@ -867,22 +859,14 @@ export function useJobActions() {
       hatchByColor.set(key, arr);
     }
 
-    const toColorFilenameBase = (color: string) => {
-      const normalized = normalizeSvgColor(color.trim());
-      const prefixed = normalized.startsWith("#")
-        ? `hex-${normalized.slice(1)}`
-        : normalized;
-      return (
-        prefixed
-          .replace(/\s+/g, "_")
-          .replace(/[^a-z0-9._-]/g, "_")
-          .replace(/^_+|_+$/g, "") || "uncolored"
-      );
-    };
+    const displayNames = colorDisplayNames(
+      [...hatchByColor.entries()].map(([color, objects]) => ({ color, objects })),
+    );
 
     for (const [color, hatchObjects] of hatchByColor.entries()) {
       const taskId = uuid();
-      const safeName = toColorFilenameBase(color);
+      const displayName = displayNames.get(color) ?? color;
+      const safeName = toFilenameSafe(displayName);
       const defaultFilename = prefs.optimise
         ? `hatch_${safeName}_opt.gcode`
         : `hatch_${safeName}.gcode`;
@@ -890,7 +874,7 @@ export function useJobActions() {
       upsertTask({
         id: taskId,
         type: "gcode-generate",
-        label: formatGcodeProgressLabel(`hatch ${color}`, "preparing"),
+        label: formatGcodeProgressLabel(`hatch ${displayName}`, "preparing"),
         progress: 0,
         status: "running",
       });
@@ -906,7 +890,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: formatGcodeProgressLabel(`hatch ${color}`, msg.stage),
+              label: formatGcodeProgressLabel(`hatch ${displayName}`, msg.stage),
               progress: msg.percent,
               status: "running",
             });
@@ -915,7 +899,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: `Hatch ${color} ready`,
+              label: `Hatch ${displayName} ready`,
               progress: 100,
               status: "completed",
             });
@@ -925,7 +909,7 @@ export function useJobActions() {
             upsertTask({
               id: taskId,
               type: "gcode-generate",
-              label: `Hatch ${color} failed`,
+              label: `Hatch ${displayName} failed`,
               progress: null,
               status: "error",
             });

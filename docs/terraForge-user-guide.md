@@ -717,7 +717,7 @@ Choose a mode under **Colour separation**:
 
 ### Plotting a Bitmap
 
-- **One file per pen:** in the G-code options, tick **Split output into separate files** and choose **Export one file per colour group** (see [Output section](#output-section)). Each ink becomes its own G-code file, named after its colour (for example `hex-00ffff.gcode` for cyan), ready to plot with that pen. Give each ink in a custom palette a distinct colour: inks with the same colour share a file.
+- **One file per pen:** in the G-code options, tick **Split output into separate files** and choose **Export one file per colour group** (see [Output section](#output-section)). Each ink becomes its own G-code file, named after the ink (for example `color_cyan.gcode`, or `color_fineliner_blue.gcode` for a custom swatch named "Fineliner blue"), ready to plot with that pen. Give each ink in a custom palette a distinct colour: inks with the same colour share a file.
 - **Leaving inks out:** expand the import in the Properties panel and choose **By Colour**. Each ink is listed with an eye toggle; hidden inks are left out of the G-code — useful for test-plotting one ink, or skipping one you have no pen for.
 - **Dots:** for **Dot halftone**, the **Plot points** switch plots each dot as a single pen tap at its centre instead of drawing its outline.
 - **Size and placement:** move, scale and rotate the image like any import. Millimetre settings (spacing, amplitude and so on) apply at the size the image had when it was imported; scaling it afterwards scales the drawing with it, so lines move further apart or closer together. For exact spacing, import at the size you want, or adjust the settings after scaling.
@@ -867,6 +867,7 @@ During G-code generation, whenever the plotter travels more than 15 mm (rapid), 
 - When not connected, the upload option shows _"(not connected — will be skipped)"_ but remains selectable to pre-configure your preference.
 - The split-output modes are mutually exclusive radio choices under the **Split output into separate files** master checkbox.
 - **Export separate hatch files per colour** is only available when **Export one file per colour group** is selected.
+- Per-colour files are named after the colour: a separated bitmap ink's name (`color_cyan.gcode`), a basic colour's name (`color_red.gcode`), or otherwise its hex code (`color_hex-3a6aaa.gcode`). If two different colours would get the same name, each name has its hex code added.
 
 ### Persisted Preferences
 

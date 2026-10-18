@@ -240,6 +240,11 @@ export interface VectorObject {
   layer?: string;
   /** Source fill color for color-based G-code batching (e.g. '#FF0000', 'black'). */
   sourceColor?: string;
+  /**
+   * A human name for `sourceColor` when one is known — a separated bitmap
+   * ink's ("Cyan", or a custom swatch's label). Names per-colour G-code files.
+   */
+  colorName?: string;
   /** Number of times to repeat this path (default 1). */
   passCount?: number;
   /** How to handle multiple passes: repeat, backtrack, or penLift (default 'repeat'). */
