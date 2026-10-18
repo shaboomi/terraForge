@@ -59,9 +59,9 @@ export function positionForCenter(
   };
 }
 
-/** The axis-aligned box around imports' rotated outlines, as centre and half
- * extents, with each import's starting scale and centre. */
-export function groupBounds(imps: SvgImport[], getBedY: (mmY: number) => number) {
+/** The axis-aligned extents of imports' rotated outlines on the canvas, with
+ * each import's starting scale and centre. */
+export function rotatedExtents(imps: SvgImport[], getBedY: (mmY: number) => number) {
   let minWx = Infinity,
     maxWx = -Infinity,
     minWy = Infinity,
@@ -86,6 +86,13 @@ export function groupBounds(imps: SvgImport[], getBedY: (mmY: number) => number)
     }
     return { id: imp.id, startScaleX: imp.scaleX ?? imp.scale, startScaleY: imp.scaleY ?? imp.scale, cxSvg, cySvg };
   });
+  return { minWx, maxWx, minWy, maxWy, items };
+}
+
+/** The box around imports' rotated outlines, as centre and half extents,
+ * with each import's starting scale and centre. */
+export function groupBounds(imps: SvgImport[], getBedY: (mmY: number) => number) {
+  const { minWx, maxWx, minWy, maxWy, items } = rotatedExtents(imps, getBedY);
   return {
     gCx: (minWx + maxWx) / 2,
     gCy: (minWy + maxWy) / 2,
