@@ -4,6 +4,7 @@
   "apiVersion": 1,
   "entry": "index.js",
   "source": "required",
+  "inkOffset": true,
   "renderTimeoutMs": 8000,
   "defaults": { "spacingMM": 2, "amplitudeMM": 1.2, "direction": "horizontal", "skipWhite": true },
   "fields": [

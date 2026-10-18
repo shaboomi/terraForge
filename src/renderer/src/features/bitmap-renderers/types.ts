@@ -15,6 +15,12 @@ export interface BitmapRendererDefinition {
    * its manifest. Only renderers that can take one are offered for a bitmap.
    */
   source: NonNullable<BitmapPluginManifest["source"]>;
+  /**
+   * Whether it offsets each separated ink's pattern when asked
+   * (`RendererContext.ink.offset`) — the same declaration a plugin makes in
+   * its manifest. "Offset each ink" is offered only when it does.
+   */
+  inkOffset?: boolean;
   defaults: BitmapRendererSettings;
   /**
    * Settings keys this renderer has renamed, old → new. Applied when saved

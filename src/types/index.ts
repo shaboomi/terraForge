@@ -534,6 +534,12 @@ export interface BitmapPluginManifest {
    */
   source?: "required" | "optional" | "none";
   /**
+   * Whether the renderer shifts each separated ink's pattern when
+   * `ink.offset` is true. The "Offset each ink" option is only shown for
+   * renderers that declare it, since for any other it would do nothing.
+   */
+  inkOffset?: boolean;
+  /**
    * Set by the app at discovery, never read from manifest.json: a hash of
    * the plugin's source files, so a drawing rendered with an older copy of
    * the plugin can be recognised as such. Absent when the source could not

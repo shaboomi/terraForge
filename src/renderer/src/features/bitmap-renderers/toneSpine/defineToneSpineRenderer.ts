@@ -192,6 +192,8 @@ export function defineToneSpineRenderer(
     label: spec.label,
     // A tone spine traces tone, so it always needs an image.
     source: "required",
+    // The engine shifts each ink by `inkFraction` (see SpineGeometry).
+    inkOffset: true,
     version: `tone-spine-${TONE_SPINE_ENGINE_VERSION}.${spec.revision}`,
     defaults,
     fields,

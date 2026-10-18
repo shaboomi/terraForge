@@ -170,7 +170,7 @@ export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpd
         </div>
       )}
       {renderer && <BitmapToneSection imp={imp} onUpdate={onUpdate} />}
-      {renderer && <BitmapSeparationSection imp={imp} onUpdate={onUpdate} />}
+      {renderer && <BitmapSeparationSection imp={imp} onUpdate={onUpdate} canOffset={renderer.inkOffset === true} />}
       <div className="mt-2 pt-2 border-t border-border-ui/30">
         <span className="text-[10px] text-content-muted uppercase tracking-wider block mb-1.5">Show</span>
         <div className="flex items-center gap-2">

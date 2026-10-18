@@ -409,6 +409,16 @@ describe("discoverBitmapPlugins", () => {
       expect(await errorFor({ ...validManifest, source: "sometimes" })).toMatch(/manifest\.source/);
     });
 
+    it("treats a manifest that says nothing about offsetting inks as not offsetting them", async () => {
+      await writePlugin(pluginsDir, "tracer", validManifest);
+      const result = await discoverBitmapPlugins(pluginsDir);
+      expect(result.plugins[0].manifest.inkOffset).toBe(false);
+    });
+
+    it("rejects an inkOffset that is not a boolean", async () => {
+      expect(await errorFor({ ...validManifest, inkOffset: "yes" })).toMatch(/manifest\.inkOffset/);
+    });
+
     /**
      * The manifest handed to the renderer is rebuilt field by field, so an
      * optional field that validation accepts but the rebuild forgets vanishes
@@ -416,7 +426,7 @@ describe("discoverBitmapPlugins", () => {
      * field is set here, so the next one added must be carried through too.
      */
     it("carries every optional manifest field through to the renderer", async () => {
-      const optionalFields = { source: "optional", renderTimeoutMs: 8000 };
+      const optionalFields = { source: "optional", renderTimeoutMs: 8000, inkOffset: true };
       await writePlugin(pluginsDir, "everything", { ...validManifest, ...optionalFields });
 
       const result = await discoverBitmapPlugins(pluginsDir);

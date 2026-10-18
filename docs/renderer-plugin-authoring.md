@@ -75,6 +75,7 @@ and dot-directories are skipped, and symlinks are ignored rather than followed.
 | `entry` | yes | Your entry module, relative to the plugin folder. Must resolve inside it. |
 | `source` | no | `"required"` (default), `"optional"` or `"none"` — see below. |
 | `renderTimeoutMs` | no | Per-render budget. Defaults to 4000, clamped to 500–15000. |
+| `inkOffset` | no | `true` if you offset each colour-separated ink's pattern — see [Colour separation](#colour-separation-ink). Defaults to `false`. |
 | `defaults` | yes | A starting value for **every** field you declare, of the matching type. |
 | `fields` | yes | The controls to show in the properties panel. May be empty. |
 
@@ -184,7 +185,12 @@ screen through 180°, a hex dot grid through 60°), or move outward by
 be without separation. When `offset` is false the user wants every ink on
 one shared pattern, so don't shift.
 
-You can ignore `ink` entirely; your inks will then stack.
+Declare that you do this with `"inkOffset": true` in your manifest. The
+"Offset each ink" option is only shown for renderers that declare it, since
+for any other it would do nothing.
+
+You can ignore `ink` entirely and leave `inkOffset` out; your inks will then
+stack.
 
 ### What you return
 

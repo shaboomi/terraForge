@@ -123,3 +123,32 @@ describe("BitmapRendererSection with a malformed plugin schema", () => {
     expect(screen.getByRole("combobox", { name: "Bitmap renderer" })).toBeInTheDocument();
   });
 });
+
+describe("BitmapRendererSection ink offset option", () => {
+  const plugin = (inkOffset?: boolean): BitmapPluginManifest => ({
+    id: "lines.plugin",
+    label: "Lines",
+    apiVersion: 1,
+    source: "required",
+    defaults: {},
+    fields: [],
+    ...(inkOffset === undefined ? {} : { inkOffset }),
+  });
+  const separated = () =>
+    createSvgImport({ kind: "bitmap", bitmapRendererId: "lines.plugin", bitmapSeparationMode: "cmyk", paths: [] });
+
+  it("is hidden for a plugin that does not declare it, since it would do nothing", () => {
+    useBitmapPluginStore.setState({ plugins: [plugin()] });
+    render(<BitmapRendererSection imp={separated()} onUpdate={vi.fn()} />);
+
+    expect(screen.getByRole("combobox", { name: "Colour separation mode" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Offset each ink" })).not.toBeInTheDocument();
+  });
+
+  it("is offered for a plugin that declares inkOffset", () => {
+    useBitmapPluginStore.setState({ plugins: [plugin(true)] });
+    render(<BitmapRendererSection imp={separated()} onUpdate={vi.fn()} />);
+
+    expect(screen.getByRole("checkbox", { name: "Offset each ink" })).toBeChecked();
+  });
+});

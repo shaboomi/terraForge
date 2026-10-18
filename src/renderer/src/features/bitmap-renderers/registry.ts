@@ -41,6 +41,7 @@ function buildPluginDefinition(manifest: BitmapPluginManifest): BitmapRendererDe
     id: manifest.id,
     label: manifest.label,
     source: manifest.source ?? "required",
+    inkOffset: manifest.inkOffset === true,
     version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,

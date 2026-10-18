@@ -150,6 +150,8 @@ export const dotHalftoneRenderer: BitmapRendererDefinition = {
   id: DOT_HALFTONE_RENDERER_ID,
   label: "Dot halftone",
   source: "required",
+  // Each ink's grid is turned by a share of 60°.
+  inkOffset: true,
   // 2: dot area, rather than radius, proportional to tone.
   // 3: each dot's tap point is its exact centre, not its vertex average.
   // 4: dots stay inside the image — clipped at the edge, none centred outside.

@@ -20,7 +20,16 @@ function defaultSwatchColor(existingCount: number): string {
 const inputClassName =
   "flex-1 bg-app border border-border-ui rounded px-1.5 py-1 text-xs text-content focus:border-accent outline-none";
 
-export function BitmapSeparationSection({ imp, onUpdate }: { imp: SvgImport; onUpdate: (changes: Partial<SvgImport>) => void }) {
+export function BitmapSeparationSection({
+  imp,
+  onUpdate,
+  canOffset,
+}: {
+  imp: SvgImport;
+  onUpdate: (changes: Partial<SvgImport>) => void;
+  /** Whether the renderer offsets inks (`inkOffset`); the option is hidden otherwise. */
+  canOffset: boolean;
+}) {
   const mode = imp.bitmapSeparationMode ?? "none";
   const palette = imp.bitmapSeparationPalette ?? [];
 
@@ -58,7 +67,7 @@ export function BitmapSeparationSection({ imp, onUpdate }: { imp: SvgImport; onU
         ))}
       </select>
 
-      {mode !== "none" && (
+      {mode !== "none" && canOffset && (
         // Like print screens set at different angles: each ink's lines or
         // dots fall beside the others' instead of every pen tracing the same
         // pattern. Off stacks the inks on one shared pattern.
