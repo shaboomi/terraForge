@@ -57,7 +57,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Pan and drag slow on dense halftones (worst frames 650 ms / 1034 ms) — each ink's dots drawn as one path, and undo no longer deep-copies every import (now 125 ms / 23 ms) | `2969a1d` |
 | The Tonal Lines example ignored `ink`, so offsetting did nothing with it | `90bd853` |
 | "Offset each ink" was shown for renderers that ignore it — renderers now declare `inkOffset` (manifest field for plugins), and the option shows only for those | `823d1e4` |
-| Custom palettes scored each ink by colour distance (white paper got ink, black got light inks too), and RGB on white was a straight-line approximation — both now solved by constrained least-squares ink unmixing against the preview's multiply model; all separation runs in the worker pool | see git log |
+| Custom palettes scored each ink by colour distance (white paper got ink, black got light inks too), and RGB on white was a straight-line approximation — both now solved by constrained least-squares ink unmixing against the preview's multiply model; all separation runs in the worker pool | `917a256` |
 
 ### Decided
 
