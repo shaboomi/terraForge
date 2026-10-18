@@ -29,12 +29,12 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 12. Renderer code changes undetected | Fixed — version stamp per render; version-only staleness offers **Re-render** and plots as shown | `3c96690` |
 | A3. Tone preprocessing | Done — `toneAdjust.ts`; per-import Tone section for every renderer and plugin; auto levels still per ink channel under separation (issue 15) | `6dddf4f` |
 | A1. Tone-spine renderer factory | Done — `defineToneSpineRenderer`; per-renderer clamp code gone (renderers coerce their own settings); output verified byte-identical across 96 cases | `0fb3342` |
-| 13. Stale "Sawtooth width" label | Fixed in A1; other items in 13 still open | `0fb3342` |
+| 13. Stale "Sawtooth width" label | Fixed in A1 (the rest of 13 is fixed below) | `0fb3342` |
 | 8. Silent truncation | Fixed in A5 — one point budget per render, truncation reported as a warning; spiral reports its own cap | `754c875` |
 | 10. Fragile dot splitting | Fixed in A5 — dots are data (`{ d, x, y }`), nothing is parsed | `754c875` |
-| 14. Import ignored `paths` | Fixed in A5; decode limits still open | `754c875` |
+| 14. Import ignored `paths` | Fixed in A5 (decode limits fixed below) | `754c875` |
 | A5. Structured result | Done, kept as API version 1 (unreleased) — `{ layers, warnings }`, dot layers; docs and examples checked | `754c875` |
-| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated); output validation (`9dbe59b`) and tone smoothing (`2dafb6e`) moved into the pool too. Decoding still runs on the main thread | `7c47b8a` |
+| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated); output validation (`9dbe59b`) and tone smoothing (`2dafb6e`) moved into the pool too. Decoding still runs on the main thread (not part of the plan; no problem seen since 14's decode limits) | `7c47b8a` |
 | 11. Plugin id collisions | Fixed — plugin ids must be namespaced (`acme.halftone`); un-namespaced ids are reserved for built-ins | `05092e7` |
 | A6. Tidy-ups | Done — `source` on definitions, cached plugin definitions, re-export layers removed | `21bb773` |
 | 13. Radial burst centre pile-up | Fixed — rays added as the burst spreads, at a set spacing, from a small clear centre | `720e325` |
@@ -52,6 +52,11 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Dense previews re-rasterised as SVG on every pan/zoom/drag (~0.5 s a frame) — now drawn from worker-rasterised images | `6b44522` |
 | Point-budget and upload-retry tests too slow for CI under coverage | `9979102` |
 | Unused-variable lint enabled; it surfaced jog tooltips never shown, an e2e assertion never made (and a 30 s stall), and a test fake never restored | `f38b51b` |
+| Separated inks all traced the same pattern, so pens drew over each other — each ink's pattern is now offset (screen angles for halftone and line screens, a share of the spacing for rings and boxes), with an "Offset each ink" option; renderers get `ink` in their context | `30bda97` |
+| Colour previews too dark or banded when zoomed out — strokes at the pen's real width, inks multiplied onto white (screened onto black for light-on-dark RGB), drawn at 2× and scaled down | `cdc60f8` |
+| Pan and drag slow on dense halftones (worst frames 650 ms / 1034 ms) — each ink's dots drawn as one path, and undo no longer deep-copies every import (now 125 ms / 23 ms) | `2969a1d` |
+| The Tonal Lines example ignored `ink`, so offsetting did nothing with it | `90bd853` |
+| "Offset each ink" was shown for renderers that ignore it — renderers now declare `inkOffset` (manifest field for plugins), and the option shows only for those | `823d1e4` |
 
 ### Decided
 
@@ -64,6 +69,8 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 8. Early size estimate | Dropped — the render-wide budget and truncation warning cover it, renders are cancellable, and an estimate can't be made reliably for plugins | — |
 
 Nothing from the review remains open (rechecked item by item against each issue's text).
+
+Deferred, outside the review: constrained least-squares unmixing for colour separation, to revisit if custom ink colours are added.
 
 ### Done but not listed above
 
