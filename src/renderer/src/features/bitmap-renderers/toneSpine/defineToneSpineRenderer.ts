@@ -122,7 +122,7 @@ export interface ToneSpineRendererSpec {
  */
 export function defineToneSpineRenderer(
   spec: ToneSpineRendererSpec,
-): BitmapRendererDefinition & { render: (context: RendererContext) => ToneSpineResult } {
+): Omit<BitmapRendererDefinition, "render"> & { render: (context: RendererContext) => ToneSpineResult } {
   const fields: BitmapRendererFieldSchema[] = [
     ...spec.fields.map(withoutUndefined),
     waveformField(),

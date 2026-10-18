@@ -8,8 +8,8 @@ import {
   materializeBitmapLayers,
 } from "@renderer/features/bitmap-renderers/bitmapImage";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import { MAX_BITMAP_RENDERER_PATH_LENGTH } from "@types/index";
-import type { BitmapPluginManifest } from "@types/index";
+import { MAX_BITMAP_RENDERER_PATH_LENGTH } from "../../../src/types";
+import type { BitmapPluginManifest } from "../../../src/types";
 
 describe("validateRendererPath", () => {
   it("accepts realistic path data", () => {

@@ -5,7 +5,7 @@ import {
   type SpineGeometry,
 } from "@renderer/features/bitmap-renderers/toneSpine/defineToneSpineRenderer";
 import { TONE_SPINE_ENGINE_VERSION } from "@renderer/features/bitmap-renderers/toneSpine/engine";
-import type { RendererSource } from "@types/index";
+import type { RendererSource } from "../../src/types";
 
 const source: RendererSource = { width: 40, height: 20, values: new Uint8Array(800).fill(40) };
 

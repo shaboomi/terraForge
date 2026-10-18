@@ -111,8 +111,8 @@ function boxBlurPass(
 
 /** Three box-blur passes per axis: a close, linear-time Gaussian stand-in. */
 function blur(values: Float32Array, width: number, height: number, radius: number): Float32Array {
-  let current = values;
-  let scratch = new Float32Array(values.length);
+  let current: Float32Array = values;
+  let scratch: Float32Array = new Float32Array(values.length);
   for (let pass = 0; pass < 3; pass++) {
     boxBlurPass(current, scratch, height, width, width, 1, radius);
     [current, scratch] = [scratch, current];

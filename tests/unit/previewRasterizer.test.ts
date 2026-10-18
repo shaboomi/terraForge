@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BitmapPreviewRasterizer } from "@renderer/features/canvas/bitmapPreview/previewRasterizer";
 import type { RasterRequest, RasterWorkerRequest } from "@renderer/features/canvas/bitmapPreview/rasterProtocol";
-import type { SvgImport } from "@types/index";
+import type { SvgImport } from "../../src/types";
 
 /** Just enough of DOMMatrix for an axis-aligned scale + translate. */
 class Matrix {

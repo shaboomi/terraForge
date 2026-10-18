@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bitmapRenderers } from "@renderer/features/bitmap-renderers/registry";
 import { bitmapRendererStamp, bitmapRenderSignature } from "@renderer/features/bitmap-renderers/bitmapImage";
-import type { RendererContext, RendererInk, RendererOutput, RendererResult } from "@types/index";
+import type { RendererContext, RendererInk, RendererOutput, RendererResult } from "../../src/types";
 
 const W = 120;
 const H = 90;

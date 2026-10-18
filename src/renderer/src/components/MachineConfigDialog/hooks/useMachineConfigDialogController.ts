@@ -8,7 +8,7 @@ import type {
   InkServiceStationAction,
   MachineConfig,
   PenType,
-} from "../../../../types";
+} from "../../../../../types";
 import { useMachineConfigDialogStores } from "./useMachineConfigDialogStores";
 import { EMPTY_CONFIG, PEN_DEFAULTS } from "../utils/machineConfigDefaults";
 import {

@@ -162,10 +162,10 @@ export async function mockCancelDialog(
  * Mock window.confirm in the renderer to always return a given value.
  */
 export async function mockConfirm(
-  window: Page,
+  page: Page,
   returnValue: boolean,
 ): Promise<void> {
-  await window.evaluate((val) => {
+  await page.evaluate((val) => {
     (window as any).__originalConfirm =
       (window as any).__originalConfirm ?? window.confirm;
     window.confirm = () => val;
@@ -175,8 +175,8 @@ export async function mockConfirm(
 /**
  * Restore window.confirm after mocking.
  */
-export async function restoreConfirm(window: Page): Promise<void> {
-  await window.evaluate(() => {
+export async function restoreConfirm(page: Page): Promise<void> {
+  await page.evaluate(() => {
     if ((window as any).__originalConfirm) {
       window.confirm = (window as any).__originalConfirm;
     }

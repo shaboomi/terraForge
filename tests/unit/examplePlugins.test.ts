@@ -3,7 +3,7 @@ import { join } from "path";
 import { discoverBitmapPlugins, type BitmapPluginRecord } from "../../src/main/plugins/pluginManifest";
 import { readPluginModules } from "../../src/main/plugins/pluginSource";
 import { validateRendererOutput } from "../../src/renderer/src/features/bitmap-renderers/validatePath";
-import type { RendererContext, RendererOutput } from "../../src/types";
+import type { RendererContext, RendererInk, RendererOutput } from "../../src/types";
 
 // Vitest runs from the repository root.
 const examplesDir = join(process.cwd(), "examples", "plugins");
@@ -172,7 +172,7 @@ describe("example plugins", () => {
       const plugin = await loadExample(find("example.tonal-lines"));
       const settings = { spacingMM: 4, amplitudeMM: 0, direction: "horizontal", skipWhite: false };
       const dark = source(40, 40, () => 0);
-      const firstLineY = (inkArg?: object) =>
+      const firstLineY = (inkArg?: RendererInk) =>
         Number(String(plugin.render({ width: 40, height: 40, scale: 1, settings, source: dark, ink: inkArg })).match(/^M[\d.]+ ([\d.]+)/)![1]);
       const ink = (index: number, offset: boolean) => ({ index, count: 4, label: "", color: "#000000", offset });
 

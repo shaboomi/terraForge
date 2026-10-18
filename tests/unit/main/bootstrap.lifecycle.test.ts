@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => {
     handlers,
     whenReady: vi.fn(() => Promise.resolve()),
     quit: vi.fn(),
-    getAllWindows: vi.fn(() => []),
+    getAllWindows: vi.fn((): unknown[] => []),
     on: vi.fn((event: string, handler: (...args: any[]) => void) => {
       handlers.set(event, handler);
     }),

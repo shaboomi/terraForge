@@ -23,7 +23,7 @@ export interface FsPaneControllerProps {
     taskId: string,
     name: string,
   ) => void;
-  upsertTask: ReturnType<typeof useTaskStore>["upsertTask"];
+  upsertTask: ReturnType<typeof useTaskStore.getState>["upsertTask"];
 }
 
 export function useFsPaneController({

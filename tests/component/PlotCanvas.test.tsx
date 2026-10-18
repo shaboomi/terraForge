@@ -9,7 +9,6 @@ import {
   createMachineConfig,
   createGcodeToolpath,
 } from "../helpers/factories";
-import type { GcodeToolpath } from "@types/index";
 
 beforeEach(() => {
   useCanvasStore.setState({
@@ -237,25 +236,7 @@ describe("PlotCanvas", () => {
   // ── Toolpath rendering ─────────────────────────────────────────────
 
   it("renders G-code toolpath when present", () => {
-    const toolpath: GcodeToolpath = {
-      segments: [
-        {
-          type: "rapid",
-          points: [
-            { x: 0, y: 0 },
-            { x: 10, y: 10 },
-          ],
-        },
-        {
-          type: "cut",
-          points: [
-            { x: 10, y: 10 },
-            { x: 20, y: 20 },
-          ],
-        },
-      ],
-      bounds: { minX: 0, minY: 0, maxX: 20, maxY: 20 },
-    };
+    const toolpath = createGcodeToolpath();
     useCanvasStore.setState({ gcodeToolpath: toolpath });
     const { container } = render(<PlotCanvas />);
     // Toolpath segments should be rendered as polyline or path elements
@@ -301,18 +282,7 @@ describe("PlotCanvas", () => {
   // ── Delete toolpath via keyboard ──────────────────────────────────
 
   it("Delete key removes toolpath when toolpath is selected", async () => {
-    const toolpath: GcodeToolpath = {
-      segments: [
-        {
-          type: "cut",
-          points: [
-            { x: 0, y: 0 },
-            { x: 10, y: 10 },
-          ],
-        },
-      ],
-      bounds: { minX: 0, minY: 0, maxX: 10, maxY: 10 },
-    };
+    const toolpath = createGcodeToolpath();
     useCanvasStore.setState({ gcodeToolpath: toolpath });
     render(<PlotCanvas />);
     // Click on a toolpath-related element to "select" it — use fireEvent on SVG
@@ -323,18 +293,7 @@ describe("PlotCanvas", () => {
 
   it("deleting canvas gcode clears selectedJobFile when source is local", async () => {
     // Simulate: user imported a local gcode file — both stores set
-    const toolpath: GcodeToolpath = {
-      segments: [
-        {
-          type: "cut",
-          points: [
-            { x: 0, y: 0 },
-            { x: 5, y: 5 },
-          ],
-        },
-      ],
-      bounds: { minX: 0, minY: 0, maxX: 5, maxY: 5 },
-    };
+    const toolpath = createGcodeToolpath();
     useCanvasStore.setState({ gcodeToolpath: toolpath });
     useMachineStore.setState({
       selectedJobFile: {
@@ -358,18 +317,7 @@ describe("PlotCanvas", () => {
   });
 
   it("deleting canvas gcode does NOT clear selectedJobFile when source is fs", () => {
-    const toolpath: GcodeToolpath = {
-      segments: [
-        {
-          type: "cut",
-          points: [
-            { x: 0, y: 0 },
-            { x: 5, y: 5 },
-          ],
-        },
-      ],
-      bounds: { minX: 0, minY: 0, maxX: 5, maxY: 5 },
-    };
+    const toolpath = createGcodeToolpath();
     useCanvasStore.setState({ gcodeToolpath: toolpath });
     const fsFile = {
       path: "/sd/job.gcode",

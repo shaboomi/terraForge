@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import type { BitmapPluginManifest, RendererContext } from "@types/index";
+import type { BitmapPluginManifest, RendererContext } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/toneAdjust", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@renderer/features/bitmap-renderers/toneAdjust")>();

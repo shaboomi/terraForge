@@ -8,7 +8,7 @@ import type {
   BitmapPluginManifest,
   BitmapRendererNumberFieldSchema,
   BitmapRendererSelectFieldSchema,
-} from "@types/index";
+} from "../../src/types";
 import { createSvgImport } from "../helpers/factories";
 
 /** React logs every caught render error; that is expected here, not a failure. */

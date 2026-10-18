@@ -322,7 +322,7 @@ test("machine selector in toolbar now shows the new active config", async () => 
   const selectedName = await window
     .locator("select[aria-label='Machine selector']")
     .evaluate((select) => {
-      const option = select.selectedOptions[0];
+      const option = (select as HTMLSelectElement).selectedOptions[0];
       return option?.textContent?.trim() ?? "";
     });
   expect(selectedName).toContain("Test Machine E2E");

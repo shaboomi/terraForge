@@ -11,7 +11,7 @@ import {
   type ToneSettings,
 } from "@renderer/features/bitmap-renderers/toneAdjust";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import type { BitmapPluginManifest, RendererContext, RendererSource } from "@types/index";
+import type { BitmapPluginManifest, RendererContext, RendererSource } from "../../src/types";
 
 const neutral: ToneSettings = { autoLevels: false, contrast: 1, smoothingMM: 0 };
 

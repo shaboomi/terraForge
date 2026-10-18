@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
 import { useCanvasStore } from "@renderer/store/canvasStore";
-import type { BitmapPluginManifest, SvgImport } from "@types/index";
+import type { BitmapPluginManifest, SvgImport } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
   const actual =

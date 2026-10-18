@@ -18,12 +18,12 @@ type HistState = ReturnType<typeof createUndoRedoSlice> & {
 
 function makeStore() {
   return create<HistState>()(
-    immer((set, get) => ({
+    immer((set, get, store) => ({
       imports: [],
       selectedImportId: null,
       selectedPathId: null,
       allImportsSelected: false,
-      ...createUndoRedoSlice(set as any, get as any),
+      ...createUndoRedoSlice(set as any, get as any, store as any),
     })),
   );
 }

@@ -8,7 +8,7 @@ import { resetRendererPool, runInTreeRenderer, smoothInWorker } from "@renderer/
 import { smoothSource } from "@renderer/features/bitmap-renderers/toneAdjust";
 import { rasterLinesRenderer } from "@renderer/features/bitmap-renderers/rasterLines";
 import { validateRendererOutput } from "@renderer/features/bitmap-renderers/validatePath";
-import type { RendererContext } from "@types/index";
+import type { RendererContext } from "../../src/types";
 
 /**
  * Stands in for a real Worker: runs the very handler the worker entry runs,

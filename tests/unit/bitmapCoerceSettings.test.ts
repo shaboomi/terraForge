@@ -7,7 +7,7 @@ import {
 import { clearBitmapDecodeCache, materializeBitmapLayers } from "@renderer/features/bitmap-renderers/bitmapImage";
 import { bitmapRenderers } from "@renderer/features/bitmap-renderers/registry";
 import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import type { BitmapPluginManifest, BitmapRendererFieldSchema, RendererContext } from "@types/index";
+import type { BitmapPluginManifest, BitmapRendererFieldSchema, RendererContext } from "../../src/types";
 
 const fields: BitmapRendererFieldSchema[] = [
   { type: "number", key: "spacing", label: "Spacing", min: 1, max: 10, step: 1 },

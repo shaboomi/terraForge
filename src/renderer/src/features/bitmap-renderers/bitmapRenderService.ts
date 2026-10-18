@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, type StoreApi, type UseBoundStore } from "zustand";
 import type { SvgImport } from "../../../../types";
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -51,7 +51,7 @@ interface BitmapRenderStatusStore {
 // Reused across hot reloads (see the bottom of this file), so a component
 // still holding the previous version of this module reads the same store the
 // running service writes to.
-export const useBitmapRenderStatusStore: ReturnType<typeof create<BitmapRenderStatusStore>> =
+export const useBitmapRenderStatusStore: UseBoundStore<StoreApi<BitmapRenderStatusStore>> =
   import.meta.hot?.data?.statusStore ?? create<BitmapRenderStatusStore>(() => ({ entries: {} }));
 
 const IDLE: BitmapRenderState = { status: "idle", error: null };

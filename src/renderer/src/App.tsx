@@ -22,7 +22,7 @@ import { useAppConfigStore } from "./store/appConfigStore";
 import { useThemeStore, applyTheme } from "./store/themeStore";
 import { useResizablePanel } from "./hooks/useResizablePanel";
 import { RULER_W } from "./features/canvas";
-import type { OriginType } from "@types/index";
+import type { OriginType } from "../../types";
 
 const GCODE_EXTS = [
   ".gcode",

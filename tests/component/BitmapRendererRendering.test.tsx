@@ -8,7 +8,7 @@ import {
   RENDER_DEBOUNCE_MS,
   startBitmapRenderService,
 } from "@renderer/features/bitmap-renderers/bitmapRenderService";
-import type { BitmapPluginManifest, SvgImport } from "@types/index";
+import type { BitmapPluginManifest, SvgImport } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
   const actual =
