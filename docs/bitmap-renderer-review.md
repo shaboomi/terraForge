@@ -34,7 +34,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 10. Fragile dot splitting | Fixed in A5 — dots are data (`{ d, x, y }`), nothing is parsed | `754c875` |
 | 14. Import ignored `paths` | Fixed in A5 (decode limits fixed below) | `754c875` |
 | A5. Structured result | Done, kept as API version 1 (unreleased) — `{ layers, warnings }`, dot layers; docs and examples checked | `754c875` |
-| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated); output validation (`9dbe59b`) and tone smoothing (`2dafb6e`) moved into the pool too. Decoding still runs on the main thread (not part of the plan; no problem seen since 14's decode limits) | `7c47b8a` |
+| A2. Off-thread rendering | Done for in-tree renderers — worker pool, parallel ink channels, superseded renders aborted (worker terminated); output validation (`9dbe59b`) and tone smoothing (`2dafb6e`) moved into the pool too. Colour separation moved into the pool later (see below); decoding still runs on the main thread (not part of the plan; no problem seen since 14's decode limits) | `7c47b8a` |
 | 11. Plugin id collisions | Fixed — plugin ids must be namespaced (`acme.halftone`); un-namespaced ids are reserved for built-ins | `05092e7` |
 | A6. Tidy-ups | Done — `source` on definitions, cached plugin definitions, re-export layers removed | `21bb773` |
 | 13. Radial burst centre pile-up | Fixed — rays added as the burst spreads, at a set spacing, from a small clear centre | `720e325` |
@@ -57,6 +57,7 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | Pan and drag slow on dense halftones (worst frames 650 ms / 1034 ms) — each ink's dots drawn as one path, and undo no longer deep-copies every import (now 125 ms / 23 ms) | `2969a1d` |
 | The Tonal Lines example ignored `ink`, so offsetting did nothing with it | `90bd853` |
 | "Offset each ink" was shown for renderers that ignore it — renderers now declare `inkOffset` (manifest field for plugins), and the option shows only for those | `823d1e4` |
+| Custom palettes scored each ink by colour distance (white paper got ink, black got light inks too), and RGB on white was a straight-line approximation — both now solved by constrained least-squares ink unmixing against the preview's multiply model; all separation runs in the worker pool | see git log |
 
 ### Decided
 
@@ -69,8 +70,6 @@ input will hit. **Low** = polish, consistency, or latent risk.
 | 8. Early size estimate | Dropped — the render-wide budget and truncation warning cover it, renders are cancellable, and an estimate can't be made reliably for plugins | — |
 
 Nothing from the review remains open (rechecked item by item against each issue's text).
-
-Deferred, outside the review: constrained least-squares unmixing for colour separation, to revisit if custom ink colours are added.
 
 ### Done but not listed above
 

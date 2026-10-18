@@ -2,15 +2,9 @@ import type { RendererDot, RendererInk, RendererSource, SvgImport, SvgPath } fro
 import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
 import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
-import {
-  separateCMY,
-  separateCMYK,
-  separateCustomPalette,
-  separateRGB,
-  separateRGBOnWhite,
-} from "./colourSeparation";
+import type { SeparationMode } from "./colourSeparation";
 import { findBitmapRenderer, getBitmapRenderer } from "./registry";
-import { runRenderer, smoothInWorker } from "./rendererPool";
+import { runRenderer, separateInWorker, smoothInWorker } from "./rendererPool";
 import type { ValidatedLayer } from "./validatePath";
 import type { BitmapRendererDefinition } from "./types";
 
@@ -193,19 +187,26 @@ export const BITMAP_PIPELINE_VERSION = 2;
  */
 const SEPARATION_VERSION = 1;
 
+/**
+ * Bump when ink unmixing (`inkUnmixing.ts`) gives different inks for the same
+ * image. Only part of the stamp for the modes that use it, so CMY and CMYK
+ * drawings are not offered a re-render that would change nothing.
+ *
+ * 1: least-squares unmixing replaced per-swatch colour distance (custom) and
+ *    a straight-line approximation (RGB on white).
+ */
+const UNMIXING_VERSION = 1;
+
 /** What a render records about the code that produced it — compared against
  * the current stamp to spot output made by an older renderer. */
 export function bitmapRendererStamp(
   renderer: Pick<BitmapRendererDefinition, "id" | "version">,
-  separated = false,
+  separation: SeparationMode = "none",
 ): string {
   const stamp = `${BITMAP_PIPELINE_VERSION}/${renderer.id}@${renderer.version}`;
-  return separated ? `${stamp}+inks${SEPARATION_VERSION}` : stamp;
-}
-
-/** Whether a bitmap renders as separated inks. */
-export function isSeparated(bitmap: Pick<SvgImport, "bitmapSeparationMode">): boolean {
-  return (bitmap.bitmapSeparationMode ?? "none") !== "none";
+  if (separation === "none") return stamp;
+  const unmixed = separation === "custom" || separation === "rgb-white";
+  return `${stamp}+inks${SEPARATION_VERSION}${unmixed ? `+unmix${UNMIXING_VERSION}` : ""}`;
 }
 
 export interface MaterializedBitmap {
@@ -361,7 +362,7 @@ export async function materializeBitmapLayers(
 
   return {
     ...(await renderWith(renderer, bitmap, bitmap.bitmapDataUrl, options.signal)),
-    rendererVersion: bitmapRendererStamp(renderer, isSeparated(bitmap)),
+    rendererVersion: bitmapRendererStamp(renderer, bitmap.bitmapSeparationMode),
   };
 }
 
@@ -412,12 +413,7 @@ async function smoothedSources(
     sources = [{ label: "", color: "", source: await smooth(await decodeBitmapLuminance(dataUrl)) }];
   } else {
     const colorData = await decodeBitmapColor(dataUrl);
-    const channels =
-      mode === "rgb" ? separateRGB(colorData)
-      : mode === "rgb-white" ? separateRGBOnWhite(colorData)
-      : mode === "cmy" ? separateCMY(colorData)
-      : mode === "cmyk" ? separateCMYK(colorData)
-      : separateCustomPalette(colorData, bitmap.bitmapSeparationPalette ?? []);
+    const channels = await separateInWorker(colorData, mode, bitmap.bitmapSeparationPalette ?? [], signal);
     sources = await Promise.all(
       channels.map(async ({ label, color, luminance }) => ({ label, color, source: await smooth(luminance) })),
     );

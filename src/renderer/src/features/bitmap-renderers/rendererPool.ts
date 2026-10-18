@@ -1,7 +1,10 @@
 import type { RendererContext, RendererSource } from "../../../../types";
 import { bitmapRenderers } from "./registry";
+import type { BitmapColorData } from "./bitmapImage";
+import type { CustomPaletteSwatch, SeparatedChannel, SeparationMode } from "./colourSeparation";
 import {
   handleRenderRequest,
+  handleSeparateRequest,
   handleSmoothRequest,
   type PoolReply,
   type PoolRequest,
@@ -10,7 +13,8 @@ import type { BitmapRendererDefinition } from "./types";
 import { validateRendererOutput, type ValidatedOutput } from "./validatePath";
 
 /**
- * Runs in-tree renderers — and tone smoothing — off the main thread. A
+ * Runs in-tree renderers — and tone smoothing and colour separation — off
+ * the main thread. A
  * large spiral or fine ring
  * render takes long enough to freeze the UI outright when run inline; in a
  * worker the app stays responsive, a colour separation's channels render in
@@ -153,6 +157,21 @@ export function smoothInWorker(
 ): Promise<RendererSource> {
   const request: PoolRequest = { id: nextId++, kind: "smooth", source, smoothingMM, pixelsPerMM };
   return runTask(request, signal, async () => unwrap(handleSmoothRequest({ ...request, kind: "smooth" })));
+}
+
+/**
+ * Colour separation (see `separateColours`) in a worker when available.
+ * `image` is copied to the worker, not handed over, so a cached decode stays
+ * usable. Abortable — see `runTask`.
+ */
+export function separateInWorker(
+  image: BitmapColorData,
+  mode: Exclude<SeparationMode, "none">,
+  palette: CustomPaletteSwatch[],
+  signal?: AbortSignal,
+): Promise<SeparatedChannel[]> {
+  const request: PoolRequest = { id: nextId++, kind: "separate", image, mode, palette };
+  return runTask(request, signal, async () => unwrap(handleSeparateRequest({ ...request, kind: "separate" })));
 }
 
 /**

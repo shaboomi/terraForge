@@ -7,6 +7,7 @@ import {
   separateRGBOnWhite,
 } from "../../src/renderer/src/features/bitmap-renderers/colourSeparation";
 import type { BitmapColorData } from "../../src/renderer/src/features/bitmap-renderers/bitmapImage";
+import { mixInks, type InkColour } from "../../src/renderer/src/features/bitmap-renderers/inkUnmixing";
 
 function uniformImage(r: number, g: number, b: number, width = 2, height = 2): BitmapColorData {
   const pixelCount = width * height;
@@ -20,10 +21,20 @@ function uniformImage(r: number, g: number, b: number, width = 2, height = 2): B
   return { width, height, rgba };
 }
 
+/** Ink coverage (0 = none, 255 = full) per channel, from separated channels. */
+const coverage = (channels: { luminance: { values: Uint8Array } }[]) => channels.map((channel) => 255 - channel.luminance.values[0]);
+
+/** The colour (0–255) a separation's inks make, multiplied onto white paper. */
+function remix(channels: { color: string; luminance: { values: Uint8Array } }[]): number[] {
+  const inks = channels.map(({ color }) => [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255) as unknown as InkColour);
+  return mixInks(coverage(channels).map((value) => value / 255), inks).map((value) => value * 255);
+}
+
+const expectColourNear = (actual: number[], expected: number[], tolerance = 3) =>
+  actual.forEach((value, c) => expect(Math.abs(value - expected[c]), `channel ${c}: ${actual} vs ${expected}`).toBeLessThanOrEqual(tolerance));
+
 describe("separateRGBOnWhite", () => {
-  /** Ink density (0 = none, 255 = full) per channel, for a uniform colour. */
-  const inks = (r: number, g: number, b: number) =>
-    separateRGBOnWhite(uniformImage(r, g, b)).map((channel) => 255 - channel.luminance.values[0]);
+  const inks = (r: number, g: number, b: number) => coverage(separateRGBOnWhite(uniformImage(r, g, b)));
 
   it("puts no ink on white paper where the image is white", () => {
     expect(inks(255, 255, 255)).toEqual([0, 0, 0]);
@@ -35,24 +46,16 @@ describe("separateRGBOnWhite", () => {
     expect(inks(0, 0, 255)).toEqual([0, 0, 255]);
   });
 
-  it("builds black and greys from all three pens equally", () => {
-    const [r, g, b] = inks(0, 0, 0);
-    expect(r).toBe(g);
-    expect(g).toBe(b);
-    expect(r).toBeGreaterThan(120);
-    const grey = inks(128, 128, 128);
-    expect(new Set(grey).size).toBe(1);
-    expect(grey[0]).toBeLessThan(r);
+  it("makes black and greys as the pens would on paper", () => {
+    expectColourNear(remix(separateRGBOnWhite(uniformImage(0, 0, 0))), [0, 0, 0]);
+    expectColourNear(remix(separateRGBOnWhite(uniformImage(128, 128, 128))), [128, 128, 128]);
   });
 
-  it("absorbs each missing primary with the two inks that absorb it, for colours the pens can mix", () => {
-    // A red pen absorbs green and blue, and so on: the inks covering each
-    // primary should add up to how much of it the pixel lacks.
-    for (const [R, G, B] of [[200, 90, 40], [120, 170, 200], [100, 100, 20]]) {
-      const [r, g, b] = inks(R, G, B);
-      expect(g + b, `red missing for ${R},${G},${B}`).toBeCloseTo(255 - R, -1);
-      expect(r + b, `green missing for ${R},${G},${B}`).toBeCloseTo(255 - G, -1);
-      expect(r + g, `blue missing for ${R},${G},${B}`).toBeCloseTo(255 - B, -1);
+  it("gets back any colour the pens can mix", () => {
+    const pens: InkColour[] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    for (const mix of [[0.3, 0.6, 0.1], [0.8, 0.2, 0.5], [0, 0.4, 0.9]]) {
+      const colour = mixInks(mix, pens).map((value) => Math.round(value * 255));
+      expectColourNear(remix(separateRGBOnWhite(uniformImage(colour[0], colour[1], colour[2]))), colour);
     }
   });
 
@@ -136,18 +139,34 @@ describe("separateCMYK", () => {
 });
 
 describe("separateCustomPalette", () => {
-  it("gives full ink where a pixel exactly matches a swatch", () => {
-    const [channel] = separateCustomPalette(uniformImage(10, 20, 30), [
-      { label: "Custom", color: "#0a141e" }, // exactly (10, 20, 30)
-    ]);
-    expect(channel.luminance.values[0]).toBe(0);
+  const separate = (rgb: [number, number, number], colors: string[]) =>
+    separateCustomPalette(uniformImage(...rgb), colors.map((color, i) => ({ label: `Ink ${i + 1}`, color })));
+
+  it("gives full ink where a pixel exactly matches a swatch, and none of the others", () => {
+    // Within an 8-bit step: interpolating the solved grid, and the small charge per unit of ink.
+    expect(coverage(separate([10, 20, 30], ["#0a141e"]))[0]).toBeGreaterThanOrEqual(253);
+    expect(coverage(separate([255, 255, 0], ["#000000", "#ffff00"]))).toEqual([0, 255]);
   });
 
-  it("gives no ink where a pixel is maximally distant from a swatch", () => {
-    const [channel] = separateCustomPalette(uniformImage(255, 255, 255), [
-      { label: "Black swatch", color: "#000000" },
-    ]);
-    expect(channel.luminance.values[0]).toBe(255);
+  it("puts no ink on white paper", () => {
+    expect(coverage(separate([255, 255, 255], ["#000000", "#ffff00", "#ff8800"]))).toEqual([0, 0, 0]);
+  });
+
+  it("does not add a light ink to black — the black pen alone makes it", () => {
+    // Scoring each ink by colour distance put 18% yellow over black, and 42%
+    // yellow over the whole of a white page.
+    expect(coverage(separate([0, 0, 0], ["#000000", "#ffff00"]))).toEqual([255, 0]);
+  });
+
+  it("uses least ink where several mixes match: a black pen rather than three colours", () => {
+    expect(coverage(separate([0, 0, 0], ["#00ffff", "#ff00ff", "#ffff00", "#000000"]))).toEqual([0, 0, 0, 255]);
+  });
+
+  it("reproduces any colour within the pens' reach", () => {
+    const colors = ["#00ffff", "#ff00ff", "#ffff00", "#000000"];
+    for (const rgb of [[30, 160, 220], [200, 90, 40], [128, 128, 128], [90, 200, 120]] as [number, number, number][]) {
+      expectColourNear(remix(separate(rgb, colors)), rgb);
+    }
   });
 
   it("produces one channel per palette entry, each carrying its own colour", () => {

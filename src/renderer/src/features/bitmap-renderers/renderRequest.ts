@@ -1,6 +1,13 @@
 import type { RendererContext, RendererSource } from "../../../../types";
 import { bitmapRenderers } from "./registry";
 import { smoothSource } from "./toneAdjust";
+import type { BitmapColorData } from "./bitmapImage";
+import {
+  separateColours,
+  type CustomPaletteSwatch,
+  type SeparatedChannel,
+  type SeparationMode,
+} from "./colourSeparation";
 import { validateRendererOutput, type ValidatedOutput } from "./validatePath";
 
 /** A render posted to a renderer worker: which in-tree renderer, and its context. */
@@ -20,7 +27,16 @@ export interface SmoothRequest {
   pixelsPerMM: number;
 }
 
-export type PoolRequest = RenderRequest | SmoothRequest;
+/** Colour separation posted to a renderer worker — see `separateColours`. */
+export interface SeparateRequest {
+  id: number;
+  kind: "separate";
+  image: BitmapColorData;
+  mode: Exclude<SeparationMode, "none">;
+  palette: CustomPaletteSwatch[];
+}
+
+export type PoolRequest = RenderRequest | SmoothRequest | SeparateRequest;
 
 export type RenderReply =
   | { id: number; ok: true; output: ValidatedOutput }
@@ -30,7 +46,11 @@ export type SmoothReply =
   | { id: number; ok: true; output: RendererSource }
   | { id: number; ok: false; message: string };
 
-export type PoolReply = RenderReply | SmoothReply;
+export type SeparateReply =
+  | { id: number; ok: true; output: SeparatedChannel[] }
+  | { id: number; ok: false; message: string };
+
+export type PoolReply = RenderReply | SmoothReply | SeparateReply;
 
 /**
  * Runs one in-tree render, validates it, and packages the outcome for posting
@@ -60,7 +80,28 @@ export function handleSmoothRequest({ id, source, smoothingMM, pixelsPerMM }: Sm
   }
 }
 
+/** Runs colour separation for the pool: a pass over every pixel per ink,
+ * and for unmixed modes a solve per palette, kept off the UI thread. */
+export function handleSeparateRequest({ id, image, mode, palette }: SeparateRequest): SeparateReply {
+  try {
+    return { id, ok: true, output: separateColours(image, mode, palette) };
+  } catch (err) {
+    return { id, ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** The buffers in a reply that can be handed over rather than copied: the
+ * images it carries are megabytes and not used in the worker again. */
+export function replyTransfers(reply: PoolReply, kind: PoolRequest["kind"]): Transferable[] {
+  if (!reply.ok) return [];
+  if (kind === "smooth") return [(reply.output as RendererSource).values.buffer];
+  if (kind === "separate") return (reply.output as SeparatedChannel[]).map((channel) => channel.luminance.values.buffer);
+  return [];
+}
+
 /** Dispatches any pool request to its handler. */
 export async function handlePoolRequest(request: PoolRequest): Promise<PoolReply> {
-  return request.kind === "smooth" ? handleSmoothRequest(request) : handleRenderRequest(request);
+  if (request.kind === "smooth") return handleSmoothRequest(request);
+  if (request.kind === "separate") return handleSeparateRequest(request);
+  return handleRenderRequest(request);
 }

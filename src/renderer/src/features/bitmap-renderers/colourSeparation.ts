@@ -1,5 +1,8 @@
 import type { BitmapColorData } from "./bitmapImage";
-import type { RendererSource } from "../../../../types";
+import type { RendererSource, SvgImport } from "../../../../types";
+import { unmixInks, type InkColour } from "./inkUnmixing";
+
+export type SeparationMode = NonNullable<SvgImport["bitmapSeparationMode"]>;
 
 export interface SeparatedChannel {
   label: string;
@@ -57,38 +60,22 @@ export function separateRGB(image: BitmapColorData): SeparatedChannel[] {
 }
 
 /**
- * Red, green and blue pens on white paper. On paper an ink works by
- * absorbing light: a red pen reflects red and absorbs green and blue. So
- * each primary the pixel is missing has to be absorbed by the two inks that
- * absorb it — missing green by red and blue ink, and so on — which solves
- * to each ink's density being half of (the two primaries it absorbs, less
- * the one it doesn't). White needs no ink, a pure red only the red pen, and
- * black all three at half strength.
+ * Red, green and blue pens on white paper, solved by ink unmixing (see
+ * `inkUnmixing.ts`): the mix of the three that, multiplied onto white, comes
+ * closest to each pixel. On paper a pen works by absorbing light — a red pen
+ * reflects red and absorbs green and blue — so white needs no ink, a pure red
+ * only the red pen, and black any two pens at full strength.
  *
  * Red, green and blue pens cannot mix every colour on paper: a yellow, for
  * instance, comes out as a dull mix of red and green. For the widest range on
  * white paper, CMY/CMYK remain the better choice.
  */
 export function separateRGBOnWhite(image: BitmapColorData): SeparatedChannel[] {
-  const pixelCount = image.width * image.height;
-  const red = new Uint8Array(pixelCount);
-  const green = new Uint8Array(pixelCount);
-  const blue = new Uint8Array(pixelCount);
-  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
-  for (let i = 0; i < pixelCount; i++) {
-    const offset = i * 4;
-    const missingRed = 255 - image.rgba[offset];
-    const missingGreen = 255 - image.rgba[offset + 1];
-    const missingBlue = 255 - image.rgba[offset + 2];
-    red[i] = clamp((missingGreen + missingBlue - missingRed) / 2);
-    green[i] = clamp((missingRed + missingBlue - missingGreen) / 2);
-    blue[i] = clamp((missingRed + missingGreen - missingBlue) / 2);
-  }
-  return [
-    { label: "Red", color: "#ff0000", luminance: densityToLuminanceInPlace(red, image.width, image.height) },
-    { label: "Green", color: "#00ff00", luminance: densityToLuminanceInPlace(green, image.width, image.height) },
-    { label: "Blue", color: "#0000ff", luminance: densityToLuminanceInPlace(blue, image.width, image.height) },
-  ];
+  return separateCustomPalette(image, [
+    { label: "Red", color: "#ff0000" },
+    { label: "Green", color: "#00ff00" },
+    { label: "Blue", color: "#0000ff" },
+  ]);
 }
 
 /** Standard subtractive complement of RGB: density(C) = 255-R, etc. */
@@ -141,8 +128,6 @@ export function separateCMYK(image: BitmapColorData): SeparatedChannel[] {
   ];
 }
 
-const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
-
 function parseHexColor(hex: string): [number, number, number] {
   const normalized = hex.replace("#", "");
   const expanded = normalized.length === 3
@@ -153,31 +138,34 @@ function parseHexColor(hex: string): [number, number, number] {
 }
 
 /**
- * Assigns each pixel a per-swatch ink density proportional to how close its
- * colour is to that swatch (closer = more ink), independently per swatch.
- * A simple proximity model, not a solved multi-ink mixing optimisation —
- * intentionally so; see the plan for why this stays simple in the first pass.
+ * Any set of pens on white paper, solved by ink unmixing (see
+ * `inkUnmixing.ts`): for each pixel, how much of each pen to lay down so that
+ * together they look most like it. White gets no ink, a colour one pen can
+ * draw gets that pen, and a colour no mix can reach gets the nearest mix
+ * there is.
  */
 export function separateCustomPalette(
   image: BitmapColorData,
   palette: CustomPaletteSwatch[],
 ): SeparatedChannel[] {
-  const pixelCount = image.width * image.height;
-  return palette.map((swatch) => {
-    const [sr, sg, sb] = parseHexColor(swatch.color);
-    const density = new Uint8Array(pixelCount);
-    for (let i = 0; i < pixelCount; i++) {
-      const offset = i * 4;
-      const dr = image.rgba[offset] - sr;
-      const dg = image.rgba[offset + 1] - sg;
-      const db = image.rgba[offset + 2] - sb;
-      const distance = Math.sqrt(dr * dr + dg * dg + db * db);
-      density[i] = Math.max(0, Math.round(255 * (1 - distance / MAX_RGB_DISTANCE)));
-    }
-    return {
-      label: swatch.label,
-      color: swatch.color,
-      luminance: densityToLuminanceInPlace(density, image.width, image.height),
-    };
-  });
+  const inks = palette.map((swatch) => parseHexColor(swatch.color).map((v) => v / 255) as unknown as InkColour);
+  const coverages = unmixInks(image.rgba, image.width * image.height, inks);
+  return palette.map((swatch, index) => ({
+    label: swatch.label,
+    color: swatch.color,
+    luminance: densityToLuminanceInPlace(coverages[index], image.width, image.height),
+  }));
+}
+
+/** Separates an image into the inks of `mode`. */
+export function separateColours(
+  image: BitmapColorData,
+  mode: Exclude<SeparationMode, "none">,
+  palette: CustomPaletteSwatch[] = [],
+): SeparatedChannel[] {
+  return mode === "rgb" ? separateRGB(image)
+    : mode === "rgb-white" ? separateRGBOnWhite(image)
+    : mode === "cmy" ? separateCMY(image)
+    : mode === "cmyk" ? separateCMYK(image)
+    : separateCustomPalette(image, palette);
 }

@@ -74,8 +74,16 @@ describe("render stamps and signatures for separation", () => {
   const spiral = bitmapRenderers.find((r) => r.id === "spiral-amplitude")!;
 
   it("marks only separated output as made before inks were offset", () => {
-    expect(bitmapRendererStamp(spiral, true)).not.toBe(bitmapRendererStamp(spiral, false));
-    expect(bitmapRendererStamp(spiral)).toBe(bitmapRendererStamp(spiral, false));
+    expect(bitmapRendererStamp(spiral, "cmyk")).not.toBe(bitmapRendererStamp(spiral, "none"));
+    expect(bitmapRendererStamp(spiral)).toBe(bitmapRendererStamp(spiral, "none"));
+  });
+
+  it("marks only the unmixed modes as made before ink unmixing", () => {
+    expect(bitmapRendererStamp(spiral, "custom")).toBe(bitmapRendererStamp(spiral, "rgb-white"));
+    expect(bitmapRendererStamp(spiral, "custom")).not.toBe(bitmapRendererStamp(spiral, "cmyk"));
+    // CMY, CMYK and light-on-dark RGB are unchanged, so not offered a re-render.
+    expect(bitmapRendererStamp(spiral, "cmyk")).toBe(bitmapRendererStamp(spiral, "cmy"));
+    expect(bitmapRendererStamp(spiral, "rgb")).toBe(bitmapRendererStamp(spiral, "cmy"));
   });
 
   it("keeps a drawing's signature until the offset setting is first changed", () => {
