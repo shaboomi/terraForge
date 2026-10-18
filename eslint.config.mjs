@@ -57,7 +57,11 @@ export default [
   {
     // Test files often use large describe/it callback bodies for scenario
     // readability; do not enforce function-length limits there.
-    files: ["tests/**/*.test.{ts,tsx}", "tests/**/*.spec.{ts,tsx}"],
+    files: [
+      "tests/**/*.test.{ts,tsx}",
+      "tests/**/*.spec.{ts,tsx}",
+      "src/**/*.test.{ts,tsx}",
+    ],
     rules: {
       "max-lines-per-function": "off",
     },
