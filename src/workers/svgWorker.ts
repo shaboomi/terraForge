@@ -164,6 +164,19 @@ function isPointWithinBounds(
   );
 }
 
+/**
+ * Whether the mode has a station it can use: prime or wipe for prime-wipe,
+ * a dip tray for brush-dip. Without one a service move does nothing, so
+ * the job is generated as if the service were off — rather than retrying a
+ * move that can never happen at every point of the drawing.
+ */
+function canServiceInMode(settings: InkServiceSettings): boolean {
+  const stations = settings.stations.filter(isEnabledStation);
+  return settings.mode === "prime-wipe"
+    ? stations.some((s) => s.type === "prime" || s.type === "wipe")
+    : stations.some((s) => s.type === "dip");
+}
+
 function isEnabledStation(station: InkServiceStation): boolean {
   return station.enabled !== false;
 }
@@ -1024,15 +1037,13 @@ async function generate(msg: GenerateMessage): Promise<void> {
   let lastMarkerKey: string | null = null;
   let accumulatedDrawTravel = 0;
   const canEmitInkService =
-    !!inkService &&
-    inkTriggerBase > 0 &&
-    inkService.stations.some(isEnabledStation);
+    !!inkService && inkTriggerBase > 0 && canServiceInMode(inkService);
   const totalOperations = orderedSubpaths.length + allPoints.length;
   const phase4StartProgress = hasPreEmitProcessing ? 95 : 40;
 
   const emitTriggeredInkService = (preferredDipStationId?: string): void => {
     if (!canEmitInkService || !inkService) return;
-    const inserted = emitInkServiceMove(
+    emitInkServiceMove(
       lines,
       config,
       inkService,
@@ -1041,13 +1052,10 @@ async function generate(msg: GenerateMessage): Promise<void> {
       currentDipIdRef,
       preferredDipStationId,
     );
-    if (inserted) {
-      accumulatedDrawTravel = 0;
-      nextInkServiceAt = chooseTriggerDistance(
-        inkTriggerBase,
-        inkTriggerJitter,
-      );
-    }
+    // Restart the travel count whether or not a move was made, so drawing
+    // always moves on rather than retrying at the same point forever.
+    accumulatedDrawTravel = 0;
+    nextInkServiceAt = chooseTriggerDistance(inkTriggerBase, inkTriggerJitter);
   };
 
   const yieldPh4 = makeYielder();
