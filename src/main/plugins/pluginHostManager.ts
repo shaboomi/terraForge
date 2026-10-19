@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from "electron";
-import type { RendererContext, RendererOutput } from "../../types";
+import type { PluginRenderContext, RendererOutput } from "../../types";
 import type { RendererPluginRecord } from "./pluginManifest";
 import type { RendererPluginRegistry } from "./pluginRegistry";
 import { PLUGIN_HOST_ORIGIN } from "./pluginSandboxAssets";
@@ -7,6 +7,7 @@ import { markPluginHostWindow } from "./pluginHostWindows";
 import { pluginSandboxSession } from "./pluginSandbox";
 import { clipPluginText, exceedsOutputBudget } from "./pluginOutputBudget";
 import { readPluginModules } from "./pluginSource";
+import { PluginSourceCache, type CachedSource } from "./pluginSourceCache";
 
 const DEFAULT_RENDER_TIMEOUT_MS = 4000;
 const MIN_RENDER_TIMEOUT_MS = 500;
@@ -15,6 +16,13 @@ const MAX_RENDER_TIMEOUT_MS = 15000;
 const LOAD_TIMEOUT_MS = 10000;
 const IDLE_RECYCLE_MS = 5 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
+/**
+ * How many source images, and how many bytes of them, one plugin's worker
+ * keeps between renders. Eight covers re-rendering a four-ink separation
+ * while flipping between two drawings; the byte cap fits a four-ink A2.
+ */
+const WORKER_MAX_SOURCES = 8;
+const WORKER_MAX_SOURCE_BYTES = 128 * 1024 * 1024;
 
 const TO_PAGE = "plugin-host:to-page";
 const FROM_PAGE = "plugin-host:from-page";
@@ -28,7 +36,9 @@ type PageToMainMessage =
 
 interface PendingRender {
   reqId: string;
-  context: RendererContext;
+  /** The context as received, its source's pixels resolved into `source` instead. */
+  context: Omit<PluginRenderContext, "source">;
+  source: CachedSource | undefined;
   resolve: (output: RendererOutput) => void;
   reject: (err: Error) => void;
 }
@@ -55,6 +65,13 @@ interface HostedPlugin {
   loadTimer: NodeJS.Timeout | null;
   readyWaiters: ReadyWaiter[];
   lastUsedAt: number;
+  /**
+   * The source images this host's worker holds, id → bytes, least recently
+   * used first. Main decides what the worker keeps and tells it what to drop,
+   * so this is an exact record rather than a guess, and it is emptied
+   * whenever the worker is replaced.
+   */
+  workerSources: Map<string, number>;
 }
 
 /**
@@ -73,12 +90,17 @@ interface HostedPlugin {
  *    and a wedged plugin is killed with `worker.terminate()` — the host page
  *    survives, so recovery costs a worker restart rather than a process
  *    respawn, and queued work for that plugin is not lost.
+ *
+ * Source images are sent once, not on every render: the main process keeps
+ * recent ones (see `PluginSourceCache`) and so does each worker, and a
+ * render sends pixels only to a side that does not already have them.
  */
 export class PluginHostManager {
   private readonly hosts = new Map<string, HostedPlugin>();
   /** webContents id → host, so a page's messages can only affect its own plugin. */
   private readonly bySenderId = new Map<number, HostedPlugin>();
   private nextReqId = 0;
+  private readonly sources = new PluginSourceCache();
   private readonly sweepTimer: NodeJS.Timeout;
   private readonly onPageMessage: (event: Electron.IpcMainEvent, message: PageToMainMessage) => void;
 
@@ -96,16 +118,25 @@ export class PluginHostManager {
     this.sweepTimer.unref();
   }
 
-  async render(pluginId: string, context: RendererContext): Promise<RendererOutput> {
+  /**
+   * Throws `PluginSourceMissingError` when `context.source` names an image by
+   * id that is not held, so the caller can send it again with its pixels.
+   */
+  async render(pluginId: string, context: PluginRenderContext): Promise<RendererOutput> {
     const record = this.registry.find(pluginId);
     if (!record) {
       throw new Error(`Renderer plugin "${pluginId}" is not installed.`);
     }
 
+    // Resolved up front, so the render holds its pixels however long it
+    // queues, whatever the cache evicts meanwhile.
+    const { source: ref, ...rest } = context;
+    const source = ref ? this.sources.resolve(ref) : undefined;
+
     const host = await this.ensureReady(pluginId, record);
 
     return new Promise<RendererOutput>((resolve, reject) => {
-      host.queue.push({ reqId: String(this.nextReqId++), context, resolve, reject });
+      host.queue.push({ reqId: String(this.nextReqId++), context: rest, source, resolve, reject });
       host.lastUsedAt = Date.now();
       this.pump(host);
     });
@@ -135,6 +166,7 @@ export class PluginHostManager {
   terminateAll(): void {
     clearInterval(this.sweepTimer);
     ipcMain.off(FROM_PAGE, this.onPageMessage);
+    this.sources.clear();
     for (const host of [...this.hosts.values()]) {
       this.failHost(host, new Error(`Plugin "${host.pluginId}" was terminated.`));
     }
@@ -179,6 +211,7 @@ export class PluginHostManager {
       loadTimer: null,
       readyWaiters: [],
       lastUsedAt: Date.now(),
+      workerSources: new Map(),
     };
 
     markPluginHostWindow(win);
@@ -271,6 +304,8 @@ export class PluginHostManager {
       // runs is the code that was fingerprinted.
       const { modules, entry } = host.record.source ?? (await readPluginModules(host.record));
       if (host.state === "terminated" || host.win.isDestroyed()) return;
+      // The page starts a fresh worker on every init, holding nothing.
+      host.workerSources.clear();
       host.win.webContents.send(TO_PAGE, { type: "init", modules, entry });
     } catch (err) {
       this.failHost(
@@ -313,7 +348,51 @@ export class PluginHostManager {
     );
     host.activeTimer = setTimeout(() => this.onRenderTimeout(host, timeoutMs), timeoutMs);
 
-    host.win.webContents.send(TO_PAGE, { type: "render", reqId: next.reqId, context: next.context });
+    const { source, evict } = this.sourceForWorker(host, next.source);
+    host.win.webContents.send(TO_PAGE, {
+      type: "render",
+      reqId: next.reqId,
+      context: { ...next.context, source },
+      evict,
+    });
+  }
+
+  /**
+   * What to send the worker for a render's source: the id alone when the
+   * worker already holds it, otherwise the pixels too, with `store` telling
+   * the worker whether to keep them and `evict` naming what it must drop to
+   * make room. Least recently used goes first.
+   */
+  private sourceForWorker(
+    host: HostedPlugin,
+    source: CachedSource | undefined,
+  ): { source?: Record<string, unknown>; evict: string[] } {
+    if (!source) return { evict: [] };
+    const ref = { id: source.id, width: source.width, height: source.height };
+    const held = host.workerSources;
+
+    const bytes = held.get(source.id);
+    if (bytes !== undefined) {
+      held.delete(source.id);
+      held.set(source.id, bytes);
+      return { source: ref, evict: [] };
+    }
+
+    const size = source.values.byteLength;
+    if (size > WORKER_MAX_SOURCE_BYTES) return { source: { ...ref, values: source.values, store: false }, evict: [] };
+
+    held.set(source.id, size);
+    let total = 0;
+    for (const value of held.values()) total += value;
+    const evict: string[] = [];
+    for (const [id, value] of held) {
+      if (id === source.id) break;
+      if (held.size <= WORKER_MAX_SOURCES && total <= WORKER_MAX_SOURCE_BYTES) break;
+      held.delete(id);
+      total -= value;
+      evict.push(id);
+    }
+    return { source: { ...ref, values: source.values, store: true }, evict };
   }
 
   /**
@@ -329,6 +408,7 @@ export class PluginHostManager {
 
     if (host.state === "terminated" || host.win.isDestroyed()) return;
     host.state = "starting";
+    host.workerSources.clear();
     this.armLoadTimer(host);
     host.win.webContents.send(TO_PAGE, { type: "restart" });
   }
@@ -357,6 +437,7 @@ export class PluginHostManager {
 
   private sweepIdle(): void {
     const now = Date.now();
+    this.sources.sweep(now);
     for (const host of [...this.hosts.values()]) {
       const idle = now - host.lastUsedAt > IDLE_RECYCLE_MS;
       const busy = host.active !== null || host.queue.length > 0;

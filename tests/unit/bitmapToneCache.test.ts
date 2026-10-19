@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
-import type { RendererPluginManifest, RendererContext } from "../../src/types";
+import type { RendererPluginManifest, PluginRenderContext } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/toneAdjust", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@renderer/features/bitmap-renderers/toneAdjust")>();
@@ -21,7 +21,7 @@ class FakeImage {
   }
 }
 const originalGetContext = HTMLCanvasElement.prototype.getContext;
-const render = vi.fn(async (_id: string, _context: RendererContext) => "M0 0 L1 1");
+const render = vi.fn(async (_id: string, _context: PluginRenderContext) => ({ status: "ok" as const, output: "M0 0 L1 1" }));
 const bitmap = { id: "b", bitmapDataUrl: "data:image/png;base64,AAAA", bitmapRendererId: "acme", bitmapBaseScale: 0.25 };
 
 beforeEach(() => {
@@ -57,7 +57,7 @@ describe("tone preparation caching", () => {
 
     expect(smooth).toHaveBeenCalledTimes(1);
     // ...while the renderer did see each new contrast.
-    const firstPixel = render.mock.calls.map(([, context]) => context.source!.values[0]);
+    const firstPixel = render.mock.calls.map(([, context]) => context.source!.values![0]);
     expect(new Set(firstPixel).size).toBeGreaterThan(1);
   });
 

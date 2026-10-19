@@ -40,25 +40,34 @@ function plugin(id: string, source: string, manifest: Record<string, unknown> = 
   };
 }
 
-type Outcome = { ok: unknown } | { error: string };
+type Outcome = { ok: unknown } | { error: string } | { missing: true };
 
-/** Runs one render from the app's own window, through the public preload API. */
-function render(pluginId: string, settings: Record<string, unknown> = {}): Promise<Outcome> {
+interface SourceSpec {
+  id: string;
+  /** Sent with its pixels when given; by id alone otherwise. */
+  values?: number[];
+  /** A blank image this many pixels wide, one high, built in the page. */
+  blank?: number;
+}
+
+/**
+ * Runs one render from the app's own window, through the public preload API.
+ * Each call gets a fresh image unless `source` names one.
+ */
+function render(pluginId: string, settings: Record<string, number | boolean | string> = {}, source?: SourceSpec): Promise<Outcome> {
+  const spec = source ?? { id: `fresh-${Math.random()}`, values: [0, 64, 128, 255] };
   return page.evaluate(
-    ({ pluginId, settings }) =>
-      window.terraForge.rendererPlugins
-        .render(pluginId, {
-          width: 2,
-          height: 2,
-          scale: 1,
-          settings,
-          source: { width: 2, height: 2, values: new Uint8Array([0, 64, 128, 255]) },
-        } as never)
+    ({ pluginId, settings, spec }) => {
+      const values = spec.blank ? new Uint8Array(spec.blank) : spec.values ? new Uint8Array(spec.values) : undefined;
+      const width = spec.blank ?? (spec.values ? spec.values.length : 1);
+      return window.terraForge.rendererPlugins
+        .render(pluginId, { width, height: 1, scale: 1, settings, source: { id: spec.id, width, height: 1, values } })
         .then(
-          (ok) => ({ ok }),
+          (result) => (result.status === "ok" ? { ok: result.output } : { missing: true as const }),
           (err: Error) => ({ error: String(err.message) }),
-        ),
-    { pluginId, settings },
+        );
+    },
+    { pluginId, settings, spec },
   );
 }
 
@@ -132,6 +141,17 @@ test.beforeAll(async () => {
         { renderTimeoutMs: 1000 },
       ),
 
+      // Sums its source, then overwrites it, as a plugin working in place would.
+      summing: plugin(
+        "e2e.summing",
+        `module.exports.render = (ctx) => {
+          const v = ctx.source.values;
+          let sum = 0;
+          for (let i = 0; i < v.length; i++) { sum += v[i]; v[i] = 0; }
+          return "M" + sum + " 0";
+        };`,
+      ),
+
       // Busy long enough for the test to close its window mid-render.
       slow: plugin(
         "e2e.slow",
@@ -154,7 +174,7 @@ test("discovers every seeded plugin", async () => {
   const { manifests, errors } = await page.evaluate(() => window.terraForge.rendererPlugins.list());
   expect(errors).toEqual([]);
   expect(manifests.map((m) => m.id).sort()).toEqual(
-    ["e2e.forged", "e2e.hang", "e2e.network", "e2e.oversized", "e2e.slow", "e2e.well-behaved"],
+    ["e2e.forged", "e2e.hang", "e2e.network", "e2e.oversized", "e2e.slow", "e2e.summing", "e2e.well-behaved"],
   );
 });
 
@@ -198,10 +218,10 @@ test("closing a host window mid-render rejects that render, and the plugin recov
         height: 1,
         scale: 1,
         settings: { slow: true },
-        source: { width: 1, height: 1, values: new Uint8Array([0]) },
-      } as never)
+        source: { id: "slow-1", width: 1, height: 1, values: new Uint8Array([0]) },
+      })
       .then(
-        (ok) => ({ ok }),
+        (result) => (result.status === "ok" ? { ok: result.output } : { missing: true }),
         (err: Error) => ({ error: String(err.message) }),
       );
   });
@@ -247,3 +267,38 @@ function hostIds(): Promise<number[]> {
       .sort((a, b) => a - b),
   );
 }
+
+test.describe("source images", () => {
+  test("a re-render by id alone sees the original pixels, even after the plugin overwrote them", async () => {
+    expect(await render("e2e.summing", {}, { id: "sum-1", values: [1, 2, 3] })).toEqual({ ok: "M6 0" });
+    expect(await render("e2e.summing", { changed: true }, { id: "sum-1" })).toEqual({ ok: "M6 0" });
+  });
+
+  test("an image the main process never received is reported, not rendered", async () => {
+    expect(await render("e2e.summing", {}, { id: "never-sent" })).toEqual({ missing: true });
+  });
+
+  test("a re-render by id is far cheaper than sending the pixels", async () => {
+    const pixels = 25_000_000; // an A2 page at the source resolution cap
+    const time = (spec: SourceSpec) =>
+      page.evaluate(
+        async ({ spec, pixels }) => {
+          const values = spec.blank ? new Uint8Array(pixels) : undefined;
+          const start = performance.now();
+          await window.terraForge.rendererPlugins.render("e2e.well-behaved", {
+            width: pixels,
+            height: 1,
+            scale: 1,
+            settings: {},
+            source: { id: spec.id, width: pixels, height: 1, values },
+          });
+          return performance.now() - start;
+        },
+        { spec, pixels },
+      );
+
+    const full = await time({ id: "big-1", blank: pixels });
+    const byId = Math.min(await time({ id: "big-1" }), await time({ id: "big-1" }));
+    expect(byId).toBeLessThan(full / 3);
+  });
+});

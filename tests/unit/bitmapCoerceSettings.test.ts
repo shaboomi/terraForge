@@ -7,7 +7,7 @@ import {
 import { clearBitmapDecodeCache, materializeBitmapLayers } from "@renderer/features/bitmap-renderers/bitmapImage";
 import { bitmapRenderers } from "@renderer/features/bitmap-renderers/registry";
 import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
-import type { RendererPluginManifest, BitmapRendererFieldSchema, RendererContext } from "../../src/types";
+import type { RendererPluginManifest, BitmapRendererFieldSchema, PluginRenderContext } from "../../src/types";
 
 const fields: BitmapRendererFieldSchema[] = [
   { type: "number", key: "spacing", label: "Spacing", min: 1, max: 10, step: 1 },
@@ -173,7 +173,7 @@ describe("materializeBitmapLayers settings coercion", () => {
       fields,
     };
     useRendererPluginStore.setState({ plugins: [manifest] });
-    const render = vi.fn(async (_id: string, _context: RendererContext) => "M0 0 L1 1");
+    const render = vi.fn(async (_id: string, _context: PluginRenderContext) => ({ status: "ok" as const, output: "M0 0 L1 1" }));
     vi.stubGlobal("terraForge", { rendererPlugins: { render } });
 
     await materializeBitmapLayers({

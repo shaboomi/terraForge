@@ -87,6 +87,7 @@ vi.mock("../../../src/main/plugins/pluginSource", () => ({
 
 import { PluginHostManager } from "../../../src/main/plugins/pluginHostManager";
 import { MAX_OUTPUT_UNITS, MAX_PLUGIN_MESSAGE_LENGTH } from "../../../src/main/plugins/pluginOutputBudget";
+import { PluginSourceMissingError } from "../../../src/main/plugins/pluginSourceCache";
 
 function makeRecord(id: string, renderTimeoutMs?: number, sourceHash?: string): RendererPluginRecord {
   return {
@@ -121,7 +122,7 @@ async function bringUp(win: FakeWindow): Promise<void> {
 }
 
 const renders = (win: FakeWindow) => win.sent.filter((s) => s.message.type === "render");
-const source = { width: 1, height: 1, values: new Uint8Array([1]) };
+const source = { id: "src-1", width: 1, height: 1, values: new Uint8Array([1]) };
 const context = { width: 1, height: 1, scale: 1, settings: {}, source };
 
 describe("PluginHostManager", () => {
@@ -443,5 +444,101 @@ describe("PluginHostManager", () => {
     fromPage(betaWin, { type: "result", reqId: renders(betaWin)[0].message.reqId, output: "still fine" });
     await expect(beta).resolves.toBe("still fine");
     manager.terminateAll();
+  });
+
+  /**
+   * An image is megabytes and most re-renders change only settings, so its
+   * pixels cross into the sandbox only when the worker does not hold them.
+   */
+  describe("source images", () => {
+    const withImage = (id: string, values?: Uint8Array) => ({
+      ...context,
+      source: { id, width: 1, height: 1, ...(values ? { values } : {}) },
+    });
+    const sentSource = (win: FakeWindow, i: number) =>
+      (renders(win)[i].message.context as { source: Record<string, unknown> }).source;
+
+    /** Runs one render to completion against an already-ready window. */
+    async function renderOnce(manager: PluginHostManager, win: FakeWindow, ctx: ReturnType<typeof withImage>) {
+      const before = renders(win).length;
+      const promise = manager.render("acme", ctx);
+      await vi.waitFor(() => expect(renders(win)).toHaveLength(before + 1));
+      fromPage(win, { type: "result", reqId: renders(win)[before].message.reqId, output: "M0 0" });
+      await promise;
+    }
+
+    it("sends an image's pixels once, then names it by id alone", async () => {
+      const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+      const values = new Uint8Array([7]);
+      const first = manager.render("acme", withImage("img", values));
+      const win = mocks.windows[0];
+      await bringUp(win);
+      fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: "M0 0" });
+      await first;
+
+      await renderOnce(manager, win, withImage("img"));
+
+      expect(sentSource(win, 0)).toMatchObject({ id: "img", values, store: true });
+      expect(sentSource(win, 1)).toEqual({ id: "img", width: 1, height: 1 });
+      manager.terminateAll();
+    });
+
+    it("reports an id it does not hold, without starting a host", async () => {
+      const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+      await expect(manager.render("acme", withImage("unknown"))).rejects.toBeInstanceOf(PluginSourceMissingError);
+      expect(mocks.windows).toHaveLength(0);
+      manager.terminateAll();
+    });
+
+    it("sends the pixels again to a worker restarted after a timeout", async () => {
+      vi.useFakeTimers();
+      const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme", 1000)]));
+      const hung = manager.render("acme", withImage("img", new Uint8Array([1]))).catch(() => {});
+      const win = mocks.windows[0];
+      await bringUp(win);
+      await vi.advanceTimersByTimeAsync(1001);
+      await hung;
+      fromPage(win, { type: "ready" });
+
+      await renderOnce(manager, win, withImage("img"));
+      expect(sentSource(win, 1)).toMatchObject({ id: "img", store: true, values: expect.any(Uint8Array) });
+      manager.terminateAll();
+    });
+
+    it("tells the worker which images to drop once it holds as many as it may", async () => {
+      const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+      const warmUp = manager.render("acme", context);
+      const win = mocks.windows[0];
+      await bringUp(win);
+      fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: "M0 0" });
+      await warmUp;
+
+      for (let i = 0; i < 8; i++) await renderOnce(manager, win, withImage(`img${i}`, new Uint8Array([i])));
+      await renderOnce(manager, win, withImage("img0")); // keeps img0 recent, so img1 is oldest
+      expect(renders(win)[9].message.evict).toEqual([]);
+
+      await renderOnce(manager, win, withImage("img8", new Uint8Array([8])));
+      expect(renders(win)[10].message.evict).toEqual(["img1"]);
+      manager.terminateAll();
+    });
+
+    it("keeps one plugin's held images apart from another's", async () => {
+      const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme"), makeRecord("beta")]));
+      const acme = manager.render("acme", withImage("img", new Uint8Array([1])));
+      const acmeWin = mocks.windows[0];
+      await bringUp(acmeWin);
+      fromPage(acmeWin, { type: "result", reqId: renders(acmeWin)[0].message.reqId, output: "M0 0" });
+      await acme;
+
+      // Main still holds it, so beta can be asked by id — but beta's worker
+      // has never seen it, so it gets the pixels.
+      const beta = manager.render("beta", withImage("img"));
+      const betaWin = mocks.windows[1];
+      await bringUp(betaWin);
+      expect(sentSource(betaWin, 0)).toMatchObject({ id: "img", store: true, values: expect.any(Uint8Array) });
+      fromPage(betaWin, { type: "result", reqId: renders(betaWin)[0].message.reqId, output: "M0 0" });
+      await beta;
+      manager.terminateAll();
+    });
   });
 });

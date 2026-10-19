@@ -11,7 +11,7 @@ import {
   type ToneSettings,
 } from "@renderer/features/bitmap-renderers/toneAdjust";
 import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
-import type { RendererPluginManifest, RendererContext, RendererSource } from "../../src/types";
+import type { RendererPluginManifest, PluginRenderContext, RendererSource } from "../../src/types";
 
 const neutral: ToneSettings = { autoLevels: false, contrast: 1, smoothingMM: 0 };
 
@@ -174,7 +174,7 @@ describe("materializeBitmapLayers tone preparation", () => {
     }
   }
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
-  const render = vi.fn(async (_id: string, _context: RendererContext) => "M0 0 L1 1");
+  const render = vi.fn(async (_id: string, _context: PluginRenderContext) => ({ status: "ok" as const, output: "M0 0 L1 1" }));
 
   beforeEach(() => {
     clearBitmapDecodeCache();
@@ -206,21 +206,27 @@ describe("materializeBitmapLayers tone preparation", () => {
     await materializeBitmapLayers({ ...bitmap, bitmapTone: { contrast: 2, smoothingMM: 0 } });
 
     // Luminance 60 at contrast 2: (60/255 - 0.5) * 2 + 0.5 < 0, so full black.
-    expect(render.mock.calls[0][1].source!.values[0]).toBe(0);
+    expect(render.mock.calls[0][1].source!.values![0]).toBe(0);
   });
 
   it("reuses the prepared source when only renderer settings change", async () => {
     await materializeBitmapLayers({ ...bitmap, bitmapRendererSettings: { a: 1 } });
     await materializeBitmapLayers({ ...bitmap, bitmapRendererSettings: { a: 2 } });
 
-    expect(render.mock.calls[1][1].source).toBe(render.mock.calls[0][1].source);
+    // The same image, so the second render names it by id and sends no pixels.
+    const [first, second] = render.mock.calls.map(([, context]) => context.source!);
+    expect(second.id).toBe(first.id);
+    expect(first.values).toBeDefined();
+    expect(second.values).toBeUndefined();
   });
 
   it("prepares the source again when tone changes", async () => {
     await materializeBitmapLayers({ ...bitmap, bitmapTone: { contrast: 1 } });
     await materializeBitmapLayers({ ...bitmap, bitmapTone: { contrast: 2 } });
 
-    expect(render.mock.calls[1][1].source).not.toBe(render.mock.calls[0][1].source);
+    const [first, second] = render.mock.calls.map(([, context]) => context.source!);
+    expect(second.id).not.toBe(first.id);
+    expect(second.values).toBeDefined();
   });
 
   it("shapes each ink channel under colour separation", async () => {
@@ -228,7 +234,7 @@ describe("materializeBitmapLayers tone preparation", () => {
 
     expect(render).toHaveBeenCalledTimes(3);
     for (const [, context] of render.mock.calls) {
-      expect(context.source!.values[0]).not.toBe(60);
+      expect(context.source!.values![0]).not.toBe(60);
     }
   });
 });

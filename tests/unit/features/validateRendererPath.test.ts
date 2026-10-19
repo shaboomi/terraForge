@@ -98,13 +98,13 @@ describe("materializeBitmapLayers output checking", () => {
   };
 
   it("refuses a plugin's malformed path instead of storing it as geometry", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 LNaN NaN");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: "M0 0 LNaN NaN" });
 
     await expect(materializeBitmapLayers(bitmap)).rejects.toThrow(/invalid path data/);
   });
 
   it("passes a well-formed path through untouched", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: "M0 0 L1 1" });
 
     await expect(materializeBitmapLayers(bitmap)).resolves.toMatchObject({
       bitmapRendererPath: "M0 0 L1 1",
@@ -114,7 +114,7 @@ describe("materializeBitmapLayers output checking", () => {
 
   it("stamps the output with the plugin's source version", async () => {
     useRendererPluginStore.setState({ plugins: [{ ...manifest, sourceHash: "abc123" }] });
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: "M0 0 L1 1" });
 
     const result = await materializeBitmapLayers(bitmap);
 
@@ -122,9 +122,9 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("turns a plugin's dots into fillable paths tapped where the plugin said", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: {
       layers: [{ dots: [{ d: "M0 0 L2 0 L2 2 Z", x: 1.5, y: 0.5 }] }],
-    });
+    } });
 
     const result = await materializeBitmapLayers(bitmap);
 
@@ -135,9 +135,9 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("keeps a layer's stroke and its dots as separate paths", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: {
       layers: [{ d: "M0 0 L5 5", dots: [{ d: "M1 1 L2 1 Z", x: 1, y: 1 }], label: "Ink" }],
-    });
+    } });
 
     const { paths } = await materializeBitmapLayers(bitmap);
 
@@ -148,7 +148,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("passes a renderer's warnings through", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: { layers: [{ d: "M0 0" }], warnings: ["Cut short"] } });
 
     expect((await materializeBitmapLayers(bitmap)).warnings).toEqual(["Cut short"]);
   });
@@ -156,7 +156,7 @@ describe("materializeBitmapLayers output checking", () => {
   it("tells each separated render which ink it is, so it can offset its pattern", async () => {
     const render = (window as any).terraForge.rendererPlugins.render;
     render.mockClear();
-    render.mockResolvedValue("M0 0 L1 1");
+    render.mockResolvedValue({ status: "ok", output: "M0 0 L1 1" });
 
     await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "cmy" });
 
@@ -170,7 +170,7 @@ describe("materializeBitmapLayers output checking", () => {
   it("asks for one shared pattern when offsetting is turned off, and gives unseparated renders no ink", async () => {
     const render = (window as any).terraForge.rendererPlugins.render;
     render.mockClear();
-    render.mockResolvedValue("M0 0 L1 1");
+    render.mockResolvedValue({ status: "ok", output: "M0 0 L1 1" });
 
     await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "cmy", bitmapSeparationOffset: false });
     expect(render.mock.calls.every(([, context]: [string, { ink: { offset: boolean } }]) => context.ink.offset === false)).toBe(true);
@@ -181,7 +181,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("separates for red, green and blue pens on white paper as three coloured inks", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: "M0 0 L1 1" });
 
     const { paths } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb-white" });
 
@@ -193,7 +193,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("names the ink a warning came from under colour separation, once per distinct warning", async () => {
-    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ status: "ok", output: { layers: [{ d: "M0 0" }], warnings: ["Cut short"] } });
 
     const { warnings } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb" });
 
@@ -202,9 +202,9 @@ describe("materializeBitmapLayers output checking", () => {
 
   it("checks every ink channel when colour separation is active", async () => {
     (window as any).terraForge.rendererPlugins.render
-      .mockResolvedValueOnce("M0 0 L1 1")
-      .mockResolvedValueOnce("M0 0 L1 1")
-      .mockResolvedValueOnce("M0 0 LInfinity 1");
+      .mockResolvedValueOnce({ status: "ok", output: "M0 0 L1 1" })
+      .mockResolvedValueOnce({ status: "ok", output: "M0 0 L1 1" })
+      .mockResolvedValueOnce({ status: "ok", output: "M0 0 LInfinity 1" });
 
     await expect(
       materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb" }),

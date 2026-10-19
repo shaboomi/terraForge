@@ -168,7 +168,8 @@ const spacing = settings.spacingMM * unitsPerMM;
 `source`, when present, is `{ width, height, values }` where `values` is a
 `Uint8Array` of one byte per unit, row-major: **0 is black, 255 is white**.
 Read it as `values[y * source.width + x]`, and treat anything outside the
-image as white.
+image as white. Each render gets its own copy, so you may work on `values`
+in place without affecting later renders.
 
 The tones arrive already shaped by the user's **Tone** settings (smoothing,
 auto levels, contrast), which terraForge applies to every renderer before it

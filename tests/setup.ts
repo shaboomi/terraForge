@@ -205,7 +205,7 @@ if (typeof window !== "undefined") {
     rendererPlugins: {
       list: vi.fn().mockResolvedValue({ manifests: [], errors: [] }),
       rescan: vi.fn().mockResolvedValue({ manifests: [], errors: [] }),
-      render: vi.fn().mockResolvedValue(""),
+      render: vi.fn().mockResolvedValue({ status: "ok", output: "" }),
       openFolder: vi.fn().mockResolvedValue(undefined),
     },
     edit: {

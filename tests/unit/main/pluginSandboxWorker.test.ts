@@ -22,7 +22,7 @@ function startWorker(pluginSource: string) {
     await new Promise((resolve) => setTimeout(resolve, 0));
     return posted[before];
   };
-  return { posted, render };
+  return { posted, render, self };
 }
 
 const plugin = (body: string) => `module.exports.render = function () { ${body} };`;
@@ -66,5 +66,56 @@ describe("sandbox worker output check", () => {
     ).render();
     expect(result.type).toBe("error");
     expect(result.message).toMatch(/over the \d+ limit/);
+  });
+});
+
+describe("sandbox worker source images", () => {
+  /** Posts one render with the given source fields and returns what the worker posted back. */
+  function sendRender(worker: ReturnType<typeof startWorker>, source: Record<string, unknown> | undefined, evict: string[] = []) {
+    const self = worker.self;
+    return async (): Promise<Posted> => {
+      const before = worker.posted.length;
+      self.onmessage!({ data: { type: "render", reqId: "1", context: { source }, evict } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return worker.posted[before];
+    };
+  }
+
+  // Sums its source and then scribbles over it, as a plugin working in place would.
+  const summing = plugin(`
+    var v = arguments[0].source.values, sum = 0;
+    for (var i = 0; i < v.length; i++) { sum += v[i]; v[i] = 0; }
+    return "M" + sum + " 0";
+  `);
+
+  it("keeps a stored image and renders from it by id", async () => {
+    const worker = startWorker(summing);
+    const first = await sendRender(worker, { id: "a", width: 3, height: 1, values: new Uint8Array([1, 2, 3]), store: true })();
+    const second = await sendRender(worker, { id: "a", width: 3, height: 1 })();
+    expect(first).toMatchObject({ type: "result", output: "M6 0" });
+    // A plugin that overwrote its input still gets the original next time.
+    expect(second).toMatchObject({ type: "result", output: "M6 0" });
+  });
+
+  it("does not keep an image it was told not to", async () => {
+    const worker = startWorker(summing);
+    await sendRender(worker, { id: "a", width: 1, height: 1, values: new Uint8Array([5]), store: false })();
+    const missing = await sendRender(worker, { id: "a", width: 1, height: 1 })();
+    expect(missing).toMatchObject({ type: "error", message: expect.stringMatching(/source image was not available/) });
+  });
+
+  it("drops the images it is told to evict", async () => {
+    const worker = startWorker(summing);
+    await sendRender(worker, { id: "a", width: 1, height: 1, values: new Uint8Array([5]), store: true })();
+    await sendRender(worker, { id: "b", width: 1, height: 1, values: new Uint8Array([6]), store: true }, ["a"])();
+    expect(await sendRender(worker, { id: "a", width: 1, height: 1 })()).toMatchObject({ type: "error" });
+    expect(await sendRender(worker, { id: "b", width: 1, height: 1 })()).toMatchObject({ output: "M6 0" });
+  });
+
+  it("hands the plugin its source in the shape a renderer expects", async () => {
+    const worker = startWorker(plugin("var s = arguments[0].source; return 'M' + s.width + ' ' + s.height + (s.id === undefined ? '' : ' leaked');"));
+    expect(await sendRender(worker, { id: "a", width: 4, height: 2, values: new Uint8Array(8), store: true })()).toMatchObject({
+      output: "M4 2",
+    });
   });
 });

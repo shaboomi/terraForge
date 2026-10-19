@@ -443,6 +443,28 @@ export interface RendererResult {
 export type RendererOutput = string | RendererLayer[] | RendererResult;
 
 /**
+ * A render's source image on its way to a plugin. Every image has an id, and
+ * its pixels travel only when the receiving side may not have them yet: an
+ * image is megabytes, most re-renders change only settings, and copying it
+ * across processes costs about as much as many renders do. `values` may be
+ * left out once an image has been sent; whoever holds it looks it up by id.
+ */
+export interface PluginSourceRef {
+  id: string;
+  width: number;
+  height: number;
+  values?: Uint8Array;
+}
+
+/** A `RendererContext` as it crosses into the main process — see `PluginSourceRef`. */
+export type PluginRenderContext = Omit<RendererContext, "source"> & { source?: PluginSourceRef };
+
+export type PluginRenderResult =
+  | { status: "ok"; output: RendererOutput }
+  /** The context named a source by id that the main process does not hold. */
+  | { status: "source-missing" };
+
+/**
  * Icon identifiers a renderer's field schema can reference. The properties
  * panel owns the mapping onto actual icon components, so renderer modules
  * (including external plugins) stay free of any UI/React dependency.
@@ -993,8 +1015,13 @@ export interface RendererPluginsApi {
   list: () => Promise<RendererPluginScan>;
   /** Re-scan the plugins directory on disk. Returns fresh metadata plus any per-folder discovery errors. */
   rescan: () => Promise<RendererPluginScan>;
-  /** Runs a plugin's render() in its isolated host process. Rejects on timeout, crash, or a thrown error. */
-  render: (pluginId: string, context: RendererContext) => Promise<RendererOutput>;
+  /**
+   * Runs a plugin's render() in its isolated host process. Rejects on timeout,
+   * crash, or a thrown error. Resolves "source-missing" when `context.source`
+   * names an image by id alone and the main process no longer holds it — the
+   * caller then sends it again with its pixels.
+   */
+  render: (pluginId: string, context: PluginRenderContext) => Promise<PluginRenderResult>;
   /**
    * Copies the example plugins that ship with the app into the user's plugins
    * folder, then rescans. Existing folders of the same name are left alone.

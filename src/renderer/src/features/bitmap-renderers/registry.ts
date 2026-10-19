@@ -4,6 +4,7 @@ import { concentricBoxesRenderer } from "./concentricBoxes";
 import { concentricPolygonsRenderer } from "./concentricPolygons";
 import { dotHalftoneRenderer } from "./dotHalftone";
 import { isometricGridRenderer } from "./isometricGrid";
+import { renderPlugin } from "./pluginRender";
 import { radialBurstRenderer } from "./radialBurst";
 import { rasterLinesRenderer } from "./rasterLines";
 import { spiralAmplitudeRenderer } from "./spiralAmplitude";
@@ -45,7 +46,7 @@ function buildPluginDefinition(manifest: RendererPluginManifest): BitmapRenderer
     version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,
-    render: (context) => window.terraForge.rendererPlugins.render(manifest.id, context),
+    render: (context) => renderPlugin(manifest.id, context),
   };
 }
 

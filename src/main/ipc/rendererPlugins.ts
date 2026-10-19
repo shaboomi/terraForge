@@ -1,8 +1,9 @@
 import { ipcMain, shell } from "electron";
-import type { RendererContext } from "../../types";
+import type { PluginRenderContext, PluginRenderResult } from "../../types";
 import { installExamplePlugins } from "../plugins/pluginPaths";
 import type { RendererPluginRegistry } from "../plugins/pluginRegistry";
 import type { PluginHostManager } from "../plugins/pluginHostManager";
+import { PluginSourceMissingError } from "../plugins/pluginSourceCache";
 
 export interface RendererPluginIpcOptions {
   pluginsDir: string;
@@ -36,8 +37,19 @@ export function registerRendererPluginIpcHandlers({
     return { manifests: plugins.map((plugin) => plugin.manifest), errors };
   });
 
-  ipcMain.handle("rendererPlugins:render", (_e, pluginId: string, context: RendererContext) =>
-    hostManager.render(pluginId, context),
+  ipcMain.handle(
+    "rendererPlugins:render",
+    async (_e, pluginId: string, context: PluginRenderContext): Promise<PluginRenderResult> => {
+      try {
+        return { status: "ok", output: await hostManager.render(pluginId, context) };
+      } catch (err) {
+        // An expected outcome, not a failure: the app window resends the
+        // image with its pixels. A result, because an error loses its type
+        // on the way across IPC.
+        if (err instanceof PluginSourceMissingError) return { status: "source-missing" };
+        throw err;
+      }
+    },
   );
 
   ipcMain.handle("rendererPlugins:installExamples", async () => {

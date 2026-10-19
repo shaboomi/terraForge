@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
     handlers,
     openPath: vi.fn(),
     invalidateChanged: vi.fn(),
+    render: vi.fn(),
   };
 });
 
@@ -27,6 +28,7 @@ import { registerRendererPluginIpcHandlers } from "../../../src/main/ipc/rendere
 import { RendererPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
 import type { PluginHostManager } from "../../../src/main/plugins/pluginHostManager";
 import type { RendererPluginRegistry as RendererPluginRegistryType } from "../../../src/main/plugins/pluginRegistry";
+import { PluginSourceMissingError } from "../../../src/main/plugins/pluginSourceCache";
 
 describe("registerRendererPluginIpcHandlers", () => {
   let pluginsDir: string;
@@ -40,13 +42,26 @@ describe("registerRendererPluginIpcHandlers", () => {
     mocks.openPath.mockReset();
     registry = new RendererPluginRegistry(pluginsDir);
     mocks.invalidateChanged.mockReset();
-    const hostManager = { invalidateChanged: mocks.invalidateChanged } as unknown as PluginHostManager;
+    mocks.render.mockReset();
+    const hostManager = { invalidateChanged: mocks.invalidateChanged, render: mocks.render } as unknown as PluginHostManager;
     registerRendererPluginIpcHandlers({ pluginsDir, examplesDir, registry, hostManager });
   });
 
   afterEach(async () => {
     await rm(pluginsDir, { recursive: true, force: true });
     await rm(examplesDir, { recursive: true, force: true });
+  });
+
+  it("wraps a render's output, and reports a missing source as a result rather than an error", async () => {
+    const render = mocks.handlers.get("rendererPlugins:render")!;
+    mocks.render.mockResolvedValueOnce("M0 0");
+    await expect(render({}, "acme.x", {})).resolves.toEqual({ status: "ok", output: "M0 0" });
+
+    mocks.render.mockRejectedValueOnce(new PluginSourceMissingError("img"));
+    await expect(render({}, "acme.x", {})).resolves.toEqual({ status: "source-missing" });
+
+    mocks.render.mockRejectedValueOnce(new Error("plugin threw"));
+    await expect(render({}, "acme.x", {})).rejects.toThrow("plugin threw");
   });
 
   it("registers list, rescan, installExamples, and openFolder handlers", () => {

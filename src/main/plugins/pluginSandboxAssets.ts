@@ -179,6 +179,10 @@ send({ type: "page-ready" });
 export const WORKER_JS = String.raw`
 "use strict";
 var pluginExports = null;
+// Source images kept between renders, by id. The main process decides what
+// is kept and says what to drop, and sends pixels only for an id it knows
+// this worker does not hold.
+var sourceCache = new Map();
 
 function dirname(path) {
   var index = path.lastIndexOf("/");
@@ -253,7 +257,10 @@ self.onmessage = function (event) {
 
   if (message.type === "render") {
     Promise.resolve()
-      .then(function () { return pluginExports.render(message.context); })
+      .then(function () {
+        message.context.source = takeSource(message);
+        return pluginExports.render(message.context);
+      })
       .then(function (output) {
         // Checked here so a well-behaved plugin gets a precise error about
         // its path data. It is not the boundary: plugin code shares this
@@ -273,6 +280,33 @@ self.onmessage = function (event) {
       });
   }
 };
+
+/**
+ * The source image for a render, as the plugin sees it. A kept image is
+ * handed over as a copy: a plugin is free to work on its input in place, and
+ * on the shared copy that would corrupt every later render of the image.
+ * Copying here is a memcpy, far cheaper than the cross-process copy keeping
+ * it saves.
+ */
+function takeSource(message) {
+  var evict = Array.isArray(message.evict) ? message.evict : [];
+  for (var i = 0; i < evict.length; i++) sourceCache.delete(evict[i]);
+
+  var ref = message.context.source;
+  if (!ref) return undefined;
+  var values = ref.values;
+  if (values) {
+    if (ref.store) {
+      sourceCache.set(ref.id, values);
+      values = values.slice();
+    }
+  } else {
+    values = sourceCache.get(ref.id);
+    if (!values) throw new Error("The render's source image was not available to the plugin worker.");
+    values = values.slice();
+  }
+  return { width: ref.width, height: ref.height, values: values };
+}
 
 /**
  * A renderer may return a single path string, an array of layers, or

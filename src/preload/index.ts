@@ -8,7 +8,7 @@ import type {
   BackgroundTask,
   RendererPluginScan,
   RendererPluginExampleInstall,
-  RendererOutput,
+  PluginRenderResult,
 } from "../types";
 
 // ─── Utility: create a typed IPC invoker ─────────────────────────────────────
@@ -227,7 +227,7 @@ const rendererPlugins: TerraForgeAPI["rendererPlugins"] = {
   list: () => invoke<RendererPluginScan>("rendererPlugins:list"),
   rescan: () => invoke<RendererPluginScan>("rendererPlugins:rescan"),
   render: (pluginId, context) =>
-    invoke<RendererOutput>("rendererPlugins:render", pluginId, context),
+    invoke<PluginRenderResult>("rendererPlugins:render", pluginId, context),
   installExamples: () => invoke<RendererPluginExampleInstall>("rendererPlugins:installExamples"),
   openFolder: () => invoke<void>("rendererPlugins:openFolder"),
 };
