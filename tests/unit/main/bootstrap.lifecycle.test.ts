@@ -27,7 +27,7 @@ vi.mock("electron", () => ({
 import { registerAppLifecycleHandlers } from "../../../src/main/bootstrap/lifecycle";
 import { markPluginHostWindow } from "../../../src/main/plugins/pluginHostWindows";
 
-/** A hidden bitmap-plugin host window, as PluginHostManager marks them. */
+/** A hidden renderer-plugin host window, as PluginHostManager marks them. */
 function pluginHostWindow(): any {
   const win = { on: vi.fn() };
   markPluginHostWindow(win as any);

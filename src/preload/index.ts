@@ -6,8 +6,8 @@ import type {
   MachineStatus,
   RemoteFile,
   BackgroundTask,
-  BitmapPluginScan,
-  BitmapPluginExampleInstall,
+  RendererPluginScan,
+  RendererPluginExampleInstall,
   RendererOutput,
 } from "../types";
 
@@ -221,15 +221,15 @@ const editApi: TerraForgeAPI["edit"] = {
     ipcRenderer.send("menu:setEditMenuState", hasSelection),
 };
 
-// ─── Bitmap renderer plugins API ──────────────────────────────────────────────
+// ─── Renderer plugins API ──────────────────────────────────────────────
 
-const bitmapPlugins: TerraForgeAPI["bitmapPlugins"] = {
-  list: () => invoke<BitmapPluginScan>("bitmapPlugins:list"),
-  rescan: () => invoke<BitmapPluginScan>("bitmapPlugins:rescan"),
+const rendererPlugins: TerraForgeAPI["rendererPlugins"] = {
+  list: () => invoke<RendererPluginScan>("rendererPlugins:list"),
+  rescan: () => invoke<RendererPluginScan>("rendererPlugins:rescan"),
   render: (pluginId, context) =>
-    invoke<RendererOutput>("bitmapPlugins:render", pluginId, context),
-  installExamples: () => invoke<BitmapPluginExampleInstall>("bitmapPlugins:installExamples"),
-  openFolder: () => invoke<void>("bitmapPlugins:openFolder"),
+    invoke<RendererOutput>("rendererPlugins:render", pluginId, context),
+  installExamples: () => invoke<RendererPluginExampleInstall>("rendererPlugins:installExamples"),
+  openFolder: () => invoke<void>("rendererPlugins:openFolder"),
 };
 
 // ─── Expose to renderer ───────────────────────────────────────────────────────
@@ -243,6 +243,6 @@ const api: TerraForgeAPI = {
   config,
   app: appApi,
   edit: editApi,
-  bitmapPlugins,
+  rendererPlugins,
 };
 contextBridge.exposeInMainWorld("terraForge", api);

@@ -6,9 +6,9 @@ import {
   pluginRendererFromManifest,
 } from "../../src/renderer/src/features/bitmap-renderers/registry";
 import { SPIRAL_AMPLITUDE_RENDERER_ID } from "../../src/renderer/src/features/bitmap-renderers/spiralAmplitude";
-import type { BitmapPluginManifest } from "../../src/types";
+import type { RendererPluginManifest } from "../../src/types";
 
-const pluginManifest: BitmapPluginManifest = {
+const pluginManifest: RendererPluginManifest = {
   id: "acme.halftone",
   label: "Acme Halftone",
   apiVersion: 1,

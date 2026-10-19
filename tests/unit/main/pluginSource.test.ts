@@ -3,9 +3,9 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { readPluginModules } from "../../../src/main/plugins/pluginSource";
-import type { BitmapPluginRecord } from "../../../src/main/plugins/pluginManifest";
+import type { RendererPluginRecord } from "../../../src/main/plugins/pluginManifest";
 
-function record(folder: string, entry = "index.js"): BitmapPluginRecord {
+function record(folder: string, entry = "index.js"): RendererPluginRecord {
   return {
     manifest: { id: "acme", label: "Acme", apiVersion: 1, defaults: {}, fields: [] },
     entryPath: join(folder, entry),

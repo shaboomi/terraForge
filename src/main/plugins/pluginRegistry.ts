@@ -1,17 +1,17 @@
 import {
-  discoverBitmapPlugins,
-  type BitmapPluginRecord,
+  discoverRendererPlugins,
+  type RendererPluginRecord,
   type PluginDiscoveryError,
 } from "./pluginManifest";
 
 export interface PluginScanResult {
-  plugins: BitmapPluginRecord[];
+  plugins: RendererPluginRecord[];
   errors: PluginDiscoveryError[];
 }
 
 /** In-memory holder for the currently-discovered bitmap-renderer plugins. */
-export class BitmapPluginRegistry {
-  private plugins: BitmapPluginRecord[] = [];
+export class RendererPluginRegistry {
+  private plugins: RendererPluginRecord[] = [];
   private errors: PluginDiscoveryError[] = [];
   private firstScan: Promise<void> | null = null;
 
@@ -29,7 +29,7 @@ export class BitmapPluginRegistry {
   }
 
   async rescan(): Promise<PluginScanResult> {
-    const { plugins, errors } = await discoverBitmapPlugins(this.pluginsDir);
+    const { plugins, errors } = await discoverRendererPlugins(this.pluginsDir);
     this.plugins = plugins;
     this.errors = errors;
     // An explicit rescan satisfies anything still waiting on the first one.
@@ -37,7 +37,7 @@ export class BitmapPluginRegistry {
     return { plugins, errors };
   }
 
-  list(): BitmapPluginRecord[] {
+  list(): RendererPluginRecord[] {
     return this.plugins;
   }
 
@@ -46,7 +46,7 @@ export class BitmapPluginRegistry {
     return this.errors;
   }
 
-  find(id: string): BitmapPluginRecord | undefined {
+  find(id: string): RendererPluginRecord | undefined {
     return this.plugins.find((plugin) => plugin.manifest.id === id);
   }
 }

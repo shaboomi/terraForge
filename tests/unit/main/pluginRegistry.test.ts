@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { BitmapPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
+import { RendererPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
 
 /** A minimal valid manifest; `name` is namespaced into a plugin id. */
 const manifestFor = (name: string) => ({
@@ -27,7 +27,7 @@ async function writePlugin(
   );
 }
 
-describe("BitmapPluginRegistry", () => {
+describe("RendererPluginRegistry", () => {
   let pluginsDir: string;
 
   beforeEach(async () => {
@@ -40,7 +40,7 @@ describe("BitmapPluginRegistry", () => {
 
   it("scans once for ready(), however many callers await it", async () => {
     await writePlugin(pluginsDir, "alpha", manifestFor("alpha"));
-    const registry = new BitmapPluginRegistry(pluginsDir);
+    const registry = new RendererPluginRegistry(pluginsDir);
 
     await Promise.all([registry.ready(), registry.ready(), registry.ready()]);
     expect(registry.list()).toHaveLength(1);
@@ -57,7 +57,7 @@ describe("BitmapPluginRegistry", () => {
 
   it("treats an explicit rescan as having satisfied the initial scan", async () => {
     await writePlugin(pluginsDir, "alpha", manifestFor("alpha"));
-    const registry = new BitmapPluginRegistry(pluginsDir);
+    const registry = new RendererPluginRegistry(pluginsDir);
 
     await registry.rescan();
     await writePlugin(pluginsDir, "beta", manifestFor("beta"));
@@ -70,7 +70,7 @@ describe("BitmapPluginRegistry", () => {
     await writePlugin(pluginsDir, "good", manifestFor("good"));
     await writePlugin(pluginsDir, "bad", { ...manifestFor("bad"), apiVersion: 99 });
 
-    const registry = new BitmapPluginRegistry(pluginsDir);
+    const registry = new RendererPluginRegistry(pluginsDir);
     await registry.ready();
 
     expect(registry.list()).toHaveLength(1);
@@ -82,7 +82,7 @@ describe("BitmapPluginRegistry", () => {
 
   it("clears stale errors once the offending plugin is fixed", async () => {
     await writePlugin(pluginsDir, "bad", "{ not json");
-    const registry = new BitmapPluginRegistry(pluginsDir);
+    const registry = new RendererPluginRegistry(pluginsDir);
     await registry.ready();
     expect(registry.lastErrors()).toHaveLength(1);
 

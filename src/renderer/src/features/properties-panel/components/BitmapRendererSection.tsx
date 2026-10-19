@@ -1,6 +1,6 @@
 import type { BitmapRendererSettings, SvgImport } from "../../../../../types";
 import { ErrorBoundary } from "../../../components/ErrorBoundary";
-import { useBitmapPluginStore } from "../../../store/bitmapPluginStore";
+import { useRendererPluginStore } from "../../../store/rendererPluginStore";
 import { bitmapRendererStamp, bitmapRenderSignature, bitmapSurface } from "../../bitmap-renderers/bitmapImage";
 import { useCanvasStore } from "../../../store/canvasStore";
 import { pageColors } from "../../../utils/paper";
@@ -32,7 +32,7 @@ const RENDER_STATUS_LABEL = {
 } as const;
 
 export function BitmapRendererSection({ imp, onUpdate }: { imp: SvgImport; onUpdate: (changes: Partial<SvgImport>) => void }) {
-  const pluginManifests = useBitmapPluginStore((state) => state.plugins);
+  const pluginManifests = useRendererPluginStore((state) => state.plugins);
   // This panel drives a bitmap, so only offer renderers that can take a source
   // image. A plugin declaring `"source": "none"` is a generator — it would run
   // here and quietly ignore the picture, which is worse than not being listed.

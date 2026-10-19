@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { discoverBitmapPlugins } from "../../../src/main/plugins/pluginManifest";
+import { discoverRendererPlugins, MANIFEST_LIMITS } from "../../../src/main/plugins/pluginManifest";
 
 /** Lets a test edit the plugin folder between the manifest read and the snapshot. */
 const hooks = vi.hoisted(() => ({ beforeSnapshot: null as null | ((folder: string) => Promise<void>) }));
@@ -41,7 +41,7 @@ const validManifest = {
   ],
 };
 
-describe("discoverBitmapPlugins", () => {
+describe("discoverRendererPlugins", () => {
   let pluginsDir: string;
 
   beforeEach(async () => {
@@ -59,7 +59,7 @@ describe("discoverBitmapPlugins", () => {
     hooks.beforeSnapshot = (folder) =>
       writeFile(join(folder, "manifest.json"), JSON.stringify({ ...validManifest, label: "Edited" }), "utf-8");
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
     expect(result.plugins).toHaveLength(0);
     expect(result.errors[0].message).toMatch(/changed while it was being read/);
   });
@@ -69,12 +69,12 @@ describe("discoverBitmapPlugins", () => {
     const entry = join(pluginsDir, "acme-halftone", "index.js");
     await writeFile(entry, "module.exports = { render: () => 'M0 0' };", "utf-8");
 
-    const before = (await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash;
+    const before = (await discoverRendererPlugins(pluginsDir)).plugins[0].manifest.sourceHash;
     expect(before).toMatch(/^[0-9a-f]{16}$/);
-    expect((await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash).toBe(before);
+    expect((await discoverRendererPlugins(pluginsDir)).plugins[0].manifest.sourceHash).toBe(before);
 
     await writeFile(entry, "module.exports = { render: () => 'M1 1' };", "utf-8");
-    expect((await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash).not.toBe(before);
+    expect((await discoverRendererPlugins(pluginsDir)).plugins[0].manifest.sourceHash).not.toBe(before);
   });
 
   it("keeps the source it fingerprinted, so what runs is what was hashed", async () => {
@@ -82,7 +82,7 @@ describe("discoverBitmapPlugins", () => {
     const entry = join(pluginsDir, "acme-halftone", "index.js");
     await writeFile(entry, "module.exports = { render: () => 'M0 0' };", "utf-8");
 
-    const [plugin] = (await discoverBitmapPlugins(pluginsDir)).plugins;
+    const [plugin] = (await discoverRendererPlugins(pluginsDir)).plugins;
     await writeFile(entry, "module.exports = { render: () => 'edited after the scan' };", "utf-8");
 
     expect(plugin.source?.modules["index.js"]).toContain("M0 0");
@@ -91,7 +91,7 @@ describe("discoverBitmapPlugins", () => {
   it("still loads a plugin whose source cannot be read, leaving it unfingerprinted", async () => {
     await writePlugin(pluginsDir, "acme-halftone", validManifest);
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.errors).toEqual([]);
     expect(result.plugins[0].manifest.sourceHash).toBeUndefined();
@@ -99,7 +99,7 @@ describe("discoverBitmapPlugins", () => {
   });
 
   it("returns nothing for an empty directory", async () => {
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
     expect(result.plugins).toEqual([]);
     expect(result.errors).toEqual([]);
   });
@@ -107,7 +107,7 @@ describe("discoverBitmapPlugins", () => {
   it("loads a valid manifest without executing any code", async () => {
     await writePlugin(pluginsDir, "acme-halftone", validManifest);
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.errors).toEqual([]);
     expect(result.plugins).toHaveLength(1);
@@ -124,7 +124,7 @@ describe("discoverBitmapPlugins", () => {
   it("reports an error for malformed JSON without throwing", async () => {
     await writePlugin(pluginsDir, "broken", "{ not json");
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toEqual([]);
     expect(result.errors).toHaveLength(1);
@@ -135,7 +135,7 @@ describe("discoverBitmapPlugins", () => {
     for (const id of ["spiral-amplitude", "halftone", ".halftone", "acme.", "acme .halftone"]) {
       await rm(pluginsDir, { recursive: true, force: true });
       await writePlugin(pluginsDir, "plugin", { ...validManifest, id });
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins, id).toEqual([]);
       expect(result.errors[0]?.message, id).toMatch(/must be namespaced/);
     }
@@ -143,13 +143,13 @@ describe("discoverBitmapPlugins", () => {
 
   it("accepts a namespaced id, however deep", async () => {
     await writePlugin(pluginsDir, "plugin", { ...validManifest, id: "com.example.halftone" });
-    expect((await discoverBitmapPlugins(pluginsDir)).errors).toEqual([]);
+    expect((await discoverRendererPlugins(pluginsDir)).errors).toEqual([]);
   });
 
   it("rejects an unsupported apiVersion", async () => {
     await writePlugin(pluginsDir, "future", { ...validManifest, id: "future.plugin", apiVersion: 99 });
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toEqual([]);
     expect(result.errors[0].message).toMatch(/apiVersion/);
@@ -162,7 +162,7 @@ describe("discoverBitmapPlugins", () => {
       fields: [{ type: "number", key: "x", label: "X" }], // missing min/max/step
     });
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toEqual([]);
     expect(result.errors[0].message).toMatch(/fields\[0\]/);
@@ -175,7 +175,7 @@ describe("discoverBitmapPlugins", () => {
       entry: "../../../etc/passwd",
     });
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toEqual([]);
     expect(result.errors[0].message).toMatch(/own folder/);
@@ -185,7 +185,7 @@ describe("discoverBitmapPlugins", () => {
     await writePlugin(pluginsDir, "a-first", { ...validManifest, id: "dup.id" });
     await writePlugin(pluginsDir, "b-second", { ...validManifest, id: "dup.id" });
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toHaveLength(1);
     expect(result.plugins[0].folder).toBe(join(pluginsDir, "a-first"));
@@ -197,7 +197,7 @@ describe("discoverBitmapPlugins", () => {
   it("skips folders with no manifest.json", async () => {
     await mkdir(join(pluginsDir, "not-a-plugin"), { recursive: true });
 
-    const result = await discoverBitmapPlugins(pluginsDir);
+    const result = await discoverRendererPlugins(pluginsDir);
 
     expect(result.plugins).toEqual([]);
     expect(result.errors).toEqual([]);
@@ -211,7 +211,7 @@ describe("discoverBitmapPlugins", () => {
   describe("field schema validation", () => {
     async function errorFor(manifest: Record<string, unknown>): Promise<string> {
       await writePlugin(pluginsDir, "candidate", manifest);
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins).toEqual([]);
       expect(result.errors).toHaveLength(1);
       return result.errors[0].message;
@@ -262,7 +262,7 @@ describe("discoverBitmapPlugins", () => {
         ],
       });
 
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.errors).toEqual([]);
       expect(result.plugins).toHaveLength(1);
     });
@@ -356,7 +356,7 @@ describe("discoverBitmapPlugins", () => {
         '{"id":"acme.a","label":"A","apiVersion":1,"entry":"index.js","defaults":{"angle":0},' +
           '"fields":[{"type":"number","key":"angle","label":"Angle","min":1e999,"max":10,"step":1}]}',
       );
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins).toEqual([]);
       expect(result.errors[0].message).toMatch(/finite numeric min\/max\/step/);
     });
@@ -374,7 +374,7 @@ describe("discoverBitmapPlugins", () => {
   describe("defaults validation", () => {
     async function errorFor(manifest: Record<string, unknown>): Promise<string> {
       await writePlugin(pluginsDir, "candidate", manifest);
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins).toEqual([]);
       expect(result.errors).toHaveLength(1);
       return result.errors[0].message;
@@ -416,7 +416,7 @@ describe("discoverBitmapPlugins", () => {
 
     it("defaults a manifest that says nothing about a source to requiring one", async () => {
       await writePlugin(pluginsDir, "tracer", validManifest);
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins[0].manifest.source).toBe("required");
     });
 
@@ -431,14 +431,14 @@ describe("discoverBitmapPlugins", () => {
         fields: [{ type: "number", key: "arms", label: "Arms", min: 1, max: 12, step: 1 }],
       });
 
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.errors).toEqual([]);
       expect(result.plugins[0].manifest.source).toBe("none");
     });
 
     it("accepts a generator that a source may optionally modulate", async () => {
       await writePlugin(pluginsDir, "hybrid", { ...validManifest, source: "optional" });
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.errors).toEqual([]);
       expect(result.plugins[0].manifest.source).toBe("optional");
     });
@@ -449,7 +449,7 @@ describe("discoverBitmapPlugins", () => {
 
     it("treats a manifest that says nothing about offsetting inks as not offsetting them", async () => {
       await writePlugin(pluginsDir, "tracer", validManifest);
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
       expect(result.plugins[0].manifest.inkOffset).toBe(false);
     });
 
@@ -467,7 +467,7 @@ describe("discoverBitmapPlugins", () => {
       const optionalFields = { source: "optional", renderTimeoutMs: 8000, inkOffset: true };
       await writePlugin(pluginsDir, "everything", { ...validManifest, ...optionalFields });
 
-      const result = await discoverBitmapPlugins(pluginsDir);
+      const result = await discoverRendererPlugins(pluginsDir);
 
       expect(result.errors).toEqual([]);
       expect(result.plugins[0].manifest).toMatchObject(optionalFields);
@@ -476,6 +476,74 @@ describe("discoverBitmapPlugins", () => {
     it("rejects a non-positive renderTimeoutMs", async () => {
       expect(await errorFor({ ...validManifest, renderTimeoutMs: 0 })).toMatch(/renderTimeoutMs/);
       expect(await errorFor({ ...validManifest, renderTimeoutMs: -5 })).toMatch(/renderTimeoutMs/);
+    });
+  });
+
+  /** Everything here is shown in the UI, so an unbounded value breaks its layout. */
+  describe("size limits", () => {
+    async function errorFor(manifest: Record<string, unknown>): Promise<string | undefined> {
+      await writePlugin(pluginsDir, "candidate", manifest);
+      return (await discoverRendererPlugins(pluginsDir)).errors[0]?.message;
+    }
+
+    const long = (n: number) => "x".repeat(n + 1);
+    const field = validManifest.fields[0];
+    const select = (options: unknown[]) => ({
+      ...validManifest,
+      defaults: { mode: "a" },
+      fields: [{ type: "select", key: "mode", label: "Mode", options }],
+    });
+
+    it("accepts strings and lists right at their limits", async () => {
+      const options = Array.from({ length: MANIFEST_LIMITS.options }, (_, i) => ({
+        value: i === 0 ? "a" : `v${i}`.padEnd(MANIFEST_LIMITS.optionValue, "v"),
+        label: "L".repeat(MANIFEST_LIMITS.label),
+      }));
+      expect(await errorFor({ ...select(options), label: "L".repeat(MANIFEST_LIMITS.label) })).toBeUndefined();
+    });
+
+    it("rejects an over-long id, label, key or aria label", async () => {
+      expect(await errorFor({ ...validManifest, id: `acme.${long(MANIFEST_LIMITS.id)}` })).toMatch(/manifest\.id must be at most/);
+      expect(await errorFor({ ...validManifest, label: long(MANIFEST_LIMITS.label) })).toMatch(/manifest\.label must be at most/);
+      expect(await errorFor({ ...validManifest, fields: [{ ...field, label: long(MANIFEST_LIMITS.label) }] })).toMatch(
+        /fields\[0\]\.label must be at most/,
+      );
+      const key = long(MANIFEST_LIMITS.key);
+      expect(await errorFor({ ...validManifest, defaults: { [key]: 1 }, fields: [{ ...field, key }] })).toMatch(
+        /fields\[0\]\.key must be at most/,
+      );
+      expect(
+        await errorFor({ ...validManifest, fields: [{ ...field, ariaLabel: long(MANIFEST_LIMITS.ariaLabel) }] }),
+      ).toMatch(/ariaLabel must be at most/);
+    });
+
+    it("rejects an over-long select option value or label", async () => {
+      expect(await errorFor(select([{ value: "a", label: long(MANIFEST_LIMITS.label) }]))).toMatch(
+        /options\[0\]\.label must be at most/,
+      );
+      expect(await errorFor(select([{ value: "a", label: "A" }, { value: long(MANIFEST_LIMITS.optionValue), label: "B" }]))).toMatch(
+        /options\[1\]\.value must be at most/,
+      );
+    });
+
+    it("rejects too many fields, options or presets", async () => {
+      const fields = Array.from({ length: MANIFEST_LIMITS.fields + 1 }, (_, i) => ({ ...field, key: `k${i}` }));
+      const defaults = Object.fromEntries(fields.map((f) => [f.key, 1]));
+      expect(await errorFor({ ...validManifest, defaults, fields })).toMatch(/fields may have at most/);
+
+      const options = Array.from({ length: MANIFEST_LIMITS.options + 1 }, (_, i) => ({ value: i === 0 ? "a" : `v${i}`, label: "L" }));
+      expect(await errorFor(select(options))).toMatch(/options may have at most/);
+
+      const presets = Array.from({ length: MANIFEST_LIMITS.presets + 1 }, () => ({ label: "+", delta: 1 }));
+      expect(await errorFor({ ...validManifest, fields: [{ ...field, presets }] })).toMatch(/presets may have at most/);
+    });
+
+    it("rejects an oversized defaults bag", async () => {
+      const many = Object.fromEntries(Array.from({ length: MANIFEST_LIMITS.defaults + 1 }, (_, i) => [`k${i}`, 1]));
+      expect(await errorFor({ ...validManifest, defaults: { ...many, dotSize: 2 } })).toMatch(/defaults may have at most/);
+      expect(await errorFor({ ...validManifest, defaults: { dotSize: 2, note: long(MANIFEST_LIMITS.stringDefault) } })).toMatch(
+        /defaults\["note"\] must be at most/,
+      );
     });
   });
 });

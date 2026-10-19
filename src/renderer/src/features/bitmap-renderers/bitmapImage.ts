@@ -1,5 +1,5 @@
 import type { RendererDot, RendererInk, RendererSource, SvgImport, SvgPath } from "../../../../types";
-import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
+import { useRendererPluginStore } from "../../store/rendererPluginStore";
 import { rendererSettings } from "./coerceSettings";
 import { levelSource, resolveToneSettings, smoothingRadius } from "./toneAdjust";
 import { defaultPaperFor, type SeparationMode } from "./colourSeparation";
@@ -386,7 +386,7 @@ export async function materializeBitmapLayers(
 ): Promise<MaterializedBitmap> {
   if (!bitmap.bitmapDataUrl) return { bitmapRendererPath: "", paths: [] };
 
-  const pluginManifests = useBitmapPluginStore.getState().plugins;
+  const pluginManifests = useRendererPluginStore.getState().plugins;
   // An unset id is a legacy/new-import case where defaulting to
   // spiral-amplitude is correct; a *set but unresolvable* id (e.g. an
   // uninstalled plugin) must fail loudly rather than silently render with a

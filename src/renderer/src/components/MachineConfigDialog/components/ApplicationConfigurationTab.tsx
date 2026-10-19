@@ -4,7 +4,7 @@ import { AppTogglesSections } from "./Application/AppTogglesSections";
 import { VinylCuttingSection } from "./Application/VinylCuttingSection";
 import { InkServiceStationsSection } from "./Application/InkServiceStationsSection";
 import { BitmapImportSection } from "./Application/BitmapImportSection";
-import { BitmapPluginsSection } from "./Application/BitmapPluginsSection";
+import { RendererPluginsSection } from "./Application/RendererPluginsSection";
 
 interface ApplicationConfigurationTabProps {
   controller: MachineConfigDialogController;
@@ -22,7 +22,7 @@ export function ApplicationConfigurationTab({
       {/* Plugin management only makes sense once bitmap import itself is on
           — otherwise the dialog shows admin controls for a feature that's
           hidden everywhere else. */}
-      {controller.appConfig.bitmapRendererEnabled && <BitmapPluginsSection />}
+      {controller.appConfig.bitmapRendererEnabled && <RendererPluginsSection />}
     </div>
   );
 }

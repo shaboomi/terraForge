@@ -1,23 +1,23 @@
 import { ipcMain, shell } from "electron";
 import type { RendererContext } from "../../types";
 import { installExamplePlugins } from "../plugins/pluginPaths";
-import type { BitmapPluginRegistry } from "../plugins/pluginRegistry";
+import type { RendererPluginRegistry } from "../plugins/pluginRegistry";
 import type { PluginHostManager } from "../plugins/pluginHostManager";
 
-export interface BitmapPluginIpcOptions {
+export interface RendererPluginIpcOptions {
   pluginsDir: string;
   examplesDir: string;
-  registry: BitmapPluginRegistry;
+  registry: RendererPluginRegistry;
   hostManager: PluginHostManager;
 }
 
-export function registerBitmapPluginIpcHandlers({
+export function registerRendererPluginIpcHandlers({
   pluginsDir,
   examplesDir,
   registry,
   hostManager,
-}: BitmapPluginIpcOptions): void {
-  ipcMain.handle("bitmapPlugins:list", async () => {
+}: RendererPluginIpcOptions): void {
+  ipcMain.handle("rendererPlugins:list", async () => {
     // Awaiting the first scan is what stops a startup-time list() from
     // returning empty while discovery is still in flight.
     await registry.ready();
@@ -27,7 +27,7 @@ export function registerBitmapPluginIpcHandlers({
     };
   });
 
-  ipcMain.handle("bitmapPlugins:rescan", async () => {
+  ipcMain.handle("rendererPlugins:rescan", async () => {
     const { plugins, errors } = await registry.rescan();
     // A warm host holds the plugin's modules in memory, so without this an
     // edited plugin would keep rendering with its previous source until the
@@ -36,11 +36,11 @@ export function registerBitmapPluginIpcHandlers({
     return { manifests: plugins.map((plugin) => plugin.manifest), errors };
   });
 
-  ipcMain.handle("bitmapPlugins:render", (_e, pluginId: string, context: RendererContext) =>
+  ipcMain.handle("rendererPlugins:render", (_e, pluginId: string, context: RendererContext) =>
     hostManager.render(pluginId, context),
   );
 
-  ipcMain.handle("bitmapPlugins:installExamples", async () => {
+  ipcMain.handle("rendererPlugins:installExamples", async () => {
     const result = await installExamplePlugins(examplesDir, pluginsDir);
     // Rescan here so the caller never has to remember to, and drop changed
     // hosts for the same reason a manual rescan does.
@@ -49,7 +49,7 @@ export function registerBitmapPluginIpcHandlers({
     return { ...result, manifests: plugins.map((plugin) => plugin.manifest), errors };
   });
 
-  ipcMain.handle("bitmapPlugins:openFolder", async () => {
+  ipcMain.handle("rendererPlugins:openFolder", async () => {
     // openPath resolves with an error string rather than rejecting, so an
     // unopenable folder would otherwise look like success to the caller.
     const failure = await shell.openPath(pluginsDir);

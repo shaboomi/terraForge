@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { join } from "path";
-import { discoverBitmapPlugins, type BitmapPluginRecord } from "../../src/main/plugins/pluginManifest";
+import { discoverRendererPlugins, type RendererPluginRecord } from "../../src/main/plugins/pluginManifest";
 import { readPluginModules } from "../../src/main/plugins/pluginSource";
 import { validateRendererOutput } from "../../src/renderer/src/features/bitmap-renderers/validatePath";
 import type { RendererContext, RendererInk, RendererOutput } from "../../src/types";
@@ -51,7 +51,7 @@ function loadPlugin(modules: Record<string, string>, entry: string): PluginModul
   return load(entry);
 }
 
-async function loadExample(record: BitmapPluginRecord): Promise<PluginModule> {
+async function loadExample(record: RendererPluginRecord): Promise<PluginModule> {
   const { modules, entry } = await readPluginModules(record);
   return loadPlugin(modules, entry);
 }
@@ -63,10 +63,10 @@ const source = (width: number, height: number, tone: (x: number, y: number) => n
 };
 
 describe("example plugins", () => {
-  let records: BitmapPluginRecord[];
+  let records: RendererPluginRecord[];
 
   beforeAll(async () => {
-    const result = await discoverBitmapPlugins(examplesDir);
+    const result = await discoverRendererPlugins(examplesDir);
     expect(result.errors).toEqual([]);
     records = result.plugins;
   });

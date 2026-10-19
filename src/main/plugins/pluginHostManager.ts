@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from "electron";
 import type { RendererContext, RendererOutput } from "../../types";
-import type { BitmapPluginRecord } from "./pluginManifest";
-import type { BitmapPluginRegistry } from "./pluginRegistry";
+import type { RendererPluginRecord } from "./pluginManifest";
+import type { RendererPluginRegistry } from "./pluginRegistry";
 import { PLUGIN_HOST_ORIGIN } from "./pluginSandboxAssets";
 import { markPluginHostWindow } from "./pluginHostWindows";
 import { pluginSandboxSession } from "./pluginSandbox";
@@ -40,7 +40,7 @@ interface ReadyWaiter {
 
 interface HostedPlugin {
   pluginId: string;
-  record: BitmapPluginRecord;
+  record: RendererPluginRecord;
   win: BrowserWindow;
   /**
    * Captured at spawn because a destroyed window can no longer be asked for
@@ -84,7 +84,7 @@ export class PluginHostManager {
 
   constructor(
     private readonly preloadPath: string,
-    private readonly registry: BitmapPluginRegistry,
+    private readonly registry: RendererPluginRegistry,
   ) {
     this.onPageMessage = (event, message) => {
       const host = this.bySenderId.get(event.sender.id);
@@ -99,7 +99,7 @@ export class PluginHostManager {
   async render(pluginId: string, context: RendererContext): Promise<RendererOutput> {
     const record = this.registry.find(pluginId);
     if (!record) {
-      throw new Error(`Bitmap renderer plugin "${pluginId}" is not installed.`);
+      throw new Error(`Renderer plugin "${pluginId}" is not installed.`);
     }
 
     const host = await this.ensureReady(pluginId, record);
@@ -140,7 +140,7 @@ export class PluginHostManager {
     }
   }
 
-  private ensureReady(pluginId: string, record: BitmapPluginRecord): Promise<HostedPlugin> {
+  private ensureReady(pluginId: string, record: RendererPluginRecord): Promise<HostedPlugin> {
     const existing = this.hosts.get(pluginId);
     const host = existing && existing.state !== "terminated" ? existing : this.spawn(pluginId, record);
     if (host.state === "ready") return Promise.resolve(host);
@@ -150,7 +150,7 @@ export class PluginHostManager {
     });
   }
 
-  private spawn(pluginId: string, record: BitmapPluginRecord): HostedPlugin {
+  private spawn(pluginId: string, record: RendererPluginRecord): HostedPlugin {
     const win = new BrowserWindow({
       show: false,
       skipTaskbar: true,
@@ -186,6 +186,11 @@ export class PluginHostManager {
     this.bySenderId.set(host.webContentsId, host);
     this.armLoadTimer(host);
 
+    // The host page is ours and never navigates or opens windows, so either
+    // happening means something has gone wrong. Refuse both rather than let a
+    // sandboxed page leave its fixed origin or spawn a window it controls.
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    win.webContents.on("will-navigate", (event) => event.preventDefault());
     win.webContents.on("render-process-gone", (_event, details) => {
       this.failHost(host, new Error(`Plugin "${pluginId}" crashed: ${details.reason}.`));
     });

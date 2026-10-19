@@ -1,6 +1,6 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
 import type { SvgImport } from "../../../../types";
-import { useBitmapPluginStore } from "../../store/bitmapPluginStore";
+import { useRendererPluginStore } from "../../store/rendererPluginStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { bitmapRenderSignature, bitmapSurface, materializeBitmapLayers } from "./bitmapImage";
 import { pageColors, type PageColors } from "../../utils/paper";
@@ -316,7 +316,7 @@ export function startBitmapRenderService(): () => void {
   // A render that failed because its plugin was missing gets another chance
   // whenever the installed set changes — the startup plugin scan routinely
   // lands after a document has already been restored.
-  const unsubscribePlugins = useBitmapPluginStore.subscribe((state, previous) => {
+  const unsubscribePlugins = useRendererPluginStore.subscribe((state, previous) => {
     if (state.plugins === previous.plugins) return;
     for (const [id, job] of jobs) if (job.failed) cancelJob(id);
     reconcile(useCanvasStore.getState().imports);

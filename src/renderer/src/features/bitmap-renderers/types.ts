@@ -1,5 +1,5 @@
 import type {
-  BitmapPluginManifest,
+  RendererPluginManifest,
   BitmapRendererFieldSchema,
   BitmapRendererSettings,
   RendererContext,
@@ -14,7 +14,7 @@ export interface BitmapRendererDefinition {
    * Whether it needs a source image — the same declaration a plugin makes in
    * its manifest. Only renderers that can take one are offered for a bitmap.
    */
-  source: NonNullable<BitmapPluginManifest["source"]>;
+  source: NonNullable<RendererPluginManifest["source"]>;
   /**
    * Whether it offsets each separated ink's pattern when asked
    * (`RendererContext.ink.offset`) — the same declaration a plugin makes in
@@ -34,7 +34,7 @@ export interface BitmapRendererDefinition {
    * default curve — so drawings rendered with the old behaviour are offered a
    * re-render instead of silently keeping, or silently losing, what the user
    * saw. Compared for equality only. Plugins get theirs from a hash of their
-   * source (`BitmapPluginManifest.sourceHash`).
+   * source (`RendererPluginManifest.sourceHash`).
    */
   version: string;
   /** Settings fields to render in the properties panel, in display order. */

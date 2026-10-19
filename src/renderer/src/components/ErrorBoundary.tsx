@@ -17,7 +17,7 @@ interface ErrorBoundaryState {
  * the whole React root, which leaves the window blank.
  *
  * Use it around anything driven by data the app does not control — most
- * obviously bitmap renderer plugins, whose field schemas come from a
+ * obviously renderer plugins, whose field schemas come from a
  * user-installed manifest. Manifests are validated before they get this far,
  * but validation and rendering are separate code paths and only one of them
  * is allowed to be wrong in a way the user can recover from.

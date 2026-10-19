@@ -1,5 +1,5 @@
 /**
- * Preload for a sandboxed bitmap-plugin host window. Runs with
+ * Preload for a sandboxed renderer-plugin host window. Runs with
  * `sandbox: true`, so it has no Node API beyond Electron's own IPC bridge,
  * and exposes exactly two functions to the page: send a message, receive a
  * message. Nothing else crosses into the page's world.

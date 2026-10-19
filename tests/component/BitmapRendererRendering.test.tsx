@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { BitmapRendererSection } from "@renderer/features/properties-panel/components/BitmapRendererSection";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
 import { useCanvasStore } from "@renderer/store/canvasStore";
 import {
   MIN_RENDERING_VISIBLE_MS,
   RENDER_DEBOUNCE_MS,
   startBitmapRenderService,
 } from "@renderer/features/bitmap-renderers/bitmapRenderService";
-import type { BitmapPluginManifest, SvgImport } from "../../src/types";
+import type { RendererPluginManifest, SvgImport } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
   const actual =
@@ -90,7 +90,7 @@ function bitmapImport(overrides: Partial<SvgImport> = {}): SvgImport {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useBitmapPluginStore.setState({ plugins: [], errors: [], scanning: false, actionError: null });
+  useRendererPluginStore.setState({ plugins: [], errors: [], scanning: false, actionError: null });
   materialize.mockReset();
   materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [], rendererVersion: currentVersion });
   useCanvasStore.setState({ imports: [] });
@@ -287,8 +287,8 @@ describe("BitmapRendererSection re-render behaviour", () => {
 
   it("offers bitmap-capable plugins, but not generators or ids clashing with a built-in", () => {
     const manifest = (id: string, source?: "required" | "optional" | "none") =>
-      ({ id, label: id, apiVersion: 1, defaults: {}, fields: [], source }) as BitmapPluginManifest;
-    useBitmapPluginStore.setState({
+      ({ id, label: id, apiVersion: 1, defaults: {}, fields: [], source }) as RendererPluginManifest;
+    useRendererPluginStore.setState({
       plugins: [
         manifest("acme.tracer", "required"),
         manifest("acme.hybrid", "optional"),

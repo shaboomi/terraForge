@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BitmapPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
-import type { BitmapPluginRecord } from "../../../src/main/plugins/pluginManifest";
+import type { RendererPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
+import type { RendererPluginRecord } from "../../../src/main/plugins/pluginManifest";
 
 interface FakeWindow {
   id: number;
@@ -11,6 +11,8 @@ interface FakeWindow {
     id: number;
     send: (channel: string, message: Record<string, unknown>) => void;
     on: (event: string, cb: (...args: unknown[]) => void) => void;
+    setWindowOpenHandler: (handler: (details: unknown) => { action: string }) => void;
+    windowOpenHandler?: (details: unknown) => { action: string };
   };
   on: (event: string, cb: (...args: unknown[]) => void) => void;
   loadURL: (url: string) => Promise<void>;
@@ -37,7 +39,12 @@ vi.mock("electron", () => {
       destroyed: false,
       sent: [],
       handlers,
-      webContents: { id, send: (channel, message) => win.sent.push({ channel, message }), on },
+      webContents: {
+        id,
+        send: (channel, message) => win.sent.push({ channel, message }),
+        on,
+        setWindowOpenHandler: (handler) => { win.webContents.windowOpenHandler = handler; },
+      },
       on,
       loadURL: async () => {},
       isDestroyed: () => win.destroyed,
@@ -81,7 +88,7 @@ vi.mock("../../../src/main/plugins/pluginSource", () => ({
 import { PluginHostManager } from "../../../src/main/plugins/pluginHostManager";
 import { MAX_OUTPUT_UNITS, MAX_PLUGIN_MESSAGE_LENGTH } from "../../../src/main/plugins/pluginOutputBudget";
 
-function makeRecord(id: string, renderTimeoutMs?: number, sourceHash?: string): BitmapPluginRecord {
+function makeRecord(id: string, renderTimeoutMs?: number, sourceHash?: string): RendererPluginRecord {
   return {
     manifest: { id, label: id, apiVersion: 1, defaults: {}, fields: [], renderTimeoutMs, sourceHash },
     entryPath: `/plugins/${id}/index.js`,
@@ -90,12 +97,12 @@ function makeRecord(id: string, renderTimeoutMs?: number, sourceHash?: string): 
 }
 
 /** Registry over a mutable list, so a test can "rescan" by replacing its contents. */
-function makeRegistry(records: BitmapPluginRecord[]): BitmapPluginRegistry {
+function makeRegistry(records: RendererPluginRecord[]): RendererPluginRegistry {
   return {
     find: (id: string) => records.find((r) => r.manifest.id === id),
     list: () => records,
     rescan: async () => ({ plugins: records, errors: [] }),
-  } as unknown as BitmapPluginRegistry;
+  } as unknown as RendererPluginRegistry;
 }
 
 /** Delivers a page→main message as the given window's webContents would. */
@@ -291,6 +298,18 @@ describe("PluginHostManager", () => {
     await vi.advanceTimersByTimeAsync(10001);
     expect(await outcome).toMatch(/did not finish loading/);
     expect(mocks.windows[0].destroyed).toBe(true);
+    manager.terminateAll();
+  });
+
+  it("refuses to let a host window navigate or open another window", async () => {
+    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+    void manager.render("acme", context).catch(() => {});
+    const win = mocks.windows[0];
+
+    expect(win.webContents.windowOpenHandler?.({ url: "https://example.com" })).toEqual({ action: "deny" });
+    const navigation = { preventDefault: vi.fn() };
+    win.emit("will-navigate", navigation, "https://example.com");
+    expect(navigation.preventDefault).toHaveBeenCalled();
     manager.terminateAll();
   });
 

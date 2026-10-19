@@ -1,4 +1,4 @@
-import type { BitmapPluginManifest } from "../../../../types";
+import type { RendererPluginManifest } from "../../../../types";
 import { circularRingsRenderer } from "./circularRings";
 import { concentricBoxesRenderer } from "./concentricBoxes";
 import { concentricPolygonsRenderer } from "./concentricPolygons";
@@ -24,10 +24,10 @@ export const bitmapRenderers: BitmapRendererDefinition[] = [
 /** One definition per manifest object: a manifest is replaced, never edited,
  * when plugins are rescanned, so its identity is a safe cache key — and the
  * panel looks renderers up on every render. */
-const pluginDefinitions = new WeakMap<BitmapPluginManifest, BitmapRendererDefinition>();
+const pluginDefinitions = new WeakMap<RendererPluginManifest, BitmapRendererDefinition>();
 
 /** Wraps an installed plugin's manifest into the same definition shape an in-tree renderer uses. */
-export function pluginRendererFromManifest(manifest: BitmapPluginManifest): BitmapRendererDefinition {
+export function pluginRendererFromManifest(manifest: RendererPluginManifest): BitmapRendererDefinition {
   let definition = pluginDefinitions.get(manifest);
   if (!definition) {
     definition = buildPluginDefinition(manifest);
@@ -36,7 +36,7 @@ export function pluginRendererFromManifest(manifest: BitmapPluginManifest): Bitm
   return definition;
 }
 
-function buildPluginDefinition(manifest: BitmapPluginManifest): BitmapRendererDefinition {
+function buildPluginDefinition(manifest: RendererPluginManifest): BitmapRendererDefinition {
   return {
     id: manifest.id,
     label: manifest.label,
@@ -45,7 +45,7 @@ function buildPluginDefinition(manifest: BitmapPluginManifest): BitmapRendererDe
     version: `plugin:${manifest.sourceHash ?? "unknown"}`,
     defaults: manifest.defaults,
     fields: manifest.fields,
-    render: (context) => window.terraForge.bitmapPlugins.render(manifest.id, context),
+    render: (context) => window.terraForge.rendererPlugins.render(manifest.id, context),
   };
 }
 
@@ -59,7 +59,7 @@ function buildPluginDefinition(manifest: BitmapPluginManifest): BitmapRendererDe
  */
 export function findBitmapRenderer(
   id: string | undefined,
-  pluginManifests: BitmapPluginManifest[] = [],
+  pluginManifests: RendererPluginManifest[] = [],
 ): BitmapRendererDefinition | undefined {
   if (!id) return undefined;
   const inTree = bitmapRenderers.find((renderer) => renderer.id === id);
@@ -74,7 +74,7 @@ export function findBitmapRenderer(
  */
 export function getBitmapRenderer(
   id: string | undefined,
-  pluginManifests: BitmapPluginManifest[] = [],
+  pluginManifests: RendererPluginManifest[] = [],
 ): BitmapRendererDefinition {
   return findBitmapRenderer(id, pluginManifests) ?? spiralAmplitudeRenderer;
 }

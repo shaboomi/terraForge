@@ -3,9 +3,9 @@ import { render, screen } from "@testing-library/react";
 import { ErrorBoundary } from "@renderer/components/ErrorBoundary";
 import { RendererFieldControl } from "@renderer/features/properties-panel/components/RendererFieldControl";
 import { BitmapRendererSection } from "@renderer/features/properties-panel/components/BitmapRendererSection";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
 import type {
-  BitmapPluginManifest,
+  RendererPluginManifest,
   BitmapRendererNumberFieldSchema,
   BitmapRendererSelectFieldSchema,
 } from "../../src/types";
@@ -16,7 +16,7 @@ let consoleError: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-  useBitmapPluginStore.setState({ plugins: [] });
+  useRendererPluginStore.setState({ plugins: [] });
 });
 
 afterEach(() => {
@@ -110,10 +110,10 @@ describe("BitmapRendererSection with a malformed plugin schema", () => {
     apiVersion: 1,
     defaults: {},
     fields: [{ type: "select", key: "axis", label: "Axis", control: "icon-buttons", options: "not-an-array" }],
-  } as unknown as BitmapPluginManifest;
+  } as unknown as RendererPluginManifest;
 
   it("contains the failure and keeps the renderer picker usable", () => {
-    useBitmapPluginStore.setState({ plugins: [malformed] });
+    useRendererPluginStore.setState({ plugins: [malformed] });
     const imp = createSvgImport({ kind: "bitmap", bitmapRendererId: "bad.plugin", paths: [] });
 
     render(<BitmapRendererSection imp={imp} onUpdate={vi.fn()} />);
@@ -125,7 +125,7 @@ describe("BitmapRendererSection with a malformed plugin schema", () => {
 });
 
 describe("BitmapRendererSection ink offset option", () => {
-  const plugin = (inkOffset?: boolean): BitmapPluginManifest => ({
+  const plugin = (inkOffset?: boolean): RendererPluginManifest => ({
     id: "lines.plugin",
     label: "Lines",
     apiVersion: 1,
@@ -138,7 +138,7 @@ describe("BitmapRendererSection ink offset option", () => {
     createSvgImport({ kind: "bitmap", bitmapRendererId: "lines.plugin", bitmapSeparationMode: "cmyk", paths: [] });
 
   it("is hidden for a plugin that does not declare it, since it would do nothing", () => {
-    useBitmapPluginStore.setState({ plugins: [plugin()] });
+    useRendererPluginStore.setState({ plugins: [plugin()] });
     render(<BitmapRendererSection imp={separated()} onUpdate={vi.fn()} />);
 
     expect(screen.getByRole("combobox", { name: "Colour separation mode" })).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe("BitmapRendererSection ink offset option", () => {
   });
 
   it("is offered for a plugin that declares inkOffset", () => {
-    useBitmapPluginStore.setState({ plugins: [plugin(true)] });
+    useRendererPluginStore.setState({ plugins: [plugin(true)] });
     render(<BitmapRendererSection imp={separated()} onUpdate={vi.fn()} />);
 
     expect(screen.getByRole("checkbox", { name: "Offset each ink" })).toBeChecked();

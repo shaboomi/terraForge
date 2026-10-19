@@ -4,7 +4,7 @@ import { readFile } from "fs/promises";
 import { join, resolve, sep } from "path";
 import {
   BITMAP_RENDERER_ICON_NAMES,
-  type BitmapPluginManifest,
+  type RendererPluginManifest,
   type BitmapRendererFieldSchema,
   type BitmapRendererSettings,
 } from "../../types";
@@ -14,9 +14,9 @@ import { readPluginModules, type PluginModuleMap } from "./pluginSource";
 const SUPPORTED_API_VERSIONS = [1];
 
 /** A discovered, validated plugin. `entryPath`/`folder` are main-process-only —
- * never sent to the renderer (see `BitmapPluginManifest`, which excludes them). */
-export interface BitmapPluginRecord {
-  manifest: BitmapPluginManifest;
+ * never sent to the renderer (see `RendererPluginManifest`, which excludes them). */
+export interface RendererPluginRecord {
+  manifest: RendererPluginManifest;
   entryPath: string;
   folder: string;
   /**
@@ -36,7 +36,7 @@ export interface PluginDiscoveryError {
 }
 
 export interface PluginDiscoveryResult {
-  plugins: BitmapPluginRecord[];
+  plugins: RendererPluginRecord[];
   errors: PluginDiscoveryError[];
 }
 
@@ -46,6 +46,27 @@ const NAMESPACED_ID = /^[^.\s]+(\.[^.\s]+)+$/;
 const NUMBER_CONTROLS = new Set(["input", "slider"]);
 const SOURCE_MODES = new Set(["required", "optional", "none"]);
 const SELECT_CONTROLS = new Set(["dropdown", "icon-buttons"]);
+
+/**
+ * Ceilings on what a manifest may declare. Every one of these ends up in the
+ * properties panel or the plugins list, so they are about keeping that UI
+ * usable, not about safety — a 10,000-character label or a select with a
+ * thousand options is a broken plugin, and is better reported as one here
+ * than discovered as a panel that no longer lays out. Generous enough that
+ * no reasonable plugin comes near them.
+ */
+export const MANIFEST_LIMITS = {
+  id: 128,
+  label: 80,
+  key: 64,
+  ariaLabel: 200,
+  optionValue: 64,
+  stringDefault: 256,
+  fields: 64,
+  options: 64,
+  presets: 16,
+  defaults: 256,
+} as const;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -65,9 +86,16 @@ function isSettingValue(value: unknown): value is number | boolean | string {
   return typeof value === "boolean" || typeof value === "string";
 }
 
-function validateOptionalString(value: unknown, where: string): string | null {
+/** A required string: present, non-empty, and no longer than `max`. */
+function validateString(value: unknown, where: string, max: number): string | null {
+  if (!isNonEmptyString(value)) return `${where} is required`;
+  return value.length > max ? `${where} must be at most ${max} characters` : null;
+}
+
+function validateOptionalString(value: unknown, where: string, max: number): string | null {
   if (value === undefined) return null;
-  return isNonEmptyString(value) ? null : `${where} must be a non-empty string`;
+  if (!isNonEmptyString(value)) return `${where} must be a non-empty string`;
+  return value.length > max ? `${where} must be at most ${max} characters` : null;
 }
 
 /**
@@ -85,18 +113,22 @@ function validateIcon(value: unknown, where: string): string | null {
 
 function validatePreset(preset: unknown, where: string): string | null {
   if (!isRecord(preset)) return `${where} is not an object`;
-  if (!isNonEmptyString(preset.label)) return `${where}.label is required`;
+  const labelError = validateString(preset.label, `${where}.label`, MANIFEST_LIMITS.label);
+  if (labelError) return labelError;
   if (!isFiniteNumber(preset.delta)) return `${where}.delta must be a finite number`;
   return (
-    validateOptionalString(preset.ariaLabel, `${where}.ariaLabel`) ?? validateIcon(preset.icon, where)
+    validateOptionalString(preset.ariaLabel, `${where}.ariaLabel`, MANIFEST_LIMITS.ariaLabel) ??
+    validateIcon(preset.icon, where)
   );
 }
 
 function validateOption(option: unknown, where: string): string | null {
   if (!isRecord(option)) return `${where} is not an object`;
-  if (!isNonEmptyString(option.value)) return `${where}.value is required`;
-  if (!isNonEmptyString(option.label)) return `${where}.label is required`;
-  return validateIcon(option.icon, where);
+  return (
+    validateString(option.value, `${where}.value`, MANIFEST_LIMITS.optionValue) ??
+    validateString(option.label, `${where}.label`, MANIFEST_LIMITS.label) ??
+    validateIcon(option.icon, where)
+  );
 }
 
 function validateNumberField(f: Record<string, unknown>, where: string): string | null {
@@ -110,6 +142,9 @@ function validateNumberField(f: Record<string, unknown>, where: string): string 
   }
   if (f.presets !== undefined) {
     if (!Array.isArray(f.presets)) return `${where}.presets must be an array`;
+    if (f.presets.length > MANIFEST_LIMITS.presets) {
+      return `${where}.presets may have at most ${MANIFEST_LIMITS.presets} entries`;
+    }
     for (let i = 0; i < f.presets.length; i++) {
       const error = validatePreset(f.presets[i], `${where}.presets[${i}]`);
       if (error) return error;
@@ -121,6 +156,9 @@ function validateNumberField(f: Record<string, unknown>, where: string): string 
 function validateSelectField(f: Record<string, unknown>, where: string): string | null {
   if (!Array.isArray(f.options) || f.options.length === 0) {
     return `${where} (select) requires a non-empty options array`;
+  }
+  if (f.options.length > MANIFEST_LIMITS.options) {
+    return `${where}.options may have at most ${MANIFEST_LIMITS.options} entries`;
   }
   for (let i = 0; i < f.options.length; i++) {
     const error = validateOption(f.options[i], `${where}.options[${i}]`);
@@ -135,11 +173,11 @@ function validateSelectField(f: Record<string, unknown>, where: string): string 
 function validateField(field: unknown, index: number): string | null {
   const where = `fields[${index}]`;
   if (!isRecord(field)) return `${where} is not an object`;
-  if (!isNonEmptyString(field.key)) return `${where}.key is required`;
-  if (!isNonEmptyString(field.label)) return `${where}.label is required`;
-
-  const ariaError = validateOptionalString(field.ariaLabel, `${where}.ariaLabel`);
-  if (ariaError) return ariaError;
+  const textError =
+    validateString(field.key, `${where}.key`, MANIFEST_LIMITS.key) ??
+    validateString(field.label, `${where}.label`, MANIFEST_LIMITS.label) ??
+    validateOptionalString(field.ariaLabel, `${where}.ariaLabel`, MANIFEST_LIMITS.ariaLabel);
+  if (textError) return textError;
 
   if (field.type === "number") return validateNumberField(field, where);
   if (field.type === "boolean") return null;
@@ -157,9 +195,19 @@ function validateDefaults(
   fields: BitmapRendererFieldSchema[],
   defaults: Record<string, unknown>,
 ): string | null {
-  for (const [key, value] of Object.entries(defaults)) {
+  const entries = Object.entries(defaults);
+  if (entries.length > MANIFEST_LIMITS.defaults) {
+    return `manifest.defaults may have at most ${MANIFEST_LIMITS.defaults} entries`;
+  }
+  for (const [key, value] of entries) {
+    if (key.length > MANIFEST_LIMITS.key) {
+      return `manifest.defaults key "${key.slice(0, MANIFEST_LIMITS.key)}…" must be at most ${MANIFEST_LIMITS.key} characters`;
+    }
     if (!isSettingValue(value)) {
       return `manifest.defaults["${key}"] must be a finite number, boolean, or string`;
+    }
+    if (typeof value === "string" && value.length > MANIFEST_LIMITS.stringDefault) {
+      return `manifest.defaults["${key}"] must be at most ${MANIFEST_LIMITS.stringDefault} characters`;
     }
   }
 
@@ -190,20 +238,25 @@ function validateDefaults(
 function validateManifestShape(raw: unknown, folder: string): string | null {
   if (!isRecord(raw)) return "manifest.json is not an object";
   const m = raw;
-  if (!isNonEmptyString(m.id)) return "manifest.id is required";
+  const idError = validateString(m.id, "manifest.id", MANIFEST_LIMITS.id);
+  if (idError) return idError;
   // Built-in renderers use plain ids ("spiral-amplitude"). Requiring a
   // namespace keeps every plugin out of that space — including ids a future
   // built-in might take — rather than letting a clash silently hide one.
-  if (!NAMESPACED_ID.test(m.id)) {
+  if (!NAMESPACED_ID.test(m.id as string)) {
     return 'manifest.id must be namespaced, like "yourname.my-renderer" — ids without a "." are reserved for built-in renderers';
   }
-  if (!isNonEmptyString(m.label)) return "manifest.label is required";
+  const labelError = validateString(m.label, "manifest.label", MANIFEST_LIMITS.label);
+  if (labelError) return labelError;
   if (typeof m.apiVersion !== "number" || !SUPPORTED_API_VERSIONS.includes(m.apiVersion)) {
     return `manifest.apiVersion must be one of ${SUPPORTED_API_VERSIONS.join(", ")}`;
   }
   if (!isNonEmptyString(m.entry)) return "manifest.entry is required";
   if (!isRecord(m.defaults)) return "manifest.defaults is required";
   if (!Array.isArray(m.fields)) return "manifest.fields must be an array";
+  if (m.fields.length > MANIFEST_LIMITS.fields) {
+    return `manifest.fields may have at most ${MANIFEST_LIMITS.fields} entries`;
+  }
 
   const seenKeys = new Set<string>();
   for (let i = 0; i < m.fields.length; i++) {
@@ -247,7 +300,7 @@ function validateManifestShape(raw: unknown, folder: string): string | null {
  * render itself then reports the problem as it always has.
  */
 async function snapshotPluginSource(
-  record: BitmapPluginRecord,
+  record: RendererPluginRecord,
 ): Promise<{ source: PluginModuleMap; hash: string } | undefined> {
   try {
     const source = await readPluginModules(record);
@@ -266,8 +319,8 @@ async function snapshotPluginSource(
  * manifest.json without ever executing plugin code. Degrades gracefully per
  * folder — one bad manifest never breaks discovery of the rest.
  */
-export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginDiscoveryResult> {
-  const plugins: BitmapPluginRecord[] = [];
+export async function discoverRendererPlugins(pluginsDir: string): Promise<PluginDiscoveryResult> {
+  const plugins: RendererPluginRecord[] = [];
   const errors: PluginDiscoveryError[] = [];
   const seenIds = new Set<string>();
 
@@ -302,7 +355,7 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
       }
       seenIds.add(id);
 
-      const record: BitmapPluginRecord = {
+      const record: RendererPluginRecord = {
         manifest: {
           id,
           label: raw.label,

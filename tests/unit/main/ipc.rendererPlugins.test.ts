@@ -23,25 +23,25 @@ vi.mock("electron", () => ({
   },
 }));
 
-import { registerBitmapPluginIpcHandlers } from "../../../src/main/ipc/bitmapPlugins";
-import { BitmapPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
+import { registerRendererPluginIpcHandlers } from "../../../src/main/ipc/rendererPlugins";
+import { RendererPluginRegistry } from "../../../src/main/plugins/pluginRegistry";
 import type { PluginHostManager } from "../../../src/main/plugins/pluginHostManager";
-import type { BitmapPluginRegistry as BitmapPluginRegistryType } from "../../../src/main/plugins/pluginRegistry";
+import type { RendererPluginRegistry as RendererPluginRegistryType } from "../../../src/main/plugins/pluginRegistry";
 
-describe("registerBitmapPluginIpcHandlers", () => {
+describe("registerRendererPluginIpcHandlers", () => {
   let pluginsDir: string;
   let examplesDir: string;
-  let registry: BitmapPluginRegistry;
+  let registry: RendererPluginRegistry;
 
   beforeEach(async () => {
     pluginsDir = await mkdtemp(join(tmpdir(), "terraforge-plugins-ipc-"));
     examplesDir = await mkdtemp(join(tmpdir(), "terraforge-examples-ipc-"));
     mocks.handlers.clear();
     mocks.openPath.mockReset();
-    registry = new BitmapPluginRegistry(pluginsDir);
+    registry = new RendererPluginRegistry(pluginsDir);
     mocks.invalidateChanged.mockReset();
     const hostManager = { invalidateChanged: mocks.invalidateChanged } as unknown as PluginHostManager;
-    registerBitmapPluginIpcHandlers({ pluginsDir, examplesDir, registry, hostManager });
+    registerRendererPluginIpcHandlers({ pluginsDir, examplesDir, registry, hostManager });
   });
 
   afterEach(async () => {
@@ -50,20 +50,20 @@ describe("registerBitmapPluginIpcHandlers", () => {
   });
 
   it("registers list, rescan, installExamples, and openFolder handlers", () => {
-    expect(mocks.handlers.has("bitmapPlugins:list")).toBe(true);
-    expect(mocks.handlers.has("bitmapPlugins:rescan")).toBe(true);
-    expect(mocks.handlers.has("bitmapPlugins:installExamples")).toBe(true);
-    expect(mocks.handlers.has("bitmapPlugins:openFolder")).toBe(true);
+    expect(mocks.handlers.has("rendererPlugins:list")).toBe(true);
+    expect(mocks.handlers.has("rendererPlugins:rescan")).toBe(true);
+    expect(mocks.handlers.has("rendererPlugins:installExamples")).toBe(true);
+    expect(mocks.handlers.has("rendererPlugins:openFolder")).toBe(true);
   });
 
   it("installExamples rescans so the new plugins are usable without a further call", async () => {
-    const result = await mocks.handlers.get("bitmapPlugins:installExamples")!();
+    const result = await mocks.handlers.get("rendererPlugins:installExamples")!();
     expect(result).toMatchObject({ installed: [], skipped: [], manifests: [], errors: [] });
     expect(mocks.invalidateChanged).toHaveBeenCalledTimes(1);
   });
 
   it("list returns manifests and discovery errors from an empty directory", async () => {
-    const result = await mocks.handlers.get("bitmapPlugins:list")!();
+    const result = await mocks.handlers.get("rendererPlugins:list")!();
     expect(result).toEqual({ manifests: [], errors: [] });
   });
 
@@ -76,17 +76,17 @@ describe("registerBitmapPluginIpcHandlers", () => {
       lastErrors: () => [],
       rescan: vi.fn(),
       find: vi.fn(),
-    } as unknown as BitmapPluginRegistryType;
+    } as unknown as RendererPluginRegistryType;
 
     mocks.handlers.clear();
-    registerBitmapPluginIpcHandlers({
+    registerRendererPluginIpcHandlers({
       pluginsDir,
       registry: slowRegistry,
       examplesDir,
       hostManager: { invalidateChanged: mocks.invalidateChanged } as unknown as PluginHostManager,
     });
 
-    const pending = mocks.handlers.get("bitmapPlugins:list")!();
+    const pending = mocks.handlers.get("rendererPlugins:list")!();
     resolveScan?.();
 
     expect(await pending).toEqual({
@@ -96,24 +96,24 @@ describe("registerBitmapPluginIpcHandlers", () => {
   });
 
   it("rescan re-reads the plugins directory and returns manifests plus errors", async () => {
-    const result = await mocks.handlers.get("bitmapPlugins:rescan")!();
+    const result = await mocks.handlers.get("rendererPlugins:rescan")!();
     expect(result).toEqual({ manifests: [], errors: [] });
   });
 
   it("rescan drops warm plugin hosts so edited source is re-read", async () => {
-    await mocks.handlers.get("bitmapPlugins:rescan")!();
+    await mocks.handlers.get("rendererPlugins:rescan")!();
     expect(mocks.invalidateChanged).toHaveBeenCalledTimes(1);
   });
 
   it("openFolder reveals the plugins directory via shell.openPath", async () => {
     mocks.openPath.mockResolvedValue("");
-    await mocks.handlers.get("bitmapPlugins:openFolder")!();
+    await mocks.handlers.get("rendererPlugins:openFolder")!();
     expect(mocks.openPath).toHaveBeenCalledWith(pluginsDir);
   });
 
   it("openFolder surfaces a failure — openPath resolves with an error string", async () => {
     mocks.openPath.mockResolvedValue("no such directory");
-    await expect(mocks.handlers.get("bitmapPlugins:openFolder")!()).rejects.toThrow(
+    await expect(mocks.handlers.get("rendererPlugins:openFolder")!()).rejects.toThrow(
       /Could not open the plugins folder: no such directory/,
     );
   });

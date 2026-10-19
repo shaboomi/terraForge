@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
 import { useCanvasStore } from "@renderer/store/canvasStore";
-import type { BitmapPluginManifest, SvgImport } from "../../src/types";
+import type { RendererPluginManifest, SvgImport } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/bitmapImage", async (importOriginal) => {
   const actual =
@@ -60,7 +60,7 @@ let stopService: () => void = () => {};
 beforeEach(() => {
   materialize.mockReset();
   materialize.mockResolvedValue({ bitmapRendererPath: "M1 1", paths: [], rendererVersion: "1/new" });
-  useBitmapPluginStore.setState({ plugins: [] });
+  useRendererPluginStore.setState({ plugins: [] });
   useCanvasStore.setState({ imports: [] });
   // Started for every test so that stopping it afterwards clears any job a
   // test leaves behind; tests that need it absent stop it themselves.
@@ -276,7 +276,7 @@ describe("background rendering", () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(materialize).toHaveBeenCalledTimes(1);
 
-    useBitmapPluginStore.setState({ plugins: [{ id: "late-plugin" } as BitmapPluginManifest] });
+    useRendererPluginStore.setState({ plugins: [{ id: "late-plugin" } as RendererPluginManifest] });
     await vi.advanceTimersByTimeAsync(500);
     expect(materialize).toHaveBeenCalledTimes(2);
     expect(stored().bitmapRendererPath).toBe("M1 1");

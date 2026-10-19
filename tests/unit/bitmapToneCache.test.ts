@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import type { BitmapPluginManifest, RendererContext } from "../../src/types";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
+import type { RendererPluginManifest, RendererContext } from "../../src/types";
 
 vi.mock("@renderer/features/bitmap-renderers/toneAdjust", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@renderer/features/bitmap-renderers/toneAdjust")>();
@@ -37,15 +37,15 @@ beforeEach(() => {
     }),
   }) as unknown as typeof originalGetContext;
   vi.stubGlobal("Image", FakeImage);
-  vi.stubGlobal("terraForge", { bitmapPlugins: { render } });
-  const manifest: BitmapPluginManifest = { id: "acme", label: "Acme", apiVersion: 1, defaults: {}, fields: [] };
-  useBitmapPluginStore.setState({ plugins: [manifest] });
+  vi.stubGlobal("terraForge", { rendererPlugins: { render } });
+  const manifest: RendererPluginManifest = { id: "acme", label: "Acme", apiVersion: 1, defaults: {}, fields: [] };
+  useRendererPluginStore.setState({ plugins: [manifest] });
 });
 
 afterEach(() => {
   HTMLCanvasElement.prototype.getContext = originalGetContext;
   vi.unstubAllGlobals();
-  useBitmapPluginStore.setState({ plugins: [] });
+  useRendererPluginStore.setState({ plugins: [] });
   clearBitmapDecodeCache();
 });
 

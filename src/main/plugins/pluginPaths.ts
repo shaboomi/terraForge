@@ -10,7 +10,7 @@ import { join } from "path";
  * producing geometry from its settings alone. They live together because they
  * are the same kind of thing to install, run and sandbox.
  */
-export function resolveBitmapPluginsDir(userDataPath: string): string {
+export function resolveRendererPluginsDir(userDataPath: string): string {
   const pluginsDir = join(userDataPath, "renderer-plugins");
   if (!existsSync(pluginsDir)) {
     mkdirSync(pluginsDir, { recursive: true });

@@ -10,8 +10,8 @@ import {
   TONE_DEFAULTS,
   type ToneSettings,
 } from "@renderer/features/bitmap-renderers/toneAdjust";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
-import type { BitmapPluginManifest, RendererContext, RendererSource } from "../../src/types";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
+import type { RendererPluginManifest, RendererContext, RendererSource } from "../../src/types";
 
 const neutral: ToneSettings = { autoLevels: false, contrast: 1, smoothingMM: 0 };
 
@@ -188,15 +188,15 @@ describe("materializeBitmapLayers tone preparation", () => {
       }),
     }) as unknown as typeof originalGetContext;
     vi.stubGlobal("Image", FakeImage);
-    vi.stubGlobal("terraForge", { bitmapPlugins: { render } });
-    const manifest: BitmapPluginManifest = { id: "acme", label: "Acme", apiVersion: 1, defaults: {}, fields: [] };
-    useBitmapPluginStore.setState({ plugins: [manifest] });
+    vi.stubGlobal("terraForge", { rendererPlugins: { render } });
+    const manifest: RendererPluginManifest = { id: "acme", label: "Acme", apiVersion: 1, defaults: {}, fields: [] };
+    useRendererPluginStore.setState({ plugins: [manifest] });
   });
 
   afterEach(() => {
     HTMLCanvasElement.prototype.getContext = originalGetContext;
     vi.unstubAllGlobals();
-    useBitmapPluginStore.setState({ plugins: [] });
+    useRendererPluginStore.setState({ plugins: [] });
     clearBitmapDecodeCache();
   });
 

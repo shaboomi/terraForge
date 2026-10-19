@@ -109,6 +109,21 @@ entry in `defaults` must be one of your own option values.
 `icon` must be one of: `rotate-cw`, `rotate-ccw`, `arrow-left-right`,
 `arrow-up-down`, `flip-horizontal`, `flip-vertical`. Anything else is rejected.
 
+Everything in a manifest is shown somewhere in the UI, so sizes are capped:
+
+| What | Limit |
+| --- | --- |
+| `id` | 128 characters |
+| any `label` (plugin, field, option, preset) | 80 characters |
+| field `key`, and any `defaults` key | 64 characters |
+| `ariaLabel` | 200 characters |
+| option `value` | 64 characters |
+| a string in `defaults` | 256 characters |
+| `fields` | 64 entries |
+| `options` per select | 64 entries |
+| `presets` per number field | 16 entries |
+| `defaults` | 256 entries |
+
 Manifests are validated before your code runs. A rejected plugin does not
 appear in the Renderer list, and the reason is shown under **Renderer Plugins**
 in Application Configuration — check there first if yours is missing.

@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "fs/promises";
 import { join, relative, sep } from "path";
-import type { BitmapPluginRecord } from "./pluginManifest";
+import type { RendererPluginRecord } from "./pluginManifest";
 
 /** Guard rails on how much plugin source the main process will read into memory. */
 const MAX_FILES = 64;
@@ -25,7 +25,7 @@ function toPosix(path: string): string {
  * main process is the only thing that ever touches disk, and it only ever
  * descends the plugin's own folder.
  */
-export async function readPluginModules(record: BitmapPluginRecord): Promise<PluginModuleMap> {
+export async function readPluginModules(record: RendererPluginRecord): Promise<PluginModuleMap> {
   const modules: Record<string, string> = {};
   let totalBytes = 0;
   let fileCount = 0;

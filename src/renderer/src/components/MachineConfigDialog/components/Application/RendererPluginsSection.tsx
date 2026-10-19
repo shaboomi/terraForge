@@ -2,7 +2,7 @@ import { Download, FolderOpen, RefreshCw } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { Section } from "../Section";
 import { Button } from "../../../ui/Button";
-import { useBitmapPluginStore } from "../../../../store/bitmapPluginStore";
+import { useRendererPluginStore } from "../../../../store/rendererPluginStore";
 
 /**
  * Manages externally-installed renderer plugins.
@@ -13,24 +13,24 @@ import { useBitmapPluginStore } from "../../../../store/bitmapPluginStore";
  * completely silent — it simply never appears in the renderer dropdown, with
  * the reason visible nowhere in the app.
  */
-export function BitmapPluginsSection() {
+export function RendererPluginsSection() {
   const {
     plugins,
     errors,
     scanning,
     actionError,
     lastInstall,
-    rescanBitmapPlugins,
+    rescanRendererPlugins,
     openPluginsFolder,
     installExamplePlugins,
-  } = useBitmapPluginStore(
+  } = useRendererPluginStore(
     useShallow((state) => ({
       plugins: state.plugins,
       errors: state.errors,
       scanning: state.scanning,
       actionError: state.actionError,
       lastInstall: state.lastInstall,
-      rescanBitmapPlugins: state.rescanBitmapPlugins,
+      rescanRendererPlugins: state.rescanRendererPlugins,
       openPluginsFolder: state.openPluginsFolder,
       installExamplePlugins: state.installExamplePlugins,
     })),
@@ -48,7 +48,7 @@ export function BitmapPluginsSection() {
 
       <div className="flex items-center gap-2">
         <Button
-          onClick={() => void rescanBitmapPlugins()}
+          onClick={() => void rescanRendererPlugins()}
           disabled={scanning}
           variant="secondary"
           size="sm"

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useMachineStore } from "../store/machineStore";
-import { useBitmapPluginStore } from "../store/bitmapPluginStore";
+import { useRendererPluginStore } from "../store/rendererPluginStore";
 import { startBitmapRenderService } from "../features/bitmap-renderers/bitmapRenderService";
 import { useTaskStore } from "../store/taskStore";
 import { useConsoleStore } from "../store/consoleStore";
@@ -8,13 +8,13 @@ import { useAppConfigStore } from "../store/appConfigStore";
 import { useThemeStore, applyTheme } from "../store/themeStore";
 
 /**
- * App start-up: loads machine configs, bitmap plugins and app settings,
+ * App start-up: loads machine configs, renderer plugins and app settings,
  * starts the bitmap render service, and subscribes to the main process's
  * status, console, task, ping and firmware updates. Also keeps the <html>
  * theme class in step with the theme store.
  */
 export function useAppBootstrap() {
-  const loadBitmapPlugins = useBitmapPluginStore((s) => s.loadBitmapPlugins);
+  const loadRendererPlugins = useRendererPluginStore((s) => s.loadRendererPlugins);
   const setConfigs = useMachineStore((s) => s.setConfigs);
   const setStatus = useMachineStore((s) => s.setStatus);
   const setWsLive = useMachineStore((s) => s.setWsLive);
@@ -33,7 +33,7 @@ export function useAppBootstrap() {
   useEffect(() => {
     // Load machine configs
     window.terraForge.config.getMachineConfigs().then(setConfigs);
-    void loadBitmapPlugins();
+    void loadRendererPlugins();
     const stopBitmapRenderService = startBitmapRenderService();
     window.terraForge.config
       .getAppConfig()
@@ -75,7 +75,7 @@ export function useAppBootstrap() {
     };
   }, [
     setConfigs,
-    loadBitmapPlugins,
+    loadRendererPlugins,
     setStatus,
     setWsLive,
     setFwInfo,

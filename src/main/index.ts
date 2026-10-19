@@ -15,13 +15,13 @@ import {
   registerTaskIpcHandlers,
   registerFluidncIpcHandlers,
   registerFsIpcHandlers,
-  registerBitmapPluginIpcHandlers,
+  registerRendererPluginIpcHandlers,
 } from "./ipc";
 import { FluidNCClient } from "../machine/fluidnc";
 import { SerialClient } from "../machine/serial";
 import { TaskManager } from "../tasks/taskManager";
-import { resolveBitmapPluginsDir, resolveBundledExamplesDir } from "./plugins/pluginPaths";
-import { BitmapPluginRegistry } from "./plugins/pluginRegistry";
+import { resolveRendererPluginsDir, resolveBundledExamplesDir } from "./plugins/pluginPaths";
+import { RendererPluginRegistry } from "./plugins/pluginRegistry";
 import { PluginHostManager } from "./plugins/pluginHostManager";
 import { registerPluginScheme } from "./plugins/pluginSandbox";
 
@@ -41,9 +41,9 @@ registerAppLifecycleHandlers({
   // server slot, requiring a power cycle to recover.
   onBeforeQuit: () => {
     fluidnc.disconnectWebSocket();
-    bitmapPluginHostManager.terminateAll();
+    rendererPluginHostManager.terminateAll();
   },
-  onAllAppWindowsClosed: () => bitmapPluginHostManager.terminateAll(),
+  onAllAppWindowsClosed: () => rendererPluginHostManager.terminateAll(),
 });
 
 // ─── Singletons ───────────────────────────────────────────────────────────────
@@ -52,11 +52,11 @@ const fluidnc = new FluidNCClient();
 const serial = new SerialClient();
 const taskManager = new TaskManager();
 const persistence = createPersistence(app.getPath("userData"));
-const bitmapPluginsDir = resolveBitmapPluginsDir(app.getPath("userData"));
-const bitmapPluginRegistry = new BitmapPluginRegistry(bitmapPluginsDir);
-const bitmapPluginHostManager = new PluginHostManager(
+const rendererPluginsDir = resolveRendererPluginsDir(app.getPath("userData"));
+const rendererPluginRegistry = new RendererPluginRegistry(rendererPluginsDir);
+const rendererPluginHostManager = new PluginHostManager(
   join(__dirname, "../preload/pluginSandboxPreload.js"),
-  bitmapPluginRegistry,
+  rendererPluginRegistry,
 );
 
 // Tracks which transport is currently active so IPC handlers can route correctly.
@@ -118,13 +118,13 @@ registerTaskIpcHandlers(taskManager);
 
 registerJobIpcHandlers(taskManager, safeSend);
 
-// ─── IPC Handlers — Bitmap renderer plugins ───────────────────────────────────
+// ─── IPC Handlers — Renderer plugins ───────────────────────────────────
 
-registerBitmapPluginIpcHandlers({
-  pluginsDir: bitmapPluginsDir,
+registerRendererPluginIpcHandlers({
+  pluginsDir: rendererPluginsDir,
   examplesDir: resolveBundledExamplesDir(__dirname),
-  registry: bitmapPluginRegistry,
-  hostManager: bitmapPluginHostManager,
+  registry: rendererPluginRegistry,
+  hostManager: rendererPluginHostManager,
 });
 
-void bitmapPluginRegistry.ready();
+void rendererPluginRegistry.ready();

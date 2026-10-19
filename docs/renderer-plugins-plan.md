@@ -98,9 +98,9 @@ region, never a limit.
 
 ### 4. Internal naming pass
 
-`BitmapPluginManifest`, `bitmapPlugins:*` IPC channels, the `bitmap-renderers`
-feature directory, `BitmapPluginsSection`, `MAX_BITMAP_RENDERER_PATH_LENGTH`,
-`resolveBitmapPluginsDir`. None of it is plugin-facing, so none of it breaks
+`RendererPluginManifest`, `rendererPlugins:*` IPC channels, the `bitmap-renderers`
+feature directory, `RendererPluginsSection`, `MAX_BITMAP_RENDERER_PATH_LENGTH`,
+`resolveRendererPluginsDir`. None of it is plugin-facing, so none of it breaks
 anything — pure readability, and best done in one pass rather than drifting.
 
 ### 5. Decide whether in-tree renderers become plugins

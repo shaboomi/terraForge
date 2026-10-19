@@ -7,9 +7,9 @@ import {
   clearBitmapDecodeCache,
   materializeBitmapLayers,
 } from "@renderer/features/bitmap-renderers/bitmapImage";
-import { useBitmapPluginStore } from "@renderer/store/bitmapPluginStore";
+import { useRendererPluginStore } from "@renderer/store/rendererPluginStore";
 import { MAX_BITMAP_RENDERER_PATH_LENGTH } from "../../../src/types";
-import type { BitmapPluginManifest } from "../../../src/types";
+import type { RendererPluginManifest } from "../../../src/types";
 
 describe("validateRendererPath", () => {
   it("accepts realistic path data", () => {
@@ -61,7 +61,7 @@ describe("materializeBitmapLayers output checking", () => {
     }
   }
 
-  const manifest: BitmapPluginManifest = {
+  const manifest: RendererPluginManifest = {
     id: "acme",
     label: "Acme",
     apiVersion: 1,
@@ -80,7 +80,7 @@ describe("materializeBitmapLayers output checking", () => {
       }),
     }) as unknown as typeof originalGetContext;
     vi.stubGlobal("Image", FakeImage);
-    useBitmapPluginStore.setState({ plugins: [manifest], errors: [], scanning: false, actionError: null });
+    useRendererPluginStore.setState({ plugins: [manifest], errors: [], scanning: false, actionError: null });
   });
 
   afterEach(() => {
@@ -98,13 +98,13 @@ describe("materializeBitmapLayers output checking", () => {
   };
 
   it("refuses a plugin's malformed path instead of storing it as geometry", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 LNaN NaN");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 LNaN NaN");
 
     await expect(materializeBitmapLayers(bitmap)).rejects.toThrow(/invalid path data/);
   });
 
   it("passes a well-formed path through untouched", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
 
     await expect(materializeBitmapLayers(bitmap)).resolves.toMatchObject({
       bitmapRendererPath: "M0 0 L1 1",
@@ -113,8 +113,8 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("stamps the output with the plugin's source version", async () => {
-    useBitmapPluginStore.setState({ plugins: [{ ...manifest, sourceHash: "abc123" }] });
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
+    useRendererPluginStore.setState({ plugins: [{ ...manifest, sourceHash: "abc123" }] });
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
 
     const result = await materializeBitmapLayers(bitmap);
 
@@ -122,7 +122,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("turns a plugin's dots into fillable paths tapped where the plugin said", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({
       layers: [{ dots: [{ d: "M0 0 L2 0 L2 2 Z", x: 1.5, y: 0.5 }] }],
     });
 
@@ -135,7 +135,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("keeps a layer's stroke and its dots as separate paths", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({
       layers: [{ d: "M0 0 L5 5", dots: [{ d: "M1 1 L2 1 Z", x: 1, y: 1 }], label: "Ink" }],
     });
 
@@ -148,13 +148,13 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("passes a renderer's warnings through", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
 
     expect((await materializeBitmapLayers(bitmap)).warnings).toEqual(["Cut short"]);
   });
 
   it("tells each separated render which ink it is, so it can offset its pattern", async () => {
-    const render = (window as any).terraForge.bitmapPlugins.render;
+    const render = (window as any).terraForge.rendererPlugins.render;
     render.mockClear();
     render.mockResolvedValue("M0 0 L1 1");
 
@@ -168,7 +168,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("asks for one shared pattern when offsetting is turned off, and gives unseparated renders no ink", async () => {
-    const render = (window as any).terraForge.bitmapPlugins.render;
+    const render = (window as any).terraForge.rendererPlugins.render;
     render.mockClear();
     render.mockResolvedValue("M0 0 L1 1");
 
@@ -181,7 +181,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("separates for red, green and blue pens on white paper as three coloured inks", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue("M0 0 L1 1");
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue("M0 0 L1 1");
 
     const { paths } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb-white" });
 
@@ -193,7 +193,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("names the ink a warning came from under colour separation, once per distinct warning", async () => {
-    (window as any).terraForge.bitmapPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
+    (window as any).terraForge.rendererPlugins.render.mockResolvedValue({ layers: [{ d: "M0 0" }], warnings: ["Cut short"] });
 
     const { warnings } = await materializeBitmapLayers({ ...bitmap, bitmapSeparationMode: "rgb" });
 
@@ -201,7 +201,7 @@ describe("materializeBitmapLayers output checking", () => {
   });
 
   it("checks every ink channel when colour separation is active", async () => {
-    (window as any).terraForge.bitmapPlugins.render
+    (window as any).terraForge.rendererPlugins.render
       .mockResolvedValueOnce("M0 0 L1 1")
       .mockResolvedValueOnce("M0 0 L1 1")
       .mockResolvedValueOnce("M0 0 LInfinity 1");

@@ -516,11 +516,11 @@ export type BitmapRendererFieldSchema =
   | BitmapRendererSelectFieldSchema;
 
 /**
- * Metadata for an externally-installed bitmap renderer plugin, as discovered
+ * Metadata for an externally-installed renderer plugin, as discovered
  * from its manifest.json — deliberately excludes the plugin's entry file path
  * and any executable code; only main-process code ever resolves those.
  */
-export interface BitmapPluginManifest {
+export interface RendererPluginManifest {
   id: string;
   label: string;
   apiVersion: number;
@@ -962,19 +962,19 @@ export interface ConfigApi {
 }
 
 /** Why one plugin folder was rejected during discovery. */
-export interface BitmapPluginDiscoveryError {
+export interface RendererPluginDiscoveryError {
   /** The plugin folder's name, as it appears in the plugins directory. */
   folder: string;
   message: string;
 }
 
-export interface BitmapPluginScan {
-  manifests: BitmapPluginManifest[];
-  errors: BitmapPluginDiscoveryError[];
+export interface RendererPluginScan {
+  manifests: RendererPluginManifest[];
+  errors: RendererPluginDiscoveryError[];
 }
 
 /** Outcome of copying the bundled example plugins into the user's folder. */
-export interface BitmapPluginExampleInstall extends BitmapPluginScan {
+export interface RendererPluginExampleInstall extends RendererPluginScan {
   /** Folder names copied in. */
   installed: string[];
   /** Folder names already present, left untouched. */
@@ -983,23 +983,23 @@ export interface BitmapPluginExampleInstall extends BitmapPluginScan {
   unsupported: string[];
 }
 
-export interface BitmapPluginsApi {
+export interface RendererPluginsApi {
   /**
    * Metadata for every currently-discovered plugin, plus the reason each
    * rejected folder was rejected (no plugin code is executed to produce this).
    * Waits for the app's initial scan rather than returning an empty list while
    * it is still running.
    */
-  list: () => Promise<BitmapPluginScan>;
+  list: () => Promise<RendererPluginScan>;
   /** Re-scan the plugins directory on disk. Returns fresh metadata plus any per-folder discovery errors. */
-  rescan: () => Promise<BitmapPluginScan>;
+  rescan: () => Promise<RendererPluginScan>;
   /** Runs a plugin's render() in its isolated host process. Rejects on timeout, crash, or a thrown error. */
   render: (pluginId: string, context: RendererContext) => Promise<RendererOutput>;
   /**
    * Copies the example plugins that ship with the app into the user's plugins
    * folder, then rescans. Existing folders of the same name are left alone.
    */
-  installExamples: () => Promise<BitmapPluginExampleInstall>;
+  installExamples: () => Promise<RendererPluginExampleInstall>;
   /** Ensures the plugins directory exists and reveals it in the OS file manager. */
   openFolder: () => Promise<void>;
 }
@@ -1038,7 +1038,7 @@ export interface TerraForgeAPI {
   config: ConfigApi;
   app: AppApi;
   edit: EditApi;
-  bitmapPlugins: BitmapPluginsApi;
+  rendererPlugins: RendererPluginsApi;
 }
 
 // ─── Jog ─────────────────────────────────────────────────────────────────────

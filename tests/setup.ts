@@ -202,7 +202,7 @@ if (typeof window !== "undefined") {
       openExternal: vi.fn().mockResolvedValue(undefined),
       onMenuAbout: vi.fn().mockReturnValue(() => {}),
     },
-    bitmapPlugins: {
+    rendererPlugins: {
       list: vi.fn().mockResolvedValue({ manifests: [], errors: [] }),
       rescan: vi.fn().mockResolvedValue({ manifests: [], errors: [] }),
       render: vi.fn().mockResolvedValue(""),
