@@ -31,8 +31,8 @@ export function registerBitmapPluginIpcHandlers({
     const { plugins, errors } = await registry.rescan();
     // A warm host holds the plugin's modules in memory, so without this an
     // edited plugin would keep rendering with its previous source until the
-    // idle sweep happened to recycle it.
-    hostManager.invalidateAll();
+    // idle sweep happened to recycle it. Unchanged plugins are left running.
+    hostManager.invalidateChanged();
     return { manifests: plugins.map((plugin) => plugin.manifest), errors };
   });
 
@@ -42,10 +42,10 @@ export function registerBitmapPluginIpcHandlers({
 
   ipcMain.handle("bitmapPlugins:installExamples", async () => {
     const result = await installExamplePlugins(examplesDir, pluginsDir);
-    // Rescan here so the caller never has to remember to, and drop warm hosts
-    // for the same reason a manual rescan does.
+    // Rescan here so the caller never has to remember to, and drop changed
+    // hosts for the same reason a manual rescan does.
     const { plugins, errors } = await registry.rescan();
-    hostManager.invalidateAll();
+    hostManager.invalidateChanged();
     return { ...result, manifests: plugins.map((plugin) => plugin.manifest), errors };
   });
 

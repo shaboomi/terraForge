@@ -1,8 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { discoverBitmapPlugins } from "../../../src/main/plugins/pluginManifest";
+
+/** Lets a test edit the plugin folder between the manifest read and the snapshot. */
+const hooks = vi.hoisted(() => ({ beforeSnapshot: null as null | ((folder: string) => Promise<void>) }));
+
+vi.mock("../../../src/main/plugins/pluginSource", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/main/plugins/pluginSource")>();
+  return {
+    ...actual,
+    readPluginModules: async (record: Parameters<typeof actual.readPluginModules>[0]) => {
+      await hooks.beforeSnapshot?.(record.folder);
+      return actual.readPluginModules(record);
+    },
+  };
+});
 
 async function writePlugin(
   pluginsDir: string,
@@ -35,7 +49,19 @@ describe("discoverBitmapPlugins", () => {
   });
 
   afterEach(async () => {
+    hooks.beforeSnapshot = null;
     await rm(pluginsDir, { recursive: true, force: true });
+  });
+
+  it("refuses a plugin whose manifest changed between being parsed and being fingerprinted", async () => {
+    await writePlugin(pluginsDir, "acme-halftone", validManifest);
+    await writeFile(join(pluginsDir, "acme-halftone", "index.js"), "module.exports = {};", "utf-8");
+    hooks.beforeSnapshot = (folder) =>
+      writeFile(join(folder, "manifest.json"), JSON.stringify({ ...validManifest, label: "Edited" }), "utf-8");
+
+    const result = await discoverBitmapPlugins(pluginsDir);
+    expect(result.plugins).toHaveLength(0);
+    expect(result.errors[0].message).toMatch(/changed while it was being read/);
   });
 
   it("fingerprints a plugin's source, and the fingerprint follows edits", async () => {
@@ -51,6 +77,17 @@ describe("discoverBitmapPlugins", () => {
     expect((await discoverBitmapPlugins(pluginsDir)).plugins[0].manifest.sourceHash).not.toBe(before);
   });
 
+  it("keeps the source it fingerprinted, so what runs is what was hashed", async () => {
+    await writePlugin(pluginsDir, "acme-halftone", validManifest);
+    const entry = join(pluginsDir, "acme-halftone", "index.js");
+    await writeFile(entry, "module.exports = { render: () => 'M0 0' };", "utf-8");
+
+    const [plugin] = (await discoverBitmapPlugins(pluginsDir)).plugins;
+    await writeFile(entry, "module.exports = { render: () => 'edited after the scan' };", "utf-8");
+
+    expect(plugin.source?.modules["index.js"]).toContain("M0 0");
+  });
+
   it("still loads a plugin whose source cannot be read, leaving it unfingerprinted", async () => {
     await writePlugin(pluginsDir, "acme-halftone", validManifest);
 
@@ -58,6 +95,7 @@ describe("discoverBitmapPlugins", () => {
 
     expect(result.errors).toEqual([]);
     expect(result.plugins[0].manifest.sourceHash).toBeUndefined();
+    expect(result.plugins[0].source).toBeUndefined();
   });
 
   it("returns nothing for an empty directory", async () => {

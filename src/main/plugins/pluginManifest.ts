@@ -8,7 +8,7 @@ import {
   type BitmapRendererFieldSchema,
   type BitmapRendererSettings,
 } from "../../types";
-import { readPluginModules } from "./pluginSource";
+import { readPluginModules, type PluginModuleMap } from "./pluginSource";
 
 /** Bitmap-renderer plugin API versions this build knows how to load. */
 const SUPPORTED_API_VERSIONS = [1];
@@ -19,6 +19,15 @@ export interface BitmapPluginRecord {
   manifest: BitmapPluginManifest;
   entryPath: string;
   folder: string;
+  /**
+   * The source read at discovery — the very modules `manifest.sourceHash` was
+   * computed from, and the ones the sandbox is started with. Hashing and
+   * running one snapshot means the fingerprint recorded in a drawing is always
+   * the code that produced it, even if a file is edited between a rescan and
+   * the next render. Absent when the source could not be read; the host then
+   * tries again and reports the real error.
+   */
+  source?: PluginModuleMap;
 }
 
 export interface PluginDiscoveryError {
@@ -230,21 +239,23 @@ function validateManifestShape(raw: unknown, folder: string): string | null {
 }
 
 /**
- * A fingerprint of everything the plugin would load — its .js/.json files,
- * manifest included — so the app can tell when a plugin's code has changed
- * since a drawing was rendered with it, without relying on authors to bump a
- * version. Reads the files; never runs them. Unreadable source (missing
- * entry, over the size limits) yields undefined, and the render itself then
- * reports the problem as it always has.
+ * Reads everything the plugin would load — its .js/.json files, manifest
+ * included — and fingerprints it, so the app can tell when a plugin's code
+ * has changed since a drawing was rendered with it, without relying on
+ * authors to bump a version. Reads the files; never runs them. Unreadable
+ * source (missing entry, over the size limits) yields no snapshot, and the
+ * render itself then reports the problem as it always has.
  */
-async function pluginSourceHash(record: BitmapPluginRecord): Promise<string | undefined> {
+async function snapshotPluginSource(
+  record: BitmapPluginRecord,
+): Promise<{ source: PluginModuleMap; hash: string } | undefined> {
   try {
-    const { modules } = await readPluginModules(record);
+    const source = await readPluginModules(record);
     const hash = createHash("sha256");
-    for (const path of Object.keys(modules).sort()) {
-      hash.update(path).update("\0").update(modules[path]).update("\0");
+    for (const path of Object.keys(source.modules).sort()) {
+      hash.update(path).update("\0").update(source.modules[path]).update("\0");
     }
-    return hash.digest("hex").slice(0, 16);
+    return { source, hash: hash.digest("hex").slice(0, 16) };
   } catch {
     return undefined;
   }
@@ -276,7 +287,8 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
     if (!existsSync(manifestPath)) continue;
 
     try {
-      const raw = JSON.parse(await readFile(manifestPath, "utf-8"));
+      const manifestText = await readFile(manifestPath, "utf-8");
+      const raw = JSON.parse(manifestText);
       const shapeError = validateManifestShape(raw, folder);
       if (shapeError) {
         errors.push({ folder: folderName, message: shapeError });
@@ -306,7 +318,17 @@ export async function discoverBitmapPlugins(pluginsDir: string): Promise<PluginD
         entryPath: resolve(folder, raw.entry as string),
         folder,
       };
-      record.manifest.sourceHash = await pluginSourceHash(record);
+      const snapshot = await snapshotPluginSource(record);
+      // The manifest was parsed from an earlier read than the snapshot, and
+      // the hash covers the snapshot's copy. If they differ, the settings
+      // shown would not be the ones fingerprinted, so refuse the plugin
+      // rather than record a hash that does not describe it.
+      if (snapshot && snapshot.source.modules["manifest.json"] !== manifestText) {
+        errors.push({ folder: folderName, message: "manifest.json changed while it was being read — rescan to load it" });
+        continue;
+      }
+      record.manifest.sourceHash = snapshot?.hash;
+      record.source = snapshot?.source;
       plugins.push(record);
     } catch (err) {
       errors.push({ folder: folderName, message: err instanceof Error ? err.message : String(err) });

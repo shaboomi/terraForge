@@ -79,15 +79,17 @@ vi.mock("../../../src/main/plugins/pluginSource", () => ({
 }));
 
 import { PluginHostManager } from "../../../src/main/plugins/pluginHostManager";
+import { MAX_OUTPUT_UNITS, MAX_PLUGIN_MESSAGE_LENGTH } from "../../../src/main/plugins/pluginOutputBudget";
 
-function makeRecord(id: string, renderTimeoutMs?: number): BitmapPluginRecord {
+function makeRecord(id: string, renderTimeoutMs?: number, sourceHash?: string): BitmapPluginRecord {
   return {
-    manifest: { id, label: id, apiVersion: 1, defaults: {}, fields: [], renderTimeoutMs },
+    manifest: { id, label: id, apiVersion: 1, defaults: {}, fields: [], renderTimeoutMs, sourceHash },
     entryPath: `/plugins/${id}/index.js`,
     folder: `/plugins/${id}`,
   };
 }
 
+/** Registry over a mutable list, so a test can "rescan" by replacing its contents. */
 function makeRegistry(records: BitmapPluginRecord[]): BitmapPluginRegistry {
   return {
     find: (id: string) => records.find((r) => r.manifest.id === id),
@@ -169,6 +171,30 @@ describe("PluginHostManager", () => {
     fromPage(win, { type: "error", reqId: renders(win)[0].message.reqId, message: "deliberate failure" });
 
     await expect(promise).rejects.toThrow(/deliberate failure/);
+    manager.terminateAll();
+  });
+
+  it("cuts an oversized error message down before passing it on", async () => {
+    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+    const promise = manager.render("acme", context);
+    const win = mocks.windows[0];
+    await bringUp(win);
+    fromPage(win, { type: "error", reqId: renders(win)[0].message.reqId, message: "x".repeat(MAX_PLUGIN_MESSAGE_LENGTH * 10) });
+
+    const err = await promise.then(() => null, (e: Error) => e);
+    expect(err?.message).toHaveLength(MAX_PLUGIN_MESSAGE_LENGTH);
+    manager.terminateAll();
+  });
+
+  it("ignores a page message that is not an object", async () => {
+    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+    const promise = manager.render("acme", context);
+    const win = mocks.windows[0];
+    await bringUp(win);
+    expect(() => fromPage(win, null as unknown as Record<string, unknown>)).not.toThrow();
+
+    fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: "A" });
+    await expect(promise).resolves.toBe("A");
     manager.terminateAll();
   });
 
@@ -282,15 +308,17 @@ describe("PluginHostManager", () => {
     manager.terminateAll();
   });
 
-  it("drops warm hosts on invalidateAll so edited source is re-read", async () => {
-    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+  it("drops a host whose source changed on invalidateChanged so edited source is re-read", async () => {
+    const records = [makeRecord("acme", undefined, "v1")];
+    const manager = new PluginHostManager("/preload.js", makeRegistry(records));
     const first = manager.render("acme", context);
     const win = mocks.windows[0];
     await bringUp(win);
     fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: "A" });
     await first;
 
-    manager.invalidateAll();
+    records[0] = makeRecord("acme", undefined, "v2");
+    manager.invalidateChanged();
     expect(win.destroyed).toBe(true);
 
     const next = manager.render("acme", context);
@@ -300,6 +328,85 @@ describe("PluginHostManager", () => {
     fromPage(fresh, { type: "result", reqId: renders(fresh)[0].message.reqId, output: "B" });
 
     await expect(next).resolves.toBe("B");
+    manager.terminateAll();
+  });
+
+  it("leaves a host and its in-flight render alone when its source is unchanged", async () => {
+    const records = [makeRecord("acme", undefined, "v1")];
+    const manager = new PluginHostManager("/preload.js", makeRegistry(records));
+    const promise = manager.render("acme", context);
+    const win = mocks.windows[0];
+    await bringUp(win);
+
+    records[0] = makeRecord("acme", undefined, "v1");
+    manager.invalidateChanged();
+    expect(win.destroyed).toBe(false);
+
+    fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: "done" });
+    await expect(promise).resolves.toBe("done");
+    manager.terminateAll();
+  });
+
+  it("drops hosts whose plugin was removed or has no fingerprint", async () => {
+    const records = [makeRecord("gone", undefined, "v1"), makeRecord("blind")];
+    const manager = new PluginHostManager("/preload.js", makeRegistry(records));
+    const gone = manager.render("gone", context);
+    const blind = manager.render("blind", context);
+    const [goneWin, blindWin] = mocks.windows;
+    await bringUp(goneWin);
+    await bringUp(blindWin);
+
+    records.splice(0, 1);
+    manager.invalidateChanged();
+
+    await expect(gone).rejects.toThrow(/reloaded/);
+    await expect(blind).rejects.toThrow(/reloaded/);
+    manager.terminateAll();
+  });
+
+  it("starts the sandbox from the source snapshot taken at discovery", async () => {
+    const record = {
+      ...makeRecord("acme", undefined, "v1"),
+      source: { modules: { "index.js": "snapshot" }, entry: "index.js" },
+    };
+    const manager = new PluginHostManager("/preload.js", makeRegistry([record]));
+    void manager.render("acme", context).catch(() => {});
+    const win = mocks.windows[0];
+    fromPage(win, { type: "page-ready" });
+    await vi.waitFor(() => expect(win.sent.some((s) => s.message.type === "init")).toBe(true));
+
+    expect(win.sent.find((s) => s.message.type === "init")?.message).toMatchObject({
+      modules: { "index.js": "snapshot" },
+    });
+    manager.terminateAll();
+  });
+
+  it("refuses a result over the output budget instead of forwarding it", async () => {
+    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+    const promise = manager.render("acme", context);
+    const win = mocks.windows[0];
+    await bringUp(win);
+
+    const huge = new Uint8Array(MAX_OUTPUT_UNITS + 1);
+    fromPage(win, { type: "result", reqId: renders(win)[0].message.reqId, output: [{ d: "M0 0", blob: huge }] });
+
+    await expect(promise).rejects.toThrow(/more data than a render may produce/);
+    manager.terminateAll();
+  });
+
+  it("stops recognising a window's messages once it has closed", async () => {
+    const manager = new PluginHostManager("/preload.js", makeRegistry([makeRecord("acme")]));
+    const promise = manager.render("acme", context);
+    const win = mocks.windows[0];
+    await bringUp(win);
+
+    // As Electron does it: by the time `closed` fires the window is destroyed
+    // and its webContents can no longer be asked for an id.
+    win.destroyed = true;
+    win.emit("closed");
+    await expect(promise).rejects.toThrow(/closed unexpectedly/);
+
+    expect((manager as unknown as { bySenderId: Map<number, unknown> }).bySenderId.size).toBe(0);
     manager.terminateAll();
   });
 

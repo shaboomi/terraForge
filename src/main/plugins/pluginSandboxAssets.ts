@@ -14,6 +14,7 @@
  */
 
 import { MAX_BITMAP_RENDERER_PATH_LENGTH } from "../../types";
+import { MAX_OUTPUT_UNITS, MAX_PLUGIN_MESSAGE_LENGTH, MAX_REQ_ID_LENGTH } from "./pluginOutputBudget";
 
 export const PLUGIN_SCHEME = "tfplugin";
 export const PLUGIN_HOST_ORIGIN = `${PLUGIN_SCHEME}://host`;
@@ -66,9 +67,69 @@ var cachedInit = null;
 
 function send(message) { window.__terraForgePluginHost.send(message); }
 
+// Plain-JavaScript twin of exceedsOutputBudget in pluginOutputBudget.ts.
+function exceedsBudget(output) {
+  var units = 0;
+  var pending = [output];
+  while (pending.length > 0) {
+    var value = pending.pop();
+    if (typeof value === "string") {
+      units += value.length;
+    } else if (typeof value !== "object" || value === null) {
+      units += 8;
+    } else if (ArrayBuffer.isView(value)) {
+      units += value.byteLength;
+    } else if (Array.isArray(value)) {
+      units += 8 + value.length * 8;
+      if (units > ${MAX_OUTPUT_UNITS}) return true;
+      for (var i = 0; i < value.length; i++) pending.push(value[i]);
+    } else {
+      units += 8;
+      var keys = Object.keys(value);
+      for (var k = 0; k < keys.length; k++) {
+        units += keys[k].length;
+        if (units > ${MAX_OUTPUT_UNITS}) return true;
+        pending.push(value[keys[k]]);
+      }
+    }
+    if (units > ${MAX_OUTPUT_UNITS}) return true;
+  }
+  return false;
+}
+
+function clip(value, max) { return typeof value === "string" ? value.slice(0, max) : ""; }
+
+// The worker shares a realm with the plugin, so anything it posts may have
+// been written by a hostile plugin rather than the worker script. This page
+// cannot be reached by plugin code, so every message is rebuilt here from
+// the fields the main process expects, each one bounded, before it crosses
+// into the main process. Anything else, a forged "page-ready" included, is
+// dropped.
+function fromWorker(data) {
+  if (!data || typeof data !== "object") return null;
+  var reqId = clip(data.reqId, ${MAX_REQ_ID_LENGTH});
+  switch (data.type) {
+    case "ready":
+      return { type: "ready" };
+    case "load-error":
+      return { type: "load-error", message: clip(data.message, ${MAX_PLUGIN_MESSAGE_LENGTH}) };
+    case "error":
+      return { type: "error", reqId: reqId, message: clip(data.message, ${MAX_PLUGIN_MESSAGE_LENGTH}) };
+    case "result":
+      if (exceedsBudget(data.output)) {
+        return { type: "error", reqId: reqId, message: "render() result is larger than the size a plugin may return." };
+      }
+      return { type: "result", reqId: reqId, output: data.output };
+  }
+  return null;
+}
+
 function startWorker() {
   worker = new Worker("${PLUGIN_HOST_ORIGIN}/worker.js");
-  worker.onmessage = function (event) { send(event.data); };
+  worker.onmessage = function (event) {
+    var message = fromWorker(event.data);
+    if (message) send(message);
+  };
   worker.onerror = function (event) {
     send({ type: "load-error", message: String((event && event.message) || "worker error") });
   };
@@ -194,8 +255,10 @@ self.onmessage = function (event) {
     Promise.resolve()
       .then(function () { return pluginExports.render(message.context); })
       .then(function (output) {
-        // Checked here so a runaway result is never transported out of the
-        // sandbox; it is validated again before it enters the document.
+        // Checked here so a well-behaved plugin gets a precise error about
+        // its path data. It is not the boundary: plugin code shares this
+        // realm and can post around it, so the host page bounds every
+        // message again, and the main process bounds it once more.
         var total = outputLength(output);
         if (total > ${MAX_BITMAP_RENDERER_PATH_LENGTH}) {
           throw new Error(

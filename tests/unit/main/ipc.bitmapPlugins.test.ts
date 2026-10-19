@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => {
   return {
     handlers,
     openPath: vi.fn(),
-    invalidateAll: vi.fn(),
+    invalidateChanged: vi.fn(),
   };
 });
 
@@ -39,8 +39,8 @@ describe("registerBitmapPluginIpcHandlers", () => {
     mocks.handlers.clear();
     mocks.openPath.mockReset();
     registry = new BitmapPluginRegistry(pluginsDir);
-    mocks.invalidateAll.mockReset();
-    const hostManager = { invalidateAll: mocks.invalidateAll } as unknown as PluginHostManager;
+    mocks.invalidateChanged.mockReset();
+    const hostManager = { invalidateChanged: mocks.invalidateChanged } as unknown as PluginHostManager;
     registerBitmapPluginIpcHandlers({ pluginsDir, examplesDir, registry, hostManager });
   });
 
@@ -59,7 +59,7 @@ describe("registerBitmapPluginIpcHandlers", () => {
   it("installExamples rescans so the new plugins are usable without a further call", async () => {
     const result = await mocks.handlers.get("bitmapPlugins:installExamples")!();
     expect(result).toMatchObject({ installed: [], skipped: [], manifests: [], errors: [] });
-    expect(mocks.invalidateAll).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateChanged).toHaveBeenCalledTimes(1);
   });
 
   it("list returns manifests and discovery errors from an empty directory", async () => {
@@ -83,7 +83,7 @@ describe("registerBitmapPluginIpcHandlers", () => {
       pluginsDir,
       registry: slowRegistry,
       examplesDir,
-      hostManager: { invalidateAll: mocks.invalidateAll } as unknown as PluginHostManager,
+      hostManager: { invalidateChanged: mocks.invalidateChanged } as unknown as PluginHostManager,
     });
 
     const pending = mocks.handlers.get("bitmapPlugins:list")!();
@@ -102,7 +102,7 @@ describe("registerBitmapPluginIpcHandlers", () => {
 
   it("rescan drops warm plugin hosts so edited source is re-read", async () => {
     await mocks.handlers.get("bitmapPlugins:rescan")!();
-    expect(mocks.invalidateAll).toHaveBeenCalledTimes(1);
+    expect(mocks.invalidateChanged).toHaveBeenCalledTimes(1);
   });
 
   it("openFolder reveals the plugins directory via shell.openPath", async () => {

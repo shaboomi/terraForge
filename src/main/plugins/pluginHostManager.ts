@@ -5,6 +5,7 @@ import type { BitmapPluginRegistry } from "./pluginRegistry";
 import { PLUGIN_HOST_ORIGIN } from "./pluginSandboxAssets";
 import { markPluginHostWindow } from "./pluginHostWindows";
 import { pluginSandboxSession } from "./pluginSandbox";
+import { clipPluginText, exceedsOutputBudget } from "./pluginOutputBudget";
 import { readPluginModules } from "./pluginSource";
 
 const DEFAULT_RENDER_TIMEOUT_MS = 4000;
@@ -41,6 +42,11 @@ interface HostedPlugin {
   pluginId: string;
   record: BitmapPluginRecord;
   win: BrowserWindow;
+  /**
+   * Captured at spawn because a destroyed window can no longer be asked for
+   * it, and `failHost` often runs exactly then (the `closed` event).
+   */
+  webContentsId: number;
   state: "starting" | "ready" | "terminated";
   /** Queued renders, dispatched one at a time — see `pump`. */
   queue: PendingRender[];
@@ -82,7 +88,7 @@ export class PluginHostManager {
   ) {
     this.onPageMessage = (event, message) => {
       const host = this.bySenderId.get(event.sender.id);
-      if (host) this.handleMessage(host, message);
+      if (host && typeof message === "object" && message !== null) this.handleMessage(host, message);
     };
     ipcMain.on(FROM_PAGE, this.onPageMessage);
 
@@ -106,19 +112,22 @@ export class PluginHostManager {
   }
 
   /**
-   * Drops any warm host for a plugin so the next render re-reads its source
-   * from disk. Call after a rescan — a live worker holds the plugin's modules
-   * in memory, so an edited plugin would otherwise keep running old code.
+   * Call after a rescan. Drops the warm hosts whose plugin is gone or whose
+   * source changed, and leaves the rest running — a rescan is something users
+   * press freely, and it should not fail a render of a plugin that did not
+   * change. A host whose fingerprint is unknown is dropped too, since there
+   * is no way to show it still matches what is on disk.
    */
-  invalidate(pluginId: string): void {
-    const host = this.hosts.get(pluginId);
-    if (host) this.failHost(host, new Error(`Plugin "${pluginId}" was reloaded.`));
-  }
-
-  /** Drops every warm host — see `invalidate`. Call after a rescan. */
-  invalidateAll(): void {
+  invalidateChanged(): void {
     for (const host of [...this.hosts.values()]) {
-      this.failHost(host, new Error(`Plugin "${host.pluginId}" was reloaded.`));
+      const current = this.registry.find(host.pluginId);
+      const hash = current?.manifest.sourceHash;
+      if (!current || hash === undefined || hash !== host.record.manifest.sourceHash) {
+        this.failHost(host, new Error(`Plugin "${host.pluginId}" was reloaded.`));
+      } else {
+        // Same code, possibly a renamed folder or a new manifest object.
+        host.record = current;
+      }
     }
   }
 
@@ -162,6 +171,7 @@ export class PluginHostManager {
       pluginId,
       record,
       win,
+      webContentsId: win.webContents.id,
       state: "starting",
       queue: [],
       active: null,
@@ -173,7 +183,7 @@ export class PluginHostManager {
 
     markPluginHostWindow(win);
     this.hosts.set(pluginId, host);
-    this.bySenderId.set(win.webContents.id, host);
+    this.bySenderId.set(host.webContentsId, host);
     this.armLoadTimer(host);
 
     win.webContents.on("render-process-gone", (_event, details) => {
@@ -219,13 +229,20 @@ export class PluginHostManager {
       }
 
       case "load-error":
-        this.failHost(host, new Error(`Plugin "${host.pluginId}" failed to load: ${message.message}`));
+        this.failHost(host, new Error(`Plugin "${host.pluginId}" failed to load: ${clipPluginText(message.message)}`));
         return;
 
       case "result": {
         const pending = this.takeActive(host, message.reqId);
         if (!pending) return;
-        pending.resolve(message.output);
+        // The host page bounds a result before sending it, but this process
+        // is the last stop before the renderer and does not take that on
+        // trust: a result over budget is refused, not forwarded.
+        if (exceedsOutputBudget(message.output)) {
+          pending.reject(new Error(`Plugin "${host.pluginId}" returned more data than a render may produce.`));
+        } else {
+          pending.resolve(message.output);
+        }
         this.pump(host);
         return;
       }
@@ -233,7 +250,9 @@ export class PluginHostManager {
       case "error": {
         const pending = this.takeActive(host, message.reqId);
         if (!pending) return;
-        pending.reject(new Error(message.message));
+        // Bounded like a result is: the message is plugin-supplied text, and
+        // it goes on to the renderer.
+        pending.reject(new Error(clipPluginText(message.message)));
         this.pump(host);
         return;
       }
@@ -243,7 +262,9 @@ export class PluginHostManager {
   /** Reads the plugin's source in the main process and posts it into the sandbox. */
   private async sendInit(host: HostedPlugin): Promise<void> {
     try {
-      const { modules, entry } = await readPluginModules(host.record);
+      // The snapshot taken at discovery when there is one, so the code that
+      // runs is the code that was fingerprinted.
+      const { modules, entry } = host.record.source ?? (await readPluginModules(host.record));
       if (host.state === "terminated" || host.win.isDestroyed()) return;
       host.win.webContents.send(TO_PAGE, { type: "init", modules, entry });
     } catch (err) {
@@ -325,10 +346,8 @@ export class PluginHostManager {
     outstanding.forEach((entry) => entry.reject(err));
 
     if (this.hosts.get(host.pluginId) === host) this.hosts.delete(host.pluginId);
-    if (!host.win.isDestroyed()) {
-      this.bySenderId.delete(host.win.webContents.id);
-      host.win.destroy();
-    }
+    this.bySenderId.delete(host.webContentsId);
+    if (!host.win.isDestroyed()) host.win.destroy();
   }
 
   private sweepIdle(): void {
