@@ -79,7 +79,7 @@ describe("FluidNCClient", () => {
 
   // ── getStatus ───────────────────────────────────────────────────────────
 
-  it("parses status from /state endpoint", async () => {
+  it("parses status through the read-only HTTP realtime query", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse("<Idle|MPos:10.000,20.000,0.000>"),
     );
@@ -87,7 +87,26 @@ describe("FluidNCClient", () => {
     expect(status.state).toBe("Idle");
     expect(status.mpos).toEqual({ x: 10, y: 20, z: 0 });
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://192.168.1.100:80/state",
+      "http://192.168.1.100:80/command?plain=%3F",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const query = new URL(mockFetch.mock.calls[0][0] as string);
+    expect([...query.searchParams.entries()]).toEqual([["plain", "?"]]);
+    expect(wsCapture.instances).toHaveLength(0);
+  });
+
+  it("parses a FluidNC 4.1.1 status response with a trailing newline", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse("<Idle|MPos:0,0,0|FS:0,0|Ov:100,100,100>\n"),
+    );
+
+    const status = await client.getStatus();
+
+    expect(status.state).toBe("Idle");
+    expect(status.mpos).toEqual({ x: 0, y: 0, z: 0 });
+    expect(mockFetch).toHaveBeenCalledExactlyOnceWith(
+      "http://192.168.1.100:80/command?plain=%3F",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -199,7 +218,7 @@ describe("FluidNCClient", () => {
     mockFetch.mockResolvedValueOnce(mockResponse("<Idle|MPos:0,0,0>"));
     await client.getStatus();
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://myplotter.local:8080/state",
+      "http://myplotter.local:8080/command?plain=%3F",
       expect.any(Object),
     );
   });

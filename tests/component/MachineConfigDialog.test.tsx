@@ -321,6 +321,29 @@ describe("MachineConfigDialog", () => {
     expect(screen.getByDisplayValue("M3S1")).toBeInTheDocument();
   });
 
+  it("resets an existing stepper profile to a 5 mm pen lift only when requested", async () => {
+    const cfg = createMachineConfig({
+      penType: "stepper",
+      penUpCommand: "G0Z15",
+      penDownCommand: "G0Z0",
+    });
+    useMachineStore.setState({ configs: [cfg], activeConfigId: cfg.id });
+
+    render(<MachineConfigDialog onClose={onClose} />);
+    expect(screen.getByDisplayValue("G0Z15")).toBeInTheDocument();
+    expect(window.terraForge.config.saveMachineConfig).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByText("↺ Reset to defaults"));
+    expect(screen.getByDisplayValue("G0Z5")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("G0Z15")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("G0Z0")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Save Changes"));
+    expect(window.terraForge.config.saveMachineConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ penType: "stepper", penUpCommand: "G0Z5" }),
+    );
+  });
+
   // ── Export ──────────────────────────────────────────────────────────────
 
   it("calls exportConfigs when Export clicked", async () => {
@@ -389,13 +412,14 @@ describe("MachineConfigDialog", () => {
       expect(screen.getByDisplayValue("G0Z0")).toBeInTheDocument();
     });
 
-    it("switching to stepper populates stepper defaults (G0Z15 / G0Z0)", async () => {
+    it("switching to stepper populates stepper defaults (G0Z5 / G0Z0)", async () => {
       render(<MachineConfigDialog onClose={onClose} />);
       await userEvent.selectOptions(
         screen.getByDisplayValue("Solenoid (Hardware)"),
         "stepper",
       );
-      expect(screen.getByDisplayValue("G0Z15")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("G0Z5")).toBeInTheDocument();
+      expect(screen.queryByDisplayValue("G0Z15")).not.toBeInTheDocument();
       expect(screen.getByDisplayValue("G0Z0")).toBeInTheDocument();
     });
 

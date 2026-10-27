@@ -31,6 +31,7 @@ export class FluidNCClient extends EventEmitter {
   private restClient = new FluidNCRestClient();
   private ws: WebSocket | null = null;
   private wsReconnectTimer: NodeJS.Timeout | null = null;
+  private wsStatusTimer: NodeJS.Timeout | null = null;
   private wsHost = "";
   private wsPort = 80;
   private wsRetryDelay = 3000; // ms — doubles on each 503, resets on success
@@ -54,6 +55,7 @@ export class FluidNCClient extends EventEmitter {
     return this as unknown as {
       ws: WebSocket | null;
       wsReconnectTimer: NodeJS.Timeout | null;
+      wsStatusTimer: NodeJS.Timeout | null;
       wsHost: string;
       wsPort: number;
       wsRetryDelay: number;
@@ -99,7 +101,10 @@ export class FluidNCClient extends EventEmitter {
   // ─── Status ───────────────────────────────────────────────────────────────
 
   async getStatus(): Promise<MachineStatus> {
-    const res = await this.restClient.get("/state");
+    // The realtime '?' query reports status without moving the machine.
+    // `plain` returns its output in the HTTP response; `commandText` routes
+    // ordinary commands to a WebSocket, and FluidNC has no /state endpoint.
+    const res = await this.restClient.get("/command?plain=%3F");
     const text = await res.text();
     return parseMachineStatus(text);
   }

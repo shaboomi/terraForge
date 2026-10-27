@@ -435,7 +435,7 @@ Use the endpoints exactly as defined:
 
 /command
 
-/state
+GET /command?plain=%3F — read-only realtime `?` status report returned in the HTTP response (`getStatus`); FluidNC does not provide a `/state` endpoint.
 
 /files
 
