@@ -2,7 +2,7 @@
 
 Date: 27 October 2026 (New Zealand)
 Review baseline: fork `shaboomi/terraForge`, main commit `5e554c6d5823f36214a5bed4982057ec5e5e71e8`.
-Status: this change implements the Stage 1 generator engine; bitmap import and processing remain planned. See [the Stage 1 scope](plugin-stage-1.md) and [the author guide](plugin-author-guide.md) for the current supported contract. This document retains the full proposed roadmap; its bitmap inputs, preview/apply and broader v1 contract describe later capabilities rather than Stage 1 features.
+Status: the Stage 1 generator engine and Stage 2 bitmap foundation are implemented. Bitmap/vector processor inputs, raster plugin output and preview processing remain planned. See [the Stage 1 scope](plugin-stage-1.md), [the Stage 2 notes](plugin-stage-2.md) and [the author guide](plugin-author-guide.md) for supported features. This document retains the broader proposed processing contract and roadmap.
 
 ## Decisions already agreed
 
@@ -25,7 +25,9 @@ Status: this change implements the Stage 1 generator engine; bitmap import and p
 
 A plugin without controls offers a Run action; a successful run adds its output as one undoable edit. Saving a plugin file makes its metadata discoverable; its computation runs only when the user invokes it.
 
-## Architecture review
+## Architecture review at the baseline
+
+The following findings record the review baseline named above; source line references describe that baseline and motivated the staged implementation.
 
 The current Electron / React / Zustand separation is suitable for this feature. The essential addition is a stable document and computation boundary; plugin code should not reach into application internals.
 
@@ -49,7 +51,7 @@ Paths beginning with `components/`, `features/` or `store/` above are relative t
 
 ## Broader proposed plugin contract
 
-This section is a roadmap for later bitmap and processing capabilities. The implemented Stage 1 contract is the [author guide](plugin-author-guide.md): no selected input, vector polyline output and existing version-1 vector layout saves.
+The implemented plugin API is documented in the [author guide](plugin-author-guide.md): generators receive no selected input and return vector polylines. Stage 2 adds portable bitmap documents; the selected-input, raster-output and preview capabilities below describe future extensions.
 
 ### File and discovery
 
@@ -142,7 +144,7 @@ Use the existing SVG default of 96 pixels per inch for initial physical sizing, 
 
 Keep encoded image assets separate from mutable item state. Decode/cache images for display, and release unused display resources. History and clipboard retain asset references instead of copying full pixel buffers for every edit.
 
-Propose a version-2 `.tforge` JSON document with vector/bitmap items, an embedded deduplicated asset table and output provenance. Encoded assets make files portable if the original PNG/JPEG moves or is deleted. Base64 increases saved size, so enforce encoded-file, decoded-pixel, total-document and output-geometry limits. Concrete budgets must be measured and fixed before release.
+Stage 2 implements version-2 `.tforge` JSON with vector/bitmap items, an embedded deduplicated asset table and vector output provenance. Encoded assets make files portable if the original PNG/JPEG moves or is deleted. The [Stage 2 notes](plugin-stage-2.md) document the enforced file, pixel, asset and document budgets; future processing outputs need their own limits.
 
 Read version-1 files through a migration that preserves all existing vector transforms. Validate the whole document before replacing current content. Reject unsupported newer versions clearly. Do not silently reinterpret them as version 1.
 
@@ -162,7 +164,7 @@ Bitmap images serve as reference/processing inputs. They never directly generate
 
 ## Plugin execution boundary
 
-Stage 1 uses a dedicated sandboxed Electron computation host, a plugin worker and a main-process supervisor outside both the worker and its renderer. The broader bitmap and processing capabilities in this proposal need additional validation as they are introduced.
+Stage 1 uses a dedicated sandboxed Electron computation host, a plugin worker and a main-process supervisor outside both the worker and its renderer. Broader bitmap-processing capabilities need additional validation as they are introduced.
 
 - No ordinary TerraForge preload or `window.terraForge` bridge.
 - Node integration disabled, context isolation enabled and sandbox explicitly enabled.
@@ -208,4 +210,4 @@ Application implementation remains TypeScript, React 19, Zustand and Tailwind, w
 
 ## Remaining decisions
 
-The agreed JavaScript/source-preservation decisions above are settled. Defaults proposed for the next implementation are manual Preview then Apply, PNG/JPEG first, structured controls and one selected input. The implemented Stage 1 limits and runtime contract are documented in the author guide; extensions for bitmap and processing workloads need their own resource-budget validation. Detailed bitmap stylisation and font algorithms remain deliberately open for later requirements.
+The agreed JavaScript/source-preservation decisions above are settled. Defaults proposed for the next implementation are manual Preview then Apply, PNG/JPEG first, structured controls and one selected input. The implemented Stage 1 and Stage 2 limits are documented in their guides; extensions for processing workloads need their own resource-budget validation. Detailed bitmap stylisation and font algorithms remain deliberately open for later requirements.

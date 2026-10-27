@@ -1,9 +1,9 @@
-import type { PluginEntry, SvgImport } from "../../../../types";
+import { isVectorImport, type CanvasItem, type PluginEntry, type SvgImport } from "../../../../types";
 import { validatePluginParameters } from "../../../../types/pluginValidation";
 
 /** Reopen only with the exact available plugin that created this artwork. */
-export function pluginEditor(artwork: SvgImport | undefined, entries: PluginEntry[]) {
-  if (!artwork?.pluginSource) return { error: "Select artwork created by a plugin." };
+export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEntry[]) {
+  if (!artwork || !isVectorImport(artwork) || !artwork.pluginSource) return { error: "Select artwork created by a plugin." };
   const source = artwork.pluginSource;
   const entry = entries.find((item) => item.manifest?.id === source.pluginId);
   if (!entry?.manifest) return { error: "This artwork's plugin is not installed. You can still edit its vectors normally." };
@@ -21,13 +21,13 @@ export function pluginEditor(artwork: SvgImport | undefined, entries: PluginEntr
 export function resolvePluginTarget(
   importId: string | null,
   pluginId: string,
-  imports: SvgImport[],
+  imports: CanvasItem[],
   entries: PluginEntry[],
 ): { target?: SvgImport; error?: string } {
   if (!importId) return {};
   const target = imports.find((item) => item.id === importId);
   const editor = pluginEditor(target, entries);
-  if (!target || editor.error || target.pluginSource?.pluginId !== pluginId) {
+  if (!target || !isVectorImport(target) || editor.error || target.pluginSource?.pluginId !== pluginId) {
     return { error: editor.error ?? "The artwork or its plugin is no longer available." };
   }
   return { target };

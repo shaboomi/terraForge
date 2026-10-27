@@ -46,6 +46,7 @@ export function PlotCanvas() {
 
   const {
     canvas,
+    assets,
     toolpath,
     activeConfig,
     theme,
@@ -278,6 +279,7 @@ export function PlotCanvas() {
         bedYMax={bedYMax}
         canvasH={canvasH}
         imports={imports}
+        assets={assets}
         selectedImportId={selectedImportId}
         allImportsSelected={allImportsSelected}
         selectedGroupId={selectedGroupId}

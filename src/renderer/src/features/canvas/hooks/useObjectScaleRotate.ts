@@ -14,13 +14,13 @@
 import { useState, useCallback, type RefObject } from "react";
 import { MM_TO_PX } from "../constants";
 import type { HandlePos, ScalingState, RotatingState, Vp } from "../types";
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import { useCanvasStore } from "../../../store/canvasStore";
 
 export function useObjectScaleRotate(
   containerRef: RefObject<HTMLDivElement | null>,
   vpRef: RefObject<Vp>,
-  updateImport: (id: string, patch: Partial<SvgImport>) => void,
+  updateImport: (id: string, patch: Partial<CanvasItem>) => void,
 ) {
   const [scaling, setScaling] = useState<ScalingState | null>(null);
   const [rotating, setRotating] = useState<RotatingState | null>(null);

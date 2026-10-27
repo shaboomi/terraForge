@@ -30,13 +30,13 @@ import type {
   GroupRotatingState,
   PersistentGroupOBB,
 } from "../types";
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import { useCanvasStore } from "../../../store/canvasStore";
 
 export function useGroupOBB(
   containerRef: RefObject<HTMLDivElement | null>,
   vpRef: RefObject<Vp>,
-  updateImport: (id: string, patch: Partial<SvgImport>) => void,
+  updateImport: (id: string, patch: Partial<CanvasItem>) => void,
   isBottom: boolean,
   canvasH: number,
   allImportsSelected: boolean,

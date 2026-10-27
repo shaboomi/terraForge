@@ -1119,6 +1119,7 @@ describe("PropertiesPanel — stroke width", () => {
       name: "ungrouped",
       strokeWidthMM: 0.5,
     });
+    useCanvasStore.setState({ imports: [imp1, imp2, unrelated] });
     useCanvasStore.getState().addLayerGroup("pen1", "#e94560");
     const group = useCanvasStore.getState().layerGroups[0];
     useCanvasStore.getState().assignImportToGroup(imp1.id, group.id);
@@ -1143,6 +1144,7 @@ describe("PropertiesPanel — stroke width", () => {
     const imp1 = createSvgImport({ name: "ug1", strokeWidthMM: 0.5 });
     const imp2 = createSvgImport({ name: "ug2", strokeWidthMM: 0.5 });
     const grouped = createSvgImport({ name: "grouped", strokeWidthMM: 0.5 });
+    useCanvasStore.setState({ imports: [imp1, imp2, grouped] });
     useCanvasStore.getState().addLayerGroup("grp", "#3a6aaa");
     const group = useCanvasStore.getState().layerGroups[0];
     useCanvasStore.getState().assignImportToGroup(grouped.id, group.id);

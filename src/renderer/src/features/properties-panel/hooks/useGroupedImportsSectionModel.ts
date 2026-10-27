@@ -1,4 +1,4 @@
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import type {
   GroupedImportsGroupView,
   GroupedImportsSectionProps,
@@ -23,7 +23,7 @@ export function useGroupedImportsSectionModel({
   return layerGroups.map((group) => {
     const members = group.importIds
       .map((id) => imports.find((imp) => imp.id === id))
-      .filter(Boolean) as SvgImport[];
+      .filter(Boolean) as CanvasItem[];
 
     return {
       group,

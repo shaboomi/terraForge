@@ -31,6 +31,7 @@ export function TransformShortcuts({
   onFitHorizontal,
   onFitVertical,
   onResetScale,
+  resetScaleTitle = "Reset scale + ratio lock to 1:1 (1 SVG unit = 1 mm)",
   onTemplateScaleEnabledChange,
   onTemplateScaleTargetChange,
   onRotateCcw,
@@ -61,7 +62,7 @@ export function TransformShortcuts({
               <Maximize2 size={14} strokeWidth={2} />
             </TransformIconButton>
             <TransformIconButton
-              title="Reset scale + ratio lock to 1:1 (1 SVG unit = 1 mm)"
+              title={resetScaleTitle}
               onClick={onResetScale}
             >
               <Minimize2 size={14} strokeWidth={2} />

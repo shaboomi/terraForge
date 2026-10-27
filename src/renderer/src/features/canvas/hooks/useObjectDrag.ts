@@ -12,14 +12,14 @@
 import { useState, useRef, useCallback, type RefObject } from "react";
 import { MM_TO_PX } from "../constants";
 import type { CanvasOrigin, DraggingState, Vp } from "../types";
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import { useCanvasStore } from "../../../store/canvasStore";
 
 export function useObjectDrag(
   vpRef: RefObject<Vp>,
   spaceRef: RefObject<boolean>,
   selectImport: (id: string | null) => void,
-  updateImport: (id: string, patch: Partial<SvgImport>) => void,
+  updateImport: (id: string, patch: Partial<CanvasItem>) => void,
   origin: CanvasOrigin = "bottom-left",
 ) {
   const [dragging, setDragging] = useState<DraggingState | null>(null);

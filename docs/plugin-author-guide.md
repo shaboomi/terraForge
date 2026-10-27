@@ -1,6 +1,6 @@
 # Writing a TerraForge plugin (Stage 1)
 
-Stage 1 adds JavaScript generators that create ordinary, editable vector artwork. Bitmap import, bitmap/vector processors, raster plugin output, preview overlays and a font-loading service remain planned. The category names are available, but a plugin requiring `bitmap` or `vector` input cannot run yet.
+The current JavaScript API adds generators that create ordinary, editable vector artwork. Stage 2 also adds PNG/JPEG canvas images and portable bitmap layouts; see [the bitmap guide](plugin-stage-2.md). Bitmap/vector processor inputs, raster plugin output, preview overlays and a font-loading service remain later stages. The category names are available, but a plugin requiring `bitmap` or `vector` input cannot run yet.
 
 ## Install your first plugin
 
@@ -22,6 +22,7 @@ To change an existing result, select the generated artwork and choose **Edit wit
 The same flow works after saving and reopening a `.tforge` layout. Keep the original plugin installed and enabled at the same version to reopen its controls. If it is missing, disabled or incompatible, Properties explains why editing with the plugin is unavailable; the saved vector artwork remains usable.
 
 Updating regenerates the vector paths from the saved settings. It does not preserve manual edits to individual generated paths. Opening a tool through the Plugins menu starts a new artwork operation; use the selected item's Edit with action when you intend to update that result.
+
 ## A complete rectangle generator
 
 Save this as `rectangle.tf-plugin.js`. The header must be at the start of the file and use JSON, including double quotes and no trailing commas.

@@ -92,10 +92,10 @@ test("save layout writes a JSON file at the chosen path", async () => {
   expect(fs.existsSync(layoutTempPath)).toBe(true);
 });
 
-test("saved layout file contains valid JSON with tfVersion 1", async () => {
+test("saved layout file contains valid JSON with tfVersion 2", async () => {
   const raw = fs.readFileSync(layoutTempPath, "utf8");
   const json = JSON.parse(raw);
-  expect(json.tfVersion).toBe(1);
+  expect(json.tfVersion).toBe(2);
   expect(Array.isArray(json.imports)).toBe(true);
 });
 
@@ -129,7 +129,7 @@ test("opening a layout on an empty canvas loads its imports directly", async () 
   await discardBtn.click();
 
   // Canvas should now be empty.
-  await expect(window.locator("text=No objects. Import an SVG.")).toBeVisible({
+  await expect(window.locator("text=No objects. Import an SVG, PDF or image, or use a generator.")).toBeVisible({
     timeout: 5_000,
   });
 
@@ -202,7 +202,7 @@ test("confirming close layout clears all imports", async () => {
   await expect(discardBtn).toBeVisible({ timeout: 5_000 });
   await discardBtn.click();
 
-  await expect(window.locator("text=No objects. Import an SVG.")).toBeVisible({
+  await expect(window.locator("text=No objects. Import an SVG, PDF or image, or use a generator.")).toBeVisible({
     timeout: 5_000,
   });
 });

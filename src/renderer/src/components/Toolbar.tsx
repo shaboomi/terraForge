@@ -1,3 +1,4 @@
+import { isVectorImport } from "../../../types";
 import { useState } from "react";
 import { PluginsMenu } from "../features/plugins/PluginsMenu";
 import { useShallow } from "zustand/react/shallow";
@@ -126,7 +127,8 @@ export function Toolbar({
           onImport={handleImport}
           onOpenGcodeDialog={() => setShowGcodeDialog(true)}
           generating={generating}
-          importsEmpty={imports.length === 0}
+          importsEmpty={!imports.some(isVectorImport)}
+          rasterOnly={imports.length > 0 && !imports.some(isVectorImport)}
         />
       </div>
 

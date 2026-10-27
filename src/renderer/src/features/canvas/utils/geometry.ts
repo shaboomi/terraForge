@@ -6,7 +6,7 @@
 
 import { MM_TO_PX, PAD, MIN_ZOOM, MAX_ZOOM } from "../constants";
 import type { Vp, HandlePos, CanvasOrigin } from "../types";
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 
 /**
  * Calculate a zoom level and pan offset to fit the bed within a container,
@@ -61,12 +61,12 @@ export function rotatePoint(
 /**
  * Compute axis-aligned bounding box (AABB) for a list of imports in SVG pixels.
  *
- * @param imports Array of SvgImport objects
+ * @param imports Array of CanvasItem objects
  * @param getBedY Callback to compute SVG Y from mm (handles origin/flip)
  * @returns { minX, maxX, minY, maxY } in SVG pixels, or null if no imports
  */
 export function computeBoundingBox(
-  imports: SvgImport[],
+  imports: CanvasItem[],
   getBedY: (mm: number) => number,
 ): { minX: number; maxX: number; minY: number; maxY: number } | null {
   if (imports.length === 0) return null;
@@ -125,13 +125,13 @@ export function computeBoundingBox(
  * Returns the OBB geometry (center, half-extents, angle) that can be used to
  * render a rotated rectangle or compute handle positions.
  *
- * @param imports Array of SvgImport objects
+ * @param imports Array of CanvasItem objects
  * @param totalAngleDeg Total accumulated rotation angle in degrees
  * @param getBedY Callback to compute SVG Y from mm
  * @returns { cx, cy, hw, hh, angle } or null if no imports
  */
 export function computeOBB(
-  imports: SvgImport[],
+  imports: CanvasItem[],
   totalAngleDeg: number,
   getBedY: (mm: number) => number,
 ): { cx: number; cy: number; hw: number; hh: number; angle: number } | null {

@@ -45,7 +45,7 @@ describe("undoRedoSlice", () => {
     const store = makeStore();
     store.setState({
       imports: [{ id: "current", x: 5, y: 5, scale: 1, rotation: 0 }] as any,
-      undoStack: [[{ id: "prev", x: 1, y: 1, scale: 1, rotation: 0 }] as any],
+      undoStack: [{ imports: [{ id: "prev", x: 1, y: 1, scale: 1, rotation: 0 }], layerGroups: [], pageTemplate: null } as any],
       selectedImportId: "x",
       selectedPathId: "p",
       allImportsSelected: true,
@@ -55,7 +55,7 @@ describe("undoRedoSlice", () => {
 
     expect(store.getState().imports[0].id).toBe("prev");
     expect(store.getState().redoStack).toHaveLength(1);
-    expect(store.getState().redoStack[0][0].id).toBe("current");
+    expect(store.getState().redoStack[0].imports[0].id).toBe("current");
     expect(store.getState().selectedImportId).toBeNull();
     expect(store.getState().selectedPathId).toBeNull();
     expect(store.getState().allImportsSelected).toBe(false);
@@ -65,26 +65,26 @@ describe("undoRedoSlice", () => {
     const store = makeStore();
     store.setState({
       imports: [{ id: "current", x: 1, y: 1, scale: 1, rotation: 0 }] as any,
-      redoStack: [[{ id: "next", x: 9, y: 9, scale: 1, rotation: 0 }] as any],
+      redoStack: [{ imports: [{ id: "next", x: 9, y: 9, scale: 1, rotation: 0 }], layerGroups: [], pageTemplate: null } as any],
     });
 
     store.getState().redo();
 
     expect(store.getState().imports[0].id).toBe("next");
     expect(store.getState().undoStack).toHaveLength(1);
-    expect(store.getState().undoStack[0][0].id).toBe("current");
+    expect(store.getState().undoStack[0].imports[0].id).toBe("current");
   });
 
-  it("snapshotForGesture stores imports and clears redo stack", () => {
+  it("snapshotForGesture preserves redo until a changed gesture commits", () => {
     const store = makeStore();
     store.setState({
       imports: [{ id: "i1", x: 0, y: 0, scale: 1, rotation: 0 }] as any,
-      redoStack: [[{ id: "stale", x: 1, y: 1, scale: 1, rotation: 0 }] as any],
+      redoStack: [{ imports: [{ id: "stale", x: 1, y: 1, scale: 1, rotation: 0 }], layerGroups: [], pageTemplate: null } as any],
     });
 
     store.getState().snapshotForGesture();
 
-    expect(store.getState().redoStack).toHaveLength(0);
+    expect(store.getState().redoStack).toHaveLength(1);
   });
 
   it("commitGesture pushes undo only when tracked values changed", () => {
@@ -105,6 +105,6 @@ describe("undoRedoSlice", () => {
     store.getState().commitGesture();
 
     expect(store.getState().undoStack).toHaveLength(1);
-    expect(store.getState().undoStack[0][0].x).toBe(0);
+    expect(store.getState().undoStack[0].imports[0].x).toBe(0);
   });
 });

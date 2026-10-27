@@ -1,15 +1,17 @@
 import {
   DEFAULT_HATCH_ANGLE_DEG,
   DEFAULT_HATCH_SPACING_MM,
-  type SvgImport,
+  type CanvasItem,
+  isVectorImport,
 } from "../../../../../types";
 import { generateHatchPaths } from "../../../utils/hatchFill";
 
-export function getEffectiveImportScale(imp: SvgImport): number {
+export function getEffectiveImportScale(imp: CanvasItem): number {
   return Math.sqrt((imp.scaleX ?? imp.scale) * (imp.scaleY ?? imp.scale));
 }
 
-export function regenerateImportHatching(imp: SvgImport): void {
+export function regenerateImportHatching(imp: CanvasItem): void {
+  if (!isVectorImport(imp)) return;
   const effectiveScale = getEffectiveImportScale(imp);
   const spacingMM = imp.hatchSpacingMM ?? DEFAULT_HATCH_SPACING_MM;
   const angleDeg = imp.hatchAngleDeg ?? DEFAULT_HATCH_ANGLE_DEG;
@@ -36,11 +38,12 @@ export function regenerateImportHatching(imp: SvgImport): void {
 }
 
 export function applyImportHatch(
-  imp: SvgImport,
+  imp: CanvasItem,
   spacingMM: number,
   angleDeg: number,
   enabled: boolean,
 ): void {
+  if (!isVectorImport(imp)) return;
   const safeSpacing =
     Number.isFinite(spacingMM) && spacingMM > 0
       ? spacingMM

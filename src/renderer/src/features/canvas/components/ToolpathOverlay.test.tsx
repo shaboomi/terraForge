@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { ToolpathOverlay, type ToolpathOverlayProps } from "./ToolpathOverlay";
 import type { Vp } from "../types";
 
@@ -96,6 +96,28 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("ToolpathOverlay", () => {
+  it("repaints when a bitmap finishes decoding and releases it when hidden or unmounted", () => {
+    const image = { src: "", naturalWidth: 200, naturalHeight: 100, onload: null, onerror: null } as unknown as HTMLImageElement;
+    vi.stubGlobal("Image", class { constructor() { return image; } });
+    const ctx = { ...makeMockCtx(), drawImage: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), globalAlpha: 1 };
+    const restoreContext = stubGetContext(ctx);
+    const restoreRAF = stubRAF();
+    const bitmap = { id: "bitmap", kind: "bitmap" as const, name: "reference", assetId: "image", opacity: 0.7, x: 0, y: 0, scale: 0.2, rotation: 0, visible: true, svgWidth: 200, svgHeight: 100, viewBoxX: 0, viewBoxY: 0 };
+    const assets = { image: { id: "image", mimeType: "image/png" as const, data: "cG5n", widthPx: 200, heightPx: 100 } };
+    try {
+      const { rerender, unmount } = render(<ToolpathOverlay {...makeProps({ imports: [bitmap], assets })} />);
+      expect(ctx.drawImage).not.toHaveBeenCalled();
+      act(() => image.onload!.call(image, new Event("load")));
+      expect(ctx.drawImage).toHaveBeenCalledWith(image, 0, 0, 200, 100);
+      rerender(<ToolpathOverlay {...makeProps({ imports: [{ ...bitmap, visible: false }], assets })} />);
+      expect(image.src).toBe("");
+      expect(image.onload).toBeNull();
+      unmount();
+      expect(image.onerror).toBeNull();
+    } finally {
+      restoreContext(); restoreRAF(); vi.unstubAllGlobals();
+    }
+  });
   it("renders a canvas element", () => {
     const { container } = render(<ToolpathOverlay {...makeProps()} />);
     expect(container.querySelector("canvas")).toBeTruthy();

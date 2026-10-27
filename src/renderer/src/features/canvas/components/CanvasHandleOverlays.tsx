@@ -1,9 +1,9 @@
 import type { ComponentProps } from "react";
-import type { SvgImport, LayerGroup } from "../../../../../types";
+import type { CanvasItem, LayerGroup } from "../../../../../types";
 import { GroupHandleOverlay, HandleOverlay } from "..";
 
 interface CanvasHandleOverlaysProps {
-  imports: SvgImport[];
+  imports: CanvasItem[];
   selectedImportId: string | null;
   allImportsSelected: boolean;
   selectedGroupId: string | null;

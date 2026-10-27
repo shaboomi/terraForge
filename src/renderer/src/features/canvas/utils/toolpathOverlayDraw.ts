@@ -1,7 +1,10 @@
+import { drawBitmapImport } from "./bitmapDraw";
+import type { BitmapImageCache } from "./bitmapImageCache";
 import {
   DEFAULT_STROKE_WIDTH_MM,
   type LayerGroup,
   type SvgImport,
+  type CanvasItem,
 } from "../../../../../types";
 import type { Vp } from "../types";
 import { LOD_PX, MM_TO_PX, PAD } from "../constants";
@@ -27,7 +30,8 @@ interface DrawImportsLayerParams {
   ctx: CanvasRenderingContext2D;
   dpr: number;
   vp: Vp;
-  imports: SvgImport[];
+  imports: CanvasItem[];
+  bitmapCache?: BitmapImageCache;
   layerGroups: LayerGroup[];
   selectedImportId: string | null;
   allImportsSelected: boolean;
@@ -51,6 +55,7 @@ export function drawImportsLayer({
   canvasH,
   respectSvgColorsOnCanvas,
   cache,
+  bitmapCache,
 }: DrawImportsLayerParams): void {
   const vpA = vp.zoom * dpr;
   const vpE = vp.panX * dpr;
@@ -64,11 +69,15 @@ export function drawImportsLayer({
   }
 
   for (const id of cache.keys()) {
-    if (!imports.some((imp) => imp.id === id)) cache.delete(id);
+    if (!imports.some((imp) => imp.id === id && imp.kind !== "bitmap")) cache.delete(id);
   }
 
   for (const imp of imports) {
     if (!imp.visible) continue;
+    if (imp.kind === "bitmap") {
+      drawBitmapImport(ctx, imp, bitmapCache, vp, dpr, isBottom, canvasH);
+      continue;
+    }
 
     let impCache = cache.get(imp.id);
     if (

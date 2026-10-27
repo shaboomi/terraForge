@@ -1,3 +1,4 @@
+import { validateCanvasLayoutImages } from "../services/validateLayoutImages";
 import { useState, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import { useShallow } from "zustand/react/shallow";
@@ -5,10 +6,11 @@ import { useCanvasStore } from "../../../store/canvasStore";
 import { selectLayoutActionsCanvasState } from "../../../store/canvasSelectors";
 import { useTaskStore } from "../../../store/taskStore";
 import { type CanvasLayout } from "../../../../../types";
+import { parseCanvasLayout, serializeCanvasLayout } from "../../../../../types/layoutValidation";
 
 /** Orchestrates save, load, and close operations for canvas layout files. */
 export function useLayoutActions() {
-  const { imports, layerGroups, pageTemplate, loadLayout, clearImports } =
+  const { imports, assets, layerGroups, pageTemplate, loadLayout, clearImports } =
     useCanvasStore(useShallow(selectLayoutActionsCanvasState));
   const upsertTask = useTaskStore((s) => s.upsertTask);
 
@@ -33,7 +35,8 @@ export function useLayoutActions() {
     });
     try {
       const layout: CanvasLayout = {
-        tfVersion: 1,
+        tfVersion: 2,
+        assets,
         savedAt: new Date().toISOString(),
         imports,
         layerGroups,
@@ -41,7 +44,7 @@ export function useLayoutActions() {
       };
       await window.terraForge.fs.writeFile(
         savePath,
-        JSON.stringify(layout, null, 2),
+        serializeCanvasLayout(layout),
       );
       upsertTask({
         id: taskId,
@@ -75,16 +78,9 @@ export function useLayoutActions() {
       status: "running",
     });
     try {
-      const raw = await window.terraForge.fs.readFile(filePath);
-      let layout: CanvasLayout;
-      try {
-        layout = JSON.parse(raw) as CanvasLayout;
-      } catch {
-        throw new Error("Not a valid terraForge layout file.");
-      }
-      if (!Array.isArray(layout.imports)) {
-        throw new Error("Layout file does not contain a valid imports array.");
-      }
+      const raw = await (window.terraForge.fs.readLayoutFile ?? window.terraForge.fs.readFile)(filePath);
+      const layout = parseCanvasLayout(raw);
+      await validateCanvasLayoutImages(layout);
       upsertTask({
         id: taskId,
         type: "svg-parse",
@@ -92,10 +88,10 @@ export function useLayoutActions() {
         progress: 100,
         status: "completed",
       });
-      if (imports.length > 0) {
+      if (useCanvasStore.getState().imports.length > 0) {
         setPendingLayout(layout);
       } else {
-        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate);
+        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate, layout.assets);
       }
     } catch (err) {
       upsertTask({

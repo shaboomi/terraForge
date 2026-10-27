@@ -1,3 +1,4 @@
+import { isVectorImport } from "../../../../types";
 import type { CanvasState } from "../canvasStore/types";
 import { normalizeSvgColor } from "../../features/imports/services/svgImportHelpers";
 
@@ -22,14 +23,14 @@ export const selectToolbarCanvasState = (state: CanvasState) => ({
 export const selectGcodeOptionsDialogCanvasState = (state: CanvasState) => ({
   layerGroupCount: state.layerGroups.length,
   sourceLayerCount: new Set(
-    state.imports.flatMap((imp) =>
+    state.imports.filter(isVectorImport).flatMap((imp) =>
       imp.paths
         .map((path) => path.layer)
         .filter((layer): layer is string => !!layer),
     ),
   ).size,
   colorGroupCount: new Set(
-    state.imports.flatMap((imp) =>
+    state.imports.filter(isVectorImport).flatMap((imp) =>
       imp.paths
         .map((p) => normalizeSvgColor(p.sourceColor ?? ""))
         .filter((color): color is string => !!color),

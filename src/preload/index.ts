@@ -97,6 +97,8 @@ const serial: TerraForgeAPI["serial"] = {
 // ─── File-System API ─────────────────────────────────────────────────────────
 
 const fs: TerraForgeAPI["fs"] = {
+  readBitmapFile: (filePath) => invoke<Uint8Array>("fs:readBitmapFile", filePath),
+  readLayoutFile: (filePath) => invoke<string>("fs:readLayoutFile", filePath),
   openSvgDialog: () => invoke<string | null>("fs:openSvgDialog"),
   openPdfDialog: () => invoke<string | null>("fs:openPdfDialog"),
   openFileDialog: () => invoke<string | null>("fs:openFileDialog"),

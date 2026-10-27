@@ -1,3 +1,4 @@
+import { BitmapPropertiesSection } from "./BitmapPropertiesSection";
 import {
   DEFAULT_HATCH_ANGLE_DEG,
   DEFAULT_HATCH_SPACING_MM,
@@ -121,6 +122,7 @@ export function ImportPropertiesForm({
         sharedTransformProps={sharedTransformProps}
       />
 
+      {imp.kind === "bitmap" ? <BitmapPropertiesSection imp={imp} onUpdate={onUpdate} /> : <>
       <StrokeOptionsSection imp={imp} onUpdate={onUpdate} />
 
       <StrokeWidthSection
@@ -137,6 +139,7 @@ export function ImportPropertiesForm({
       />
 
       <PlotPointsSection imp={imp} onUpdate={onUpdate} />
+      </>}
     </>
   );
 }

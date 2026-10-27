@@ -1,6 +1,8 @@
+import { isVectorImport } from "../../../../../types";
 import type {
   LayerGroup,
   SvgImport,
+  CanvasItem,
   SvgPath,
   VectorObject,
 } from "../../../../../types";
@@ -96,8 +98,8 @@ function projectPathToVectorObjects(
   return [...outlineVOs, ...hatchVOs, ...pointVOs];
 }
 
-export function vectorObjectsForImport(imp: SvgImport): VectorObject[] {
-  if (!imp.visible) return [];
+export function vectorObjectsForImport(imp: CanvasItem): VectorObject[] {
+  if (!isVectorImport(imp) || !imp.visible) return [];
   const hiddenLayerIds = imp.layers
     ? new Set(
         imp.layers.filter((layer) => !layer.visible).map((layer) => layer.id),
@@ -113,7 +115,7 @@ export function vectorObjectsForImportLayer(
   imp: SvgImport,
   layerId: string,
 ): VectorObject[] {
-  if (!imp.visible) return [];
+  if (!isVectorImport(imp) || !imp.visible) return [];
   const hiddenLayerIds = imp.layers
     ? new Set(
         imp.layers.filter((layer) => !layer.visible).map((layer) => layer.id),
@@ -130,12 +132,12 @@ export function vectorObjectsForImportLayer(
     .flatMap((path) => projectPathToVectorObjects(imp, path));
 }
 
-export function vectorObjectsForImports(imports: SvgImport[]): VectorObject[] {
+export function vectorObjectsForImports(imports: CanvasItem[]): VectorObject[] {
   return imports.flatMap((imp) => vectorObjectsForImport(imp));
 }
 
 export function vectorObjectsForGroup(
-  imports: SvgImport[],
+  imports: CanvasItem[],
   layerGroups: LayerGroup[],
   groupId: string,
 ): VectorObject[] {
@@ -148,7 +150,7 @@ export function vectorObjectsForGroup(
 }
 
 export function vectorObjectsUngrouped(
-  imports: SvgImport[],
+  imports: CanvasItem[],
   layerGroups: LayerGroup[],
 ): VectorObject[] {
   const groupedImportIds = new Set(

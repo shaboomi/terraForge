@@ -1,6 +1,8 @@
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "fs/promises";
 import type { MachineConfig } from "../../types";
+import { BITMAP_LIMITS } from "../../types/bitmapValidation";
+import { readBoundedFile } from "../files/boundedFile";
 
 const GCODE_EXTENSIONS = [
   "gcode",
@@ -17,10 +19,11 @@ const GCODE_EXTENSIONS = [
 const IMPORT_FILTERS = [
   {
     name: "Supported Files",
-    extensions: ["svg", "pdf", ...GCODE_EXTENSIONS],
+    extensions: ["svg", "pdf", "png", "jpg", "jpeg", ...GCODE_EXTENSIONS],
   },
   { name: "SVG Files", extensions: ["svg"] },
   { name: "PDF Files", extensions: ["pdf"] },
+  { name: "Bitmap Images", extensions: ["png", "jpg", "jpeg"] },
   { name: "G-code Files", extensions: GCODE_EXTENSIONS },
 ];
 
@@ -87,6 +90,20 @@ export function registerFsIpcHandlers(options: FsIpcOptions): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  const assertMainFrame = (event: Electron.IpcMainInvokeEvent) => {
+    const main = getMainWindow();
+    if (!main || main.isDestroyed() || event.sender !== main.webContents ||
+        event.senderFrame !== main.webContents.mainFrame) throw new Error("File request denied.");
+  };
+  ipcMain.handle("fs:readBitmapFile", async (event, filePath: unknown) => {
+    assertMainFrame(event);
+    return readBoundedFile(filePath, BITMAP_LIMITS.sourceBytes, "Image");
+  });
+  ipcMain.handle("fs:readLayoutFile", async (event, filePath: unknown) => {
+    assertMainFrame(event);
+    const bytes = await readBoundedFile(filePath, BITMAP_LIMITS.layoutBytes, "Layout");
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  });
   ipcMain.handle("fs:readFile", (_e, filePath: string) =>
     readFile(filePath, "utf-8"),
   );

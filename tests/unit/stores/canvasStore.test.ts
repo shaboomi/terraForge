@@ -978,13 +978,13 @@ describe("canvasStore", () => {
       expect(useCanvasStore.getState().imports[0].y).toBe(99);
     });
 
-    it("snapshotForGesture clears the redo stack", () => {
+    it("snapshotForGesture preserves the redo stack until a changed commit", () => {
       const imp = createSvgImport();
       useCanvasStore.getState().addImport(imp);
       useCanvasStore.getState().undo(); // populate redoStack
       expect(useCanvasStore.getState().redoStack).toHaveLength(1);
       useCanvasStore.getState().snapshotForGesture();
-      expect(useCanvasStore.getState().redoStack).toHaveLength(0);
+      expect(useCanvasStore.getState().redoStack).toHaveLength(1);
     });
 
     it("commitGesture detects scale changes", () => {

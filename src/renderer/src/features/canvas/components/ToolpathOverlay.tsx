@@ -1,5 +1,6 @@
+import { BitmapImageCache } from "../utils/bitmapImageCache";
 /**
- * ToolpathOverlay - canvas-based rendering of G-code toolpaths and SVG imports.
+ * ToolpathOverlay - canvas-based rendering of G-code toolpaths and vector/bitmap imports.
  *
  * Renders a <canvas> element positioned absolutely behind the SVG layer.
  * Uses Path2D caching, RAF debouncing, and LOD (level-of-detail) culling to
@@ -11,10 +12,10 @@
  *   • LOD: sub-pixel segments are skipped based on current zoom level
  *   • RAF debouncing: rapid pan/zoom events collapse into one repaint per frame
  */
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { MM_TO_PX, PAD } from "../constants";
 import type { Vp } from "../types";
-import type { SvgImport, LayerGroup } from "../../../../../types";
+import type { CanvasItem, BitmapAssetTable, LayerGroup } from "../../../../../types";
 import type { GcodeToolpath } from "../../../utils/gcodeParser";
 import type { Theme } from "../../../store/themeStore";
 import {
@@ -38,7 +39,8 @@ export interface ToolpathOverlayProps {
   bedYMax: number;
   /** Canvas height in SVG pixels (bedH * MM_TO_PX + PAD * 2) */
   canvasH: number;
-  imports: SvgImport[];
+  imports: CanvasItem[];
+  assets?: BitmapAssetTable;
   selectedImportId: string | null;
   allImportsSelected: boolean;
   selectedGroupId: string | null;
@@ -54,6 +56,8 @@ export interface ToolpathOverlayProps {
   theme: Theme;
 }
 
+const EMPTY_ASSETS: BitmapAssetTable = {};
+
 export function ToolpathOverlay({
   vp,
   containerSize,
@@ -68,6 +72,7 @@ export function ToolpathOverlay({
   bedYMax,
   canvasH,
   imports,
+  assets = EMPTY_ASSETS,
   selectedImportId,
   allImportsSelected,
   selectedGroupId,
@@ -83,6 +88,10 @@ export function ToolpathOverlay({
   theme,
 }: ToolpathOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [imageRevision, setImageRevision] = useState(0);
+  const bitmapCacheRef = useRef<BitmapImageCache | null>(null);
+  if (!bitmapCacheRef.current) bitmapCacheRef.current = new BitmapImageCache(() => setImageRevision((value) => value + 1));
+  useEffect(() => () => bitmapCacheRef.current?.clear(), []);
 
   // Cache of combined Path2D geometry per import, keyed by import ID.
   // Invalidated when imp.paths reference changes (immer creates a new array on
@@ -104,6 +113,7 @@ export function ToolpathOverlay({
   });
 
   useEffect(() => {
+    bitmapCacheRef.current!.sync(assets, imports);
     let rafId: number | null = null;
 
     const draw = () => {
@@ -170,6 +180,7 @@ export function ToolpathOverlay({
         canvasH,
         respectSvgColorsOnCanvas,
         cache: importPath2DCacheRef.current,
+        bitmapCache: bitmapCacheRef.current!,
       });
 
       if (!gcodeToolpath) return;
@@ -222,10 +233,13 @@ export function ToolpathOverlay({
     imports,
     selectedImportId,
     allImportsSelected,
+    selectedGroupId,
     layerGroups,
     canvasH,
     respectSvgColorsOnCanvas,
     theme,
+    assets,
+    imageRevision,
   ]);
 
   return (

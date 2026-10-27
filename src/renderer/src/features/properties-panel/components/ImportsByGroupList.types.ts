@@ -5,7 +5,7 @@ import type {
   PageSize,
   PageTemplate,
   SvgPath,
-  SvgImport,
+  CanvasItem,
 } from "../../../../../types";
 import type { RotStep } from "../utils/rotation";
 
@@ -15,7 +15,7 @@ export interface NameEditState {
 }
 
 export interface ImportsByGroupListProps {
-  imports: SvgImport[];
+  imports: CanvasItem[];
   layerGroups: LayerGroup[];
   selectedImportId: string | null;
   selectedGroupId: string | null;
@@ -46,7 +46,7 @@ export interface ImportsByGroupListProps {
   onToggleExpand: (importId: string) => void;
   onToggleGroupCollapse: (groupId: string) => void;
   onToggleLayerCollapse: (importId: string, layerId: string) => void;
-  onUpdateImport: (importId: string, changes: Partial<SvgImport>) => void;
+  onUpdateImport: (importId: string, changes: Partial<CanvasItem>) => void;
   onUpdateImportLayer: (
     importId: string,
     layerId: string,

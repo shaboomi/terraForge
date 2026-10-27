@@ -9,7 +9,7 @@
 - [x] Host-rendered Properties controls: number, slider, boolean, select, text and colour; generators also work on an empty canvas.
 - [x] Generators receive page dimensions and parameters, run in a dedicated sandboxed computation host/worker, and report progress/errors through background tasks; cancellation and the default 30-second deadline terminate execution.
 - [x] Validated local-millimetre polylines become an ordinary vector import with plugin identity, version and parameters. Adding one result creates one undo step; artwork survives layout save/open without the plugin installed.
-- [x] Minimise/expand or close the plugin panel without deleting artwork. Select a generated item to reopen saved settings with Edit with its plugin; Update artwork replaces that item, preserves placement and creates one undoable edit, including after saving/reopening a version-1 layout.
+- [x] Minimise/expand or close the plugin panel without deleting artwork. Select a generated item to reopen saved settings with Edit with its plugin; Update artwork replaces that item, preserves placement and creates one undoable edit, including after saving/reopening a layout.
 - [x] Cancelled, failed and stale runs do not add artwork. The application constructs the SVG markup from validated coordinates.
 
 See [Stage 1](plugin-stage-1.md) for the completion boundary and [the author guide](plugin-author-guide.md) for the supported file/API contract. Category availability does not imply bitmap/vector input or font-loading support.
@@ -252,7 +252,7 @@ See [Stage 1](plugin-stage-1.md) for the completion boundary and [the author gui
 
 ### Plugin and Bitmap Roadmap
 
-- [ ] PNG/JPEG import, editable bitmap items, embedded image assets and portable bitmap layouts.
+- [x] **Stage 2 PNG/JPEG import** — first-class bitmap items, orientation/alpha, shared transforms, opacity, grouping, clipboard/Undo, embedded deduplicated assets and portable version-2 layouts with version-1 migration. See [Stage 2](plugin-stage-2.md).
 - [ ] Selected bitmap/vector inputs and bitmap processing outputs.
 - [ ] Temporary preview/apply overlays and atomic multi-item/group transactions.
 - [ ] Host font loading/shaping and detailed stylised-vector plugins.

@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
-import type { SvgImport } from "../../../../../types";
+import { isVectorImport, type CanvasItem } from "../../../../../types";
+import { pruneCanvasAssets } from "../services/history";
 import { generateCopyName } from "../services/clipboard";
 import type { CanvasStateCreator, ClipboardSlice } from "../types";
 
@@ -15,6 +16,7 @@ export function createClipboardSlice(
       const snap = structuredClone(imp);
       set((state) => {
         state.clipboardImport = snap;
+        pruneCanvasAssets(state);
       });
     },
 
@@ -25,7 +27,9 @@ export function createClipboardSlice(
       const snap = structuredClone(imp);
       set((state) => {
         state.clipboardImport = snap;
+        pruneCanvasAssets(state);
         state.imports = state.imports.filter((item) => item.id !== id);
+        for (const group of state.layerGroups ?? []) group.importIds = group.importIds.filter((itemId) => itemId !== id);
         if (state.selectedImportId === id) {
           state.selectedImportId = null;
           state.selectedPathId = null;
@@ -40,11 +44,11 @@ export function createClipboardSlice(
       const existingNames = get().imports.map((item) => item.name);
       const newName = generateCopyName(clipboard.name, existingNames);
       const newId = uuid();
-      const pasted: SvgImport = {
+      const pasted: CanvasItem = {
         ...structuredClone(clipboard),
         id: newId,
         name: newName,
-        paths: clipboard.paths.map((path) => ({ ...path, id: uuid() })),
+        ...(isVectorImport(clipboard) ? { paths: clipboard.paths.map((path) => ({ ...path, id: uuid() })) } : {}),
         x: clipboard.x + 5,
         y: clipboard.y + 5,
       };

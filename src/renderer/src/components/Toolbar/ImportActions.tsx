@@ -5,6 +5,7 @@ interface ImportActionsProps {
   onOpenGcodeDialog: () => void;
   generating: boolean;
   importsEmpty: boolean;
+  rasterOnly?: boolean;
 }
 
 export function ImportActions({
@@ -12,13 +13,14 @@ export function ImportActions({
   onOpenGcodeDialog,
   generating,
   importsEmpty,
+  rasterOnly = false,
 }: ImportActionsProps) {
   return (
     <>
       <Button
         variant="secondary"
         onClick={onImport}
-        title="Import an SVG, PDF, or G-code file"
+        title="Import an SVG, PDF, PNG, JPEG, or G-code file"
       >
         Import
       </Button>
@@ -28,7 +30,7 @@ export function ImportActions({
         onClick={onOpenGcodeDialog}
         disabled={generating || importsEmpty}
         loading={generating}
-        title="Choose generation options then generate G-code"
+        title={rasterOnly ? "Bitmaps are reference images. Convert an image to vectors before generating G-code." : "Choose generation options then generate G-code"}
       >
         {generating ? "Generating…" : "Generate G-code"}
       </Button>

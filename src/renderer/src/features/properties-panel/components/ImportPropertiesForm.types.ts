@@ -1,9 +1,9 @@
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import type { OriginType } from "../../../../../types";
 import type { RotStep } from "../utils/rotation";
 
 export interface ImportPropertiesFormProps {
-  imp: SvgImport;
+  imp: CanvasItem;
   bedW: number;
   bedH: number;
   origin: OriginType;
@@ -19,7 +19,7 @@ export interface ImportPropertiesFormProps {
   rotStep: RotStep;
   stepFlyoutOpen: boolean;
   showCentreMarker: boolean;
-  onUpdate: (changes: Partial<SvgImport>) => void;
+  onUpdate: (changes: Partial<CanvasItem>) => void;
   onTemplateAlignEnabledChange: (v: boolean) => void;
   onTemplateAlignTargetChange: (v: "page" | "margin") => void;
   onTemplateScaleEnabledChange: (v: boolean) => void;
