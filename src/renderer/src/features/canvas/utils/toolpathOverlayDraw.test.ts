@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { drawToolpathLayer } from "./toolpathOverlayDraw";
+import { drawImportsLayer, drawToolpathLayer } from "./toolpathOverlayDraw";
 import type { GcodeToolpath } from "@renderer/utils/gcodeParser";
+import { createSvgImport } from "../../../../../../tests/helpers/factories";
 
 interface MockCtx {
   save: ReturnType<typeof vi.fn>;
@@ -91,5 +92,24 @@ describe("drawToolpathLayer", () => {
     // Legacy defaults should not be necessary with full metadata present.
     expect(ctx.strokeHistory).not.toContain("#0ea5e9");
     expect(ctx.strokeHistory).not.toContain("#4a5568");
+  });
+});
+
+describe("assigned pen preview", () => {
+  it("shows the assigned pen for outlines and hatching even with original SVG colours enabled", () => {
+    vi.stubGlobal("Path2D", class { constructor(public path: string) {} });
+    try {
+      const ctx = Object.assign(makeMockCtx(), { translate: vi.fn(), rotate: vi.fn(), scale: vi.fn() });
+      const imp = createSvgImport({ id: "one", paths: [{ id: "path", d: "M0 0L10 10", svgSource: "", visible: true,
+        strokeColor: "red", fillColor: "blue", hatchLines: ["M0 1L10 1"] }] });
+      drawImportsLayer({ ctx: ctx as unknown as CanvasRenderingContext2D, dpr: 1,
+        vp: { zoom: 1, panX: 0, panY: 0 }, imports: [imp],
+        layerGroups: [{ id: "pen", name: "Yellow", color: "#ffff00", importIds: [imp.id] }],
+        selectedImportId: imp.id, selectedGroupId: null, allImportsSelected: false,
+        isBottom: false, canvasH: 300, respectSvgColorsOnCanvas: true, cache: new Map() });
+      expect(ctx.strokeHistory).toEqual(["#ffff00", "#ffff00"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

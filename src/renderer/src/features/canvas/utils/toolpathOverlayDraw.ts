@@ -195,24 +195,12 @@ export function drawImportsLayer({
     ctx.setLineDash([]);
 
     const groupColor = groupColorMap.get(imp.id);
-    const outlineColor = groupColor
-      ? isImpSelected
-        ? scaleHexColor(groupColor, 1.35)
-        : groupColor
-      : isImpSelected
-        ? "#60a0ff"
-        : "#3a6aaa";
-    const hatchColor = groupColor
-      ? isImpSelected
-        ? groupColor
-        : scaleHexColor(groupColor, 0.65)
-      : isImpSelected
-        ? "#4a88cc"
-        : "#2a5a8a";
+    const outlineColor = groupColor ?? (isImpSelected ? "#60a0ff" : "#3a6aaa");
+    const hatchColor = groupColor ?? (isImpSelected ? "#4a88cc" : "#2a5a8a");
 
     ctx.lineWidth =
       ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * MM_TO_PX) / avgImpScale;
-    if (respectSvgColorsOnCanvas) {
+    if (respectSvgColorsOnCanvas && !groupColor) {
       for (const entry of impCache.outlineByColor) {
         ctx.strokeStyle = entry.color ?? outlineColor;
         ctx.stroke(entry.path);
@@ -225,7 +213,7 @@ export function drawImportsLayer({
     ctx.lineWidth =
       ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * 0.5 * MM_TO_PX) /
       avgImpScale;
-    if (respectSvgColorsOnCanvas) {
+    if (respectSvgColorsOnCanvas && !groupColor) {
       for (const entry of impCache.hatchByColor) {
         ctx.strokeStyle = entry.color ?? hatchColor;
         ctx.stroke(entry.path);

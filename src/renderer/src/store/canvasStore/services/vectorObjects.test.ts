@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   vectorObjectsForGroup,
   vectorObjectsForImport,
+  vectorObjectsForImportLayer,
   vectorObjectsForImports,
   vectorObjectsUngrouped,
 } from "./vectorObjects";
@@ -65,6 +66,22 @@ describe("canvasStore vectorObjects service", () => {
     expect(result[0].sourceColor).toBe("#123456");
     expect(result[1].sourceColor).toBe("#ffd54f");
     expect(result[2].sourceColor).toBe("#ffd54f");
+  });
+
+  it("applies assigned pen colour to outlines, hatching and points without changing source artwork", () => {
+    const imp = makeImport({ plotPointsEnabled: true, paths: [{
+      id: "p1", d: "M0 0L10 10", svgSource: "", visible: true, layer: "source-layer",
+      strokeColor: "red", fillColor: "blue", sourceColor: "red",
+      hatchLines: ["M0 1L10 1"], pointTap: { x: 5, y: 5 },
+    }] });
+    const groups: LayerGroup[] = [{ id: "pen", name: "Yellow pen", color: "#ffff00", importIds: [imp.id] }];
+    const combined = vectorObjectsForImports([imp], groups);
+    expect(combined).toHaveLength(3);
+    expect(combined.every((object) => object.sourceColor === "#ffff00")).toBe(true);
+    expect(vectorObjectsForGroup([imp], groups, "pen")).toEqual(combined);
+    expect(vectorObjectsForImportLayer(imp, "source-layer", "#ffff00")).toEqual(combined);
+    expect(imp.paths[0]).toMatchObject({ strokeColor: "red", fillColor: "blue", sourceColor: "red" });
+    expect(vectorObjectsForImports([imp])[0].sourceColor).toBe("#ff0000");
   });
 
   it("filters out paths hidden by invisible layers", () => {

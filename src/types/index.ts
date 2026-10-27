@@ -408,6 +408,8 @@ export interface PageTemplate {
   landscape: boolean;
   /** Margin in mm drawn as a second inset overlay inside the page boundary. */
   marginMM: number;
+  /** Opaque paper colour in six-digit hex notation; older layouts default to white. */
+  color?: string;
 }
 
 /** Built-in page sizes used as defaults when no custom page-sizes.json exists. */
@@ -447,7 +449,7 @@ export interface LayerGroup {
   id: string;
   /** User-visible name — used as the G-code filename base */
   name: string;
-  /** Display colour in CSS hex notation, e.g. "#e94560" */
+  /** Pen colour for preview and generated metadata in CSS hex notation, e.g. "#e94560" */
   color: string;
   /** SvgImport.id values belonging to this group */
   importIds: string[];

@@ -10,6 +10,7 @@ import {
   regenerateImportHatching,
 } from "../services/hatching";
 import { prepareCanvasAssets, pruneCanvasAssets } from "../services/history";
+import { compareColorsLightFirst } from "../../../../../types/colorUtils";
 import { vectorObjectsForImports } from "../services/vectorObjects";
 import type { CanvasStateCreator, ImportSlice } from "../types";
 
@@ -179,7 +180,7 @@ export function createImportSlice(
         state.selectedPathId = null;
         state.allImportsSelected = false;
         state.selectedGroupId = null;
-        state.layerGroups = layerGroups ?? [];
+        state.layerGroups = [...(layerGroups ?? [])].sort((a, b) => compareColorsLightFirst(a.color, b.color));
         state.pageTemplate = pageTemplate ?? null;
       });
     },
@@ -189,7 +190,7 @@ export function createImportSlice(
       return imports.find((item) => item.id === selectedImportId);
     },
 
-    toVectorObjects: () => vectorObjectsForImports(get().imports),
+    toVectorObjects: () => vectorObjectsForImports(get().imports, get().layerGroups),
 
     applyHatch: (importId, spacingMM, angleDeg, enabled) =>
       set((state) => {

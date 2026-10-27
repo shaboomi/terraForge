@@ -9,6 +9,7 @@ import { useAppConfigStore } from "../../../store/appConfigStore";
 import { parseGcode } from "../../../utils/gcodeParser";
 import { isVectorImport, type GcodeOptions, type VectorObject } from "../../../../../types";
 import type { GcodePrefs } from "../../../components/GcodeOptionsDialog";
+import { compareColorsLightFirst } from "../../../../../types/colorUtils";
 import { normalizeSvgColor } from "../../imports/services/svgImportHelpers";
 import { vectorObjectsForImportLayer } from "../../../store/canvasStore/services/vectorObjects";
 
@@ -414,7 +415,8 @@ export function useJobActions() {
       ...(ungroupedObjects.length > 0
         ? [{ id: null, name: "ungrouped", objects: ungroupedObjects }]
         : []),
-      ...layerGroups
+      ...[...layerGroups]
+        .sort((a, b) => compareColorsLightFirst(a.color, b.color))
         .map((g) => ({
           id: g.id,
           name: g.name,
@@ -546,7 +548,8 @@ export function useJobActions() {
         );
 
         return Array.from(layerIds).map((layerId) => {
-          const objects = vectorObjectsForImportLayer(imp, layerId);
+          const penColor = layerGroups.find((group) => group.importIds.includes(imp.id))?.color;
+          const objects = vectorObjectsForImportLayer(imp, layerId, penColor);
           return {
             importName: imp.name,
             layerId,
@@ -709,7 +712,7 @@ export function useJobActions() {
     const allEntries: ColorEntry[] = Array.from(byColor.entries())
       .map(([color, objects]) => ({ color, objects }))
       .filter((e) => e.objects.length > 0)
-      .sort((a, b) => a.color.localeCompare(b.color));
+      .sort((a, b) => compareColorsLightFirst(a.color, b.color));
 
     if (allEntries.length === 0) return;
 
@@ -868,7 +871,7 @@ export function useJobActions() {
       );
     };
 
-    for (const [color, hatchObjects] of hatchByColor.entries()) {
+    for (const [color, hatchObjects] of [...hatchByColor.entries()].sort(([a], [b]) => compareColorsLightFirst(a, b))) {
       const taskId = uuid();
       const safeName = toColorFilenameBase(color);
       const defaultFilename = prefs.optimise

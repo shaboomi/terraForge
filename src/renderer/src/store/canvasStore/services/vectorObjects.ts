@@ -98,7 +98,7 @@ function projectPathToVectorObjects(
   return [...outlineVOs, ...hatchVOs, ...pointVOs];
 }
 
-export function vectorObjectsForImport(imp: CanvasItem): VectorObject[] {
+export function vectorObjectsForImport(imp: CanvasItem, penColor?: string): VectorObject[] {
   if (!isVectorImport(imp) || !imp.visible) return [];
   const hiddenLayerIds = imp.layers
     ? new Set(
@@ -108,12 +108,14 @@ export function vectorObjectsForImport(imp: CanvasItem): VectorObject[] {
 
   return imp.paths
     .filter((path) => path.visible && isLayerVisible(path, hiddenLayerIds))
-    .flatMap((path) => projectPathToVectorObjects(imp, path));
+    .flatMap((path) => projectPathToVectorObjects(imp, path))
+    .map((object) => penColor ? { ...object, sourceColor: normalizeSvgColor(penColor) } : object);
 }
 
 export function vectorObjectsForImportLayer(
   imp: SvgImport,
   layerId: string,
+  penColor?: string,
 ): VectorObject[] {
   if (!isVectorImport(imp) || !imp.visible) return [];
   const hiddenLayerIds = imp.layers
@@ -129,11 +131,13 @@ export function vectorObjectsForImportLayer(
         path.layer === layerId &&
         isLayerVisible(path, hiddenLayerIds),
     )
-    .flatMap((path) => projectPathToVectorObjects(imp, path));
+    .flatMap((path) => projectPathToVectorObjects(imp, path))
+    .map((object) => penColor ? { ...object, sourceColor: normalizeSvgColor(penColor) } : object);
 }
 
-export function vectorObjectsForImports(imports: CanvasItem[]): VectorObject[] {
-  return imports.flatMap((imp) => vectorObjectsForImport(imp));
+export function vectorObjectsForImports(imports: CanvasItem[], layerGroups: LayerGroup[] = []): VectorObject[] {
+  const penColors = new Map(layerGroups.flatMap((group) => group.importIds.map((id) => [id, group.color] as const)));
+  return imports.flatMap((imp) => vectorObjectsForImport(imp, penColors.get(imp.id)));
 }
 
 export function vectorObjectsForGroup(
@@ -146,7 +150,7 @@ export function vectorObjectsForGroup(
   const groupImportIds = new Set(group.importIds);
   return imports
     .filter((imp) => groupImportIds.has(imp.id))
-    .flatMap((imp) => vectorObjectsForImport(imp));
+    .flatMap((imp) => vectorObjectsForImport(imp, group.color));
 }
 
 export function vectorObjectsUngrouped(

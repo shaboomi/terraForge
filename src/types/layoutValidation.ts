@@ -156,8 +156,13 @@ function vector(item: Row): SvgImport {
 
 function page(value: unknown): PageTemplate | null {
   if (value === undefined || value === null) return null;
-  const item = row(value, "Page template"); fields(item, ["sizeId", "landscape", "marginMM"], "Page template");
-  return { sizeId: id(item.sizeId, "Page size"), landscape: bool(item.landscape, "Page orientation"), marginMM: number(item.marginMM, "Page margin", 0, 10000) };
+  const item = row(value, "Page template"); fields(item, ["sizeId", "landscape", "marginMM", "color"], "Page template");
+  const result: PageTemplate = { sizeId: id(item.sizeId, "Page size"), landscape: bool(item.landscape, "Page orientation"), marginMM: number(item.marginMM, "Page margin", 0, 10000) };
+  if (item.color !== undefined) {
+    if (typeof item.color !== "string" || !/^#[0-9a-f]{6}$/i.test(item.color)) throw new Error("Page colour must be a six-digit hex colour.");
+    result.color = item.color.toLowerCase();
+  }
+  return result;
 }
 
 export function parseCanvasLayout(raw: string): CanvasLayout {

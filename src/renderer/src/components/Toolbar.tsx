@@ -12,6 +12,7 @@ import { useJobActions } from "../features/machine/hooks/useJobActions";
 import { useEditKeyboardShortcuts } from "../hooks/useEditKeyboardShortcuts";
 import { MachineSelector } from "./Toolbar/MachineSelector";
 import { ImportActions } from "./Toolbar/ImportActions";
+import { PenColourControls } from "./Toolbar/PenColourControls";
 import { PageTemplateControls } from "./Toolbar/PageTemplateControls";
 import { ToolbarDialogs } from "./Toolbar/ToolbarDialogs";
 import { ToolbarRightSection } from "./Toolbar/ToolbarRightSection";
@@ -50,6 +51,8 @@ export function Toolbar({
     setPageSizes,
   } = useCanvasStore(useShallow(selectToolbarCanvasState));
 
+  const layerGroups = useCanvasStore((state) => state.layerGroups);
+
   // ── Dialog state ──────────────────────────────────────────────────────────
   const [showGcodeDialog, setShowGcodeDialog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -86,7 +89,7 @@ export function Toolbar({
     closeLayoutRef,
     setShowAbout,
     setPageSizes,
-    importsLength: imports.length,
+    hasLayout: imports.length > 0 || !!pageTemplate || layerGroups.length > 0,
     selectedImportId,
   });
 
@@ -105,7 +108,7 @@ export function Toolbar({
   );
 
   return (
-    <header className="flex items-center gap-3 px-4 py-2 bg-panel border-b border-border-ui shrink-0">
+    <header className="flex flex-wrap items-center gap-3 px-4 py-2 bg-panel border-b border-border-ui shrink-0">
       {/* Brand */}
       <TerraForgeLogotype
         aria-label="terraForge"
@@ -144,6 +147,8 @@ export function Toolbar({
         setPageSizes={setPageSizes}
       />
 
+      <PenColourControls />
+
       {/* Right side: status + theme + settings */}
       <ToolbarRightSection
         theme={theme}
@@ -179,6 +184,7 @@ export function Toolbar({
             pendingLayout!.imports,
             pendingLayout!.layerGroups,
             pendingLayout!.pageTemplate,
+            pendingLayout!.assets,
           );
           setPendingLayout(null);
         }}

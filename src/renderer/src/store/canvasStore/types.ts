@@ -122,6 +122,8 @@ export interface PageTemplateSlice {
 export interface LayerGroupSlice {
   layerGroups: LayerGroup[];
   addLayerGroup: (name: string, color: string) => void;
+  addPen: (name: string, color: string) => string;
+  applyPenToSelection: (groupId: string) => void;
   removeLayerGroup: (id: string) => void;
   updateLayerGroup: (
     id: string,
