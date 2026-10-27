@@ -28,7 +28,7 @@ export const PEN_DEFAULTS: Record<
     penUpDelayMs: 0,
   },
   stepper: {
-    penUpCommand: "G0Z15",
+    penUpCommand: "G0Z5",
     penDownCommand: "G0Z0",
     penDownDelayMs: 0,
     penUpDelayMs: 0,
