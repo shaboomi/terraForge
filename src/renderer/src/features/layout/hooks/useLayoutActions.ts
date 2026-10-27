@@ -10,7 +10,7 @@ import { parseCanvasLayout, serializeCanvasLayout } from "../../../../../types/l
 
 /** Orchestrates save, load, and close operations for canvas layout files. */
 export function useLayoutActions() {
-  const { imports, assets, layerGroups, pageTemplate, loadLayout, clearImports } =
+  const { imports, assets, layerGroups, activePenId, pageTemplate, loadLayout, clearImports } =
     useCanvasStore(useShallow(selectLayoutActionsCanvasState));
   const upsertTask = useTaskStore((s) => s.upsertTask);
 
@@ -42,6 +42,7 @@ export function useLayoutActions() {
         savedAt: new Date().toISOString(),
         imports,
         layerGroups,
+        activePenId,
         pageTemplate,
       };
       await window.terraForge.fs.writeFile(
@@ -94,7 +95,7 @@ export function useLayoutActions() {
       if (current.imports.length > 0 || current.layerGroups.length > 0 || current.pageTemplate) {
         setPendingLayout(layout);
       } else {
-        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate, layout.assets);
+        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate, layout.assets, layout.activePenId);
       }
     } catch (err) {
       upsertTask({

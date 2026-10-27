@@ -37,6 +37,7 @@ export interface ImportSlice {
     layerGroups?: LayerGroup[],
     pageTemplate?: PageTemplate | null,
     assets?: BitmapAssetTable,
+    activePenId?: string | null,
   ) => void;
   selectedImport: () => CanvasItem | undefined;
   toVectorObjects: () => VectorObject[];
@@ -121,9 +122,11 @@ export interface PageTemplateSlice {
 
 export interface LayerGroupSlice {
   layerGroups: LayerGroup[];
+  activePenId: string | null;
+  setActivePen: (id: string | null) => void;
   addLayerGroup: (name: string, color: string) => void;
   addPen: (name: string, color: string) => string;
-  applyPenToSelection: (groupId: string) => void;
+  applyPenToSelection: (groupId: string | null) => void;
   removeLayerGroup: (id: string) => void;
   updateLayerGroup: (
     id: string,

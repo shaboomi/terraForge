@@ -169,7 +169,7 @@ export function parseCanvasLayout(raw: string): CanvasLayout {
   if (raw.length > BITMAP_LIMITS.layoutBytes || new TextEncoder().encode(raw).byteLength > BITMAP_LIMITS.layoutBytes) throw new Error("Layout exceeds the 96 MiB file limit.");
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error("Not a valid TerraForge layout file."); }
-  const layout = row(parsed, "Layout"); fields(layout, ["tfVersion", "savedAt", "imports", "layerGroups", "pageTemplate", "assets"], "Layout");
+  const layout = row(parsed, "Layout"); fields(layout, ["tfVersion", "savedAt", "imports", "layerGroups", "pageTemplate", "assets", "activePenId"], "Layout");
   if (layout.tfVersion !== 1 && layout.tfVersion !== 2) throw new Error("Unsupported TerraForge layout version. This app supports versions 1 and 2.");
   const assets: Record<string, ReturnType<typeof validateBitmapAsset>> = {};
   if (layout.assets !== undefined) {
@@ -218,9 +218,11 @@ export function parseCanvasLayout(raw: string): CanvasLayout {
     return { id: id(group.id, "Group ID"), name: text(group.name, "Group name"), color: color(group.color), importIds };
   });
   unique(layerGroups.map((group) => group.id), "Group IDs");
+  const activePenId = layout.activePenId === undefined || layout.activePenId === null ? null : id(layout.activePenId, "Active pen");
+  if (activePenId && !layerGroups.some((group) => group.id === activePenId)) throw new Error("Active pen references a missing pen.");
   const savedAt = layout.savedAt === undefined && layout.tfVersion === 1 ? "1970-01-01T00:00:00.000Z" : text(layout.savedAt, "Save date", 80);
   if (!Number.isFinite(Date.parse(savedAt))) throw new Error("Layout save date is invalid.");
-  return { tfVersion: 2, savedAt, imports, layerGroups, pageTemplate: page(layout.pageTemplate), assets };
+  return { tfVersion: 2, savedAt, imports, layerGroups, pageTemplate: page(layout.pageTemplate), assets, ...(layout.activePenId === undefined ? {} : { activePenId }) };
 }
 
 /** Saves only live-document assets; history and clipboard remain local to the app. */

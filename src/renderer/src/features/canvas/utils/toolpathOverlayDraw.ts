@@ -418,38 +418,7 @@ export function drawToolpathLayer({
     return rapidCalls;
   };
 
-  if (gcodeToolpath.cutPaths.length > 0) {
-    const defaultCutColor = toolpathSelected ? "#38bdf8" : "#0ea5e9";
-    const cutPathColors = useMetadataColors
-      ? gcodeToolpath.cutPathColors
-      : null;
-    const usePerPathColors =
-      !!cutPathColors &&
-      cutPathColors.length === gcodeToolpath.cutPaths.length &&
-      cutPathColors.some((value) => !!value);
-
-    if (!usePerPathColors) {
-      const allIndexes = gcodeToolpath.cutPaths.map((_, idx) => idx);
-      drawCutPaths(allIndexes, defaultCutColor);
-    } else {
-      const byColor = new Map<string, number[]>();
-      for (let i = 0; i < gcodeToolpath.cutPaths.length; i++) {
-        const key = cutPathColors[i] ?? defaultCutColor;
-        const bucket = byColor.get(key) ?? [];
-        bucket.push(i);
-        byColor.set(key, bucket);
-      }
-
-      let remainingCalls = MAX_CUT_CALLS;
-      for (const [strokeStyle, indexes] of byColor.entries()) {
-        if (remainingCalls <= 0) break;
-        const before = remainingCalls;
-        const used = drawCutPaths(indexes, strokeStyle);
-        remainingCalls = Math.max(0, before - used);
-      }
-    }
-  }
-
+  // Travel is a guide underneath the ink: overlapping rapids must never hide pen colours.
   const rp = gcodeToolpath.rapidPaths;
   if (rp.length >= 4) {
     const defaultRapidColor = "#4a5568";
@@ -483,6 +452,38 @@ export function drawToolpathLayer({
         if (remainingCalls <= 0) break;
         const before = remainingCalls;
         const used = drawRapidSegments(indexes, strokeStyle);
+        remainingCalls = Math.max(0, before - used);
+      }
+    }
+  }
+
+  if (gcodeToolpath.cutPaths.length > 0) {
+    const defaultCutColor = toolpathSelected ? "#38bdf8" : "#0ea5e9";
+    const cutPathColors = useMetadataColors
+      ? gcodeToolpath.cutPathColors
+      : null;
+    const usePerPathColors =
+      !!cutPathColors &&
+      cutPathColors.length === gcodeToolpath.cutPaths.length &&
+      cutPathColors.some((value) => !!value);
+
+    if (!usePerPathColors) {
+      const allIndexes = gcodeToolpath.cutPaths.map((_, idx) => idx);
+      drawCutPaths(allIndexes, defaultCutColor);
+    } else {
+      const byColor = new Map<string, number[]>();
+      for (let i = 0; i < gcodeToolpath.cutPaths.length; i++) {
+        const key = cutPathColors[i] ?? defaultCutColor;
+        const bucket = byColor.get(key) ?? [];
+        bucket.push(i);
+        byColor.set(key, bucket);
+      }
+
+      let remainingCalls = MAX_CUT_CALLS;
+      for (const [strokeStyle, indexes] of byColor.entries()) {
+        if (remainingCalls <= 0) break;
+        const before = remainingCalls;
+        const used = drawCutPaths(indexes, strokeStyle);
         remainingCalls = Math.max(0, before - used);
       }
     }

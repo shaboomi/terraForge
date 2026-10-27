@@ -5,6 +5,8 @@
 ### Page and Pen Colours
 
 - [x] Page colour control beside page size: preset swatches, native custom picker and validated hex entry. Opaque paper renders beneath artwork and saves with layouts.
+- [x] Active pen applies immediately to selected vectors and automatically to future vector imports, persists in layouts and history, and appears in the toolbar. Original SVG colours can be restored.
+- [x] Grey rapid-travel guides render beneath true pen-colour G-code strokes, preserving white ink visibility.
 - [x] Named pens with the same colour controls, vector selection assignment, editable names/colours, removal and automatic lightest-first ordering by relative luminance.
 - [x] Pen colours agree between preview and G-code colour metadata; per-group/per-colour exports follow lightest-first ordering. Original path colours remain intact.
 - [x] Save/open page-and-pen-only layouts, restore assignments and colours with undo/redo, and load older layouts with white paper.

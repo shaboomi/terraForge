@@ -185,6 +185,7 @@ export function Toolbar({
             pendingLayout!.layerGroups,
             pendingLayout!.pageTemplate,
             pendingLayout!.assets,
+            pendingLayout!.activePenId,
           );
           setPendingLayout(null);
         }}

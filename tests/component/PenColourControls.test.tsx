@@ -7,7 +7,7 @@ import type { BitmapImport } from "../../src/types";
 import { createSvgImport } from "../helpers/factories";
 
 beforeEach(() => {
-  useCanvasStore.setState({ imports: [], assets: {}, layerGroups: [], selectedImportId: null,
+  useCanvasStore.setState({ imports: [], assets: {}, layerGroups: [], activePenId: null, selectedImportId: null,
     selectedGroupId: null, selectedPathId: null, allImportsSelected: false,
     undoStack: [], redoStack: [], pageTemplate: null });
 });
@@ -22,6 +22,24 @@ async function addPen(user: ReturnType<typeof userEvent.setup>, name: string, sw
 }
 
 describe("PenColourControls", () => {
+  it("chooses white for selected artwork immediately and can restore original colours", async () => {
+    const artwork = createSvgImport();
+    useCanvasStore.setState({ imports: [artwork], selectedImportId: artwork.id,
+      layerGroups: [{ id: "white", name: "White", color: "#ffffff", importIds: [] }] });
+    const user = userEvent.setup();
+    render(<PenColourControls />);
+    await user.click(screen.getByRole("button", { name: "Pen colours" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Pen", exact: true }), "white");
+    expect(useCanvasStore.getState().activePenId).toBe("white");
+    expect(useCanvasStore.getState().layerGroups[0].importIds).toEqual([artwork.id]);
+    expect(useCanvasStore.getState().toVectorObjects().every((object) => object.sourceColor === "#ffffff")).toBe(true);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Pen", exact: true }), "");
+    expect(useCanvasStore.getState().activePenId).toBeNull();
+    expect(useCanvasStore.getState().layerGroups[0].importIds).toEqual([]);
+    expect(useCanvasStore.getState().imports[0]).toEqual(artwork);
+  });
+
+
   it("adds named pens in lightest-first order and keeps the selected pen when its colour moves", async () => {
     const user = userEvent.setup();
     render(<PenColourControls />);
@@ -31,7 +49,7 @@ describe("PenColourControls", () => {
     await addPen(user, "Yellow", "Yellow (#facc15)");
     const select = screen.getByRole("combobox", { name: "Pen", exact: true });
     expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "1. White (#ffffff)", "2. Yellow (#facc15)", "3. Black (#000000)",
+      "Original SVG colours", "1. White (#ffffff)", "2. Yellow (#facc15)", "3. Black (#000000)",
     ]);
     const yellowId = useCanvasStore.getState().layerGroups.find((pen) => pen.name === "Yellow")!.id;
     expect(select).toHaveValue(yellowId);
@@ -42,7 +60,7 @@ describe("PenColourControls", () => {
   });
 
   it("keeps a loaded pen selected when changing its default selection moves it in the order", async () => {
-    useCanvasStore.setState({ layerGroups: [
+    useCanvasStore.setState({ activePenId: "white", layerGroups: [
       { id: "white", name: "White", color: "#ffffff", importIds: [] },
       { id: "yellow", name: "Yellow", color: "#facc15", importIds: [] },
       { id: "black", name: "Black", color: "#000000", importIds: [] },
@@ -57,7 +75,7 @@ describe("PenColourControls", () => {
   });
 
   it("can open the colour picker immediately after renaming a pen", async () => {
-    useCanvasStore.setState({ layerGroups: [{ id: "black", name: "Black", color: "#000000", importIds: [] }] });
+    useCanvasStore.setState({ activePenId: "black", layerGroups: [{ id: "black", name: "Black", color: "#000000", importIds: [] }] });
     const user = userEvent.setup();
     render(<PenColourControls />);
     await user.click(screen.getByRole("button", { name: "Pen colours" }));
@@ -70,7 +88,7 @@ describe("PenColourControls", () => {
   });
   it("applies the chosen pen to selected vector artwork", async () => {
     const artwork = createSvgImport();
-    useCanvasStore.setState({ imports: [artwork], selectedImportId: artwork.id,
+    useCanvasStore.setState({ activePenId: "blue", imports: [artwork], selectedImportId: artwork.id,
       layerGroups: [{ id: "blue", name: "Blue", color: "#3b82f6", importIds: [] }] });
     const user = userEvent.setup();
     render(<PenColourControls />);
@@ -82,7 +100,7 @@ describe("PenColourControls", () => {
 
   it("disables applying a pen when only a bitmap is selected", async () => {
     const bitmap: BitmapImport = { ...createSvgImport(), kind: "bitmap", assetId: "image", opacity: 1 };
-    useCanvasStore.setState({ imports: [bitmap], selectedImportId: bitmap.id,
+    useCanvasStore.setState({ activePenId: "blue", imports: [bitmap], selectedImportId: bitmap.id,
       layerGroups: [{ id: "blue", name: "Blue", color: "#3b82f6", importIds: [] }] });
     const user = userEvent.setup();
     render(<PenColourControls />);
@@ -93,7 +111,7 @@ describe("PenColourControls", () => {
 
   it("removes a pen while preserving its artwork", async () => {
     const artwork = createSvgImport();
-    useCanvasStore.setState({ imports: [artwork], layerGroups: [
+    useCanvasStore.setState({ activePenId: "blue", imports: [artwork], layerGroups: [
       { id: "blue", name: "Blue", color: "#3b82f6", importIds: [artwork.id] },
     ] });
     const user = userEvent.setup();

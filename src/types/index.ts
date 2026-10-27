@@ -388,6 +388,7 @@ export interface CanvasSnapshot {
   imports: CanvasItem[];
   layerGroups: LayerGroup[];
   pageTemplate: PageTemplate | null;
+  activePenId?: string | null;
 }
 // ─── Page Templates ──────────────────────────────────────────────────────────
 
@@ -437,6 +438,8 @@ export interface CanvasLayout {
   layerGroups?: LayerGroup[];
   /** Active page template — optional for backward compatibility. */
   pageTemplate?: PageTemplate | null;
+  /** Pen applied to future vector imports; absent older layouts use source colours. */
+  activePenId?: string | null;
 }
 
 // ─── Layer Groups ────────────────────────────────────────────────────────────

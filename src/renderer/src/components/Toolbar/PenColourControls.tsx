@@ -8,7 +8,7 @@ import { useCanvasStore } from "../../store/canvasStore";
 import { ColourPicker } from "./ColourPicker";
 import { Button } from "../ui";
 
-function PenEditor({ pen, onActivate }: { pen: LayerGroup; onActivate: () => void }) {
+function PenEditor({ pen }: { pen: LayerGroup }) {
   const updatePen = useCanvasStore((state) => state.updateLayerGroup);
   const [name, setName] = useState(pen.name);
   useEffect(() => setName(pen.name), [pen.name]);
@@ -21,7 +21,7 @@ function PenEditor({ pen, onActivate }: { pen: LayerGroup; onActivate: () => voi
         onChange={(event) => setName(event.target.value)}
         onBlur={() => {
           const trimmed = name.trim();
-          if (trimmed) { onActivate(); updatePen(pen.id, { name: trimmed }); }
+          if (trimmed) updatePen(pen.id, { name: trimmed });
           else setName(pen.name);
         }}
         onKeyDown={(event) => {
@@ -29,39 +29,46 @@ function PenEditor({ pen, onActivate }: { pen: LayerGroup; onActivate: () => voi
         }}
         className="min-w-0 flex-1 bg-app border border-border-ui rounded px-2 py-1 text-sm text-content"
       />
-      <ColourPicker label="Pen colour" value={pen.color} onChange={(color) => { onActivate(); updatePen(pen.id, { color }); }} />
+      <ColourPicker label="Pen colour" value={pen.color} onChange={(color) => updatePen(pen.id, { color })} />
     </div>
   );
 }
 
 /** Named pens share the layout's existing multi-pen artwork groups. */
 export function PenColourControls() {
-  const { layerGroups, imports, selectedImportId, selectedGroupId, allImportsSelected, addPen, applyPenToSelection, removeLayerGroup } = useCanvasStore(useShallow((state) => ({
+  const { layerGroups, imports, selectedImportId, selectedGroupId, allImportsSelected, activePenId, setActivePen, addPen, applyPenToSelection, removeLayerGroup } = useCanvasStore(useShallow((state) => ({
     layerGroups: state.layerGroups,
     imports: state.imports,
     selectedImportId: state.selectedImportId,
     selectedGroupId: state.selectedGroupId,
     allImportsSelected: state.allImportsSelected,
+    activePenId: state.activePenId,
+    setActivePen: state.setActivePen,
     addPen: state.addPen,
     applyPenToSelection: state.applyPenToSelection,
     removeLayerGroup: state.removeLayerGroup,
   })));
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState("#000000");
   const pens = [...layerGroups].sort((a, b) => compareColorsLightFirst(a.color, b.color));
-  const activePen = pens.find((pen) => pen.id === activeId) ?? pens[0];
+  const activePen = pens.find((pen) => pen.id === activePenId);
   const selectedGroup = layerGroups.find((group) => group.id === selectedGroupId);
   const selectionCount = imports.filter((item) => isVectorImport(item) && (
     allImportsSelected || item.id === selectedImportId || !!selectedGroup?.importIds.includes(item.id)
   )).length;
+
+  const choosePen = (id: string | null) => {
+    setActivePen(id);
+    applyPenToSelection(id);
+  };
 
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
         <Button size="sm" aria-label="Pen colours" title="Choose and add pen colours">
           <PenLine size={14} aria-hidden="true" />
-          Pens{pens.length > 0 ? ` (${pens.length})` : ""}
+          {activePen && <span aria-hidden="true" className="h-3 w-3 rounded border border-border-ui" style={{ backgroundColor: activePen.color }} />}
+          <span className="max-w-32 truncate">{activePen ? `Pens: ${activePen.name}` : `Pens${pens.length > 0 ? ` (${pens.length})` : ""}`}</span>
         </Button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -76,22 +83,25 @@ export function PenColourControls() {
             </Dialog.Close>
           </div>
           <Dialog.Description className="text-sm text-content-muted mb-4">
-            Select artwork, choose a pen, then apply it. Pens are ordered from lightest to darkest.
+            Choose a pen for selected artwork and future vector imports. Pens are ordered from lightest to darkest.
           </Dialog.Description>
-          {activePen ? (
-            <div className="space-y-3">
+          {pens.length > 0 && (
               <label className="block text-xs text-content-muted">
                 Pen
                 <select
                   aria-label="Pen"
-                  value={activePen.id}
-                  onChange={(event) => setActiveId(event.target.value)}
+                  value={activePen?.id ?? ""}
+                  onChange={(event) => choosePen(event.target.value || null)}
                   className="block w-full mt-1 bg-app border border-border-ui rounded px-2 py-1.5 text-sm text-content"
                 >
+                  <option value="">Original SVG colours</option>
                   {pens.map((pen, index) => <option key={pen.id} value={pen.id}>{index + 1}. {pen.name} ({pen.color})</option>)}
                 </select>
               </label>
-              <PenEditor key={activePen.id} pen={activePen} onActivate={() => setActiveId(activePen.id)} />
+          )}
+          {activePen ? (
+            <div className="space-y-3">
+              <PenEditor key={activePen.id} pen={activePen} />
               <div className="flex items-center justify-between gap-2">
                 <Button size="sm" variant="primary" disabled={selectionCount === 0} onClick={() => applyPenToSelection(activePen.id)}>
                   Apply pen to selection
@@ -102,7 +112,7 @@ export function PenColourControls() {
                 {selectionCount > 0 ? `${selectionCount} vector object${selectionCount === 1 ? "" : "s"} selected.` : "Select vector artwork on the canvas to apply a pen."}
               </p>
             </div>
-          ) : <p className="text-sm text-content-muted mb-3">Add your first pen below.</p>}
+          ) : <p className="text-sm text-content-muted mb-3">{pens.length > 0 ? "Original SVG colours will be used. Choose a pen above to override them." : "Add your first pen below."}</p>}
           <div className="border-t border-border-ui mt-4 pt-4 space-y-3">
             <h3 className="text-sm font-medium">Add a pen</h3>
             <input
@@ -116,7 +126,7 @@ export function PenColourControls() {
             <div className="flex items-center justify-between gap-2">
               <ColourPicker label="New pen colour" value={newColor} onChange={setNewColor} />
               <Button size="sm" variant="primary" onClick={() => {
-                setActiveId(addPen(newName.trim() || `Pen ${pens.length + 1}`, newColor));
+                choosePen(addPen(newName.trim() || `Pen ${pens.length + 1}`, newColor));
                 setNewName("");
               }}><Plus size={14} />Add pen</Button>
             </div>

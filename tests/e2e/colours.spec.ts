@@ -27,7 +27,7 @@ test("page colour and lightest-first pens survive saving, reopening and undo", a
       await dialog.getByRole("button", { name: "Add pen", exact: true }).click();
     }
     await expect(dialog.getByLabel("Pen", { exact: true }).locator("option")).toHaveText([
-      "1. White (#ffffff)", "2. Yellow (#ffff00)", "3. Black (#000000)",
+      "Original SVG colours", "1. White (#ffffff)", "2. Yellow (#ffff00)", "3. Black (#000000)",
     ]);
     await dialog.getByRole("button", { name: "Close pen colours", exact: true }).click();
 

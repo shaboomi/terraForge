@@ -7,6 +7,11 @@ import type { CanvasStateCreator, LayerGroupSlice } from "../types";
 
 export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (set, get) => ({
   layerGroups: [],
+  activePenId: null,
+  setActivePen: (id) => {
+    if (id !== null && !get().layerGroups.some((group) => group.id === id)) return;
+    set((state) => { state.activePenId = id; });
+  },
   addLayerGroup: (name, color) => {
     pushCanvasUndo(set, get);
     set((state) => {
@@ -21,6 +26,7 @@ export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (set, 
     pushCanvasUndo(set, get);
     set((state) => {
       state.layerGroups.push({ id, name: name.trim() || "Pen", color: normalized, importIds: [] });
+      state.activePenId = id;
       state.layerGroups.sort((a, b) => compareColorsLightFirst(a.color, b.color));
     });
     return id;
@@ -28,17 +34,19 @@ export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (set, 
   applyPenToSelection: (groupId) => {
     const state = get();
     const target = state.layerGroups.find((group) => group.id === groupId);
-    if (!target) return;
+    if (groupId !== null && !target) return;
     const selectedGroup = state.layerGroups.find((group) => group.id === state.selectedGroupId);
     const selectedIds = new Set(state.imports
       .filter((item) => isVectorImport(item) && (state.allImportsSelected ||
         (selectedGroup ? selectedGroup.importIds.includes(item.id) : item.id === state.selectedImportId)))
       .map((item) => item.id));
-    if (selectedIds.size === 0 || [...selectedIds].every((id) => target.importIds.includes(id))) return;
+    if (selectedIds.size === 0) return;
+    if (target ? [...selectedIds].every((id) => target.importIds.includes(id))
+      : state.layerGroups.every((group) => group.importIds.every((id) => !selectedIds.has(id)))) return;
     pushCanvasUndo(set, get);
     set((draft) => {
       for (const group of draft.layerGroups) group.importIds = group.importIds.filter((id) => !selectedIds.has(id));
-      draft.layerGroups.find((group) => group.id === groupId)!.importIds.push(...selectedIds);
+      if (groupId !== null) draft.layerGroups.find((group) => group.id === groupId)!.importIds.push(...selectedIds);
       if (selectedGroup) draft.selectedGroupId = groupId;
     });
   },
@@ -48,6 +56,7 @@ export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (set, 
     set((state) => {
       state.layerGroups = state.layerGroups.filter((group) => group.id !== id);
       if (state.selectedGroupId === id) state.selectedGroupId = null;
+      if (state.activePenId === id) state.activePenId = null;
     });
   },
   updateLayerGroup: (id, patch) => {
