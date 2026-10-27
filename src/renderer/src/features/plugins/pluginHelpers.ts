@@ -46,4 +46,3 @@ export function importPluginResult(result: PluginResult, manifest: PluginManifes
   const top = origin === "top-left" || origin === "top-right";
   return { id: uuid(), name: manifest.name, paths, x: right ? (machine?.bedWidth ?? 220) - result.width : 0, y: top ? -result.height : 0, scale: 1, rotation: 0, visible: true, svgWidth: result.width, svgHeight: result.height, viewBoxX: 0, viewBoxY: 0, hatchEnabled: false, strokeEnabled: true, pluginSource: { pluginId: manifest.id, pluginVersion: manifest.version, parameters: { ...parameters } } };
 }
-
