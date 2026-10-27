@@ -541,6 +541,71 @@ describe("SerialClient connect and disconnect", () => {
     await expect(cmdPromise).rejects.toThrow("disconnected");
   });
 
+  it("disconnect rejects every queued command and does not send them after reconnect", async () => {
+    const client = new SerialClient();
+    const write = vi.fn((_data: string, callback?: (error?: Error) => void) =>
+      callback?.(),
+    );
+    (client as any).port = {
+      isOpen: true,
+      write,
+      close: vi.fn((callback: (error?: Error) => void) => callback()),
+    };
+    const commands = [
+      client.sendAndReceive("FIRST"),
+      client.sendAndReceive("QUEUED1"),
+      client.sendAndReceive("QUEUED2"),
+    ];
+    const results = Promise.allSettled(commands);
+
+    await client.disconnect();
+
+    expect(await results).toEqual(
+      commands.map(() => ({
+        status: "rejected",
+        reason: expect.objectContaining({ message: "Serial port disconnected" }),
+      })),
+    );
+    expect(write).toHaveBeenCalledTimes(1);
+
+    await client.connect("/dev/ttyUSB0");
+    const next = client.sendAndReceive("NEW");
+    (client as any).handleLine("ok");
+    await expect(next).resolves.toEqual([]);
+    expect((client as any).port.write).toHaveBeenCalledTimes(1);
+    expect((client as any).port.write).toHaveBeenCalledWith(
+      "NEW\n",
+      expect.any(Function),
+    );
+    await client.disconnect();
+  });
+
+  it("ignores a write error from a command cancelled before reconnect", async () => {
+    const client = new SerialClient();
+    let writeCallback!: (error?: Error) => void;
+    (client as any).port = {
+      isOpen: true,
+      write: vi.fn((_data: string, callback: (error?: Error) => void) => {
+        writeCallback = callback;
+      }),
+      close: vi.fn((callback: (error?: Error) => void) => callback()),
+    };
+    const cancelled = client.sendAndReceive("OLD").catch((error: Error) => error);
+    await client.disconnect();
+    await expect(cancelled).resolves.toMatchObject({
+      message: "Serial port disconnected",
+    });
+
+    await client.connect("/dev/ttyUSB0");
+    const current = client.sendAndReceive("NEW");
+    writeCallback(new Error("Old write failed"));
+    (client as any).handleLine("new response");
+    (client as any).handleLine("ok");
+
+    await expect(current).resolves.toEqual(["new response"]);
+    await client.disconnect();
+  });
+
   it("connect() opens the port and sets up parser", async () => {
     const client = new SerialClient();
     await client.connect("/dev/ttyUSB0", 115200);

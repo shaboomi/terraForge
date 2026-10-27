@@ -23,6 +23,7 @@ export function flattenToSubpaths(
     startY = 0;
   let lastCpX = 0,
     lastCpY = 0;
+  let previousCommand = "";
 
   const push = (x: number, y: number) => {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -47,6 +48,15 @@ export function flattenToSubpaths(
   for (const cmd of abs) {
     const t = cmd.type;
     const a = cmd.args;
+    // Smooth commands only reflect a control point from the same curve
+    // family. Otherwise SVG defines the current point as the first control.
+    if (
+      (t === "S" && previousCommand !== "C" && previousCommand !== "S") ||
+      (t === "T" && previousCommand !== "Q" && previousCommand !== "T")
+    ) {
+      lastCpX = cx;
+      lastCpY = cy;
+    }
     switch (t) {
       case "M": {
         if (cur.length > 1) subpaths.push(cur);
@@ -166,6 +176,7 @@ export function flattenToSubpaths(
         }
         break;
     }
+    previousCommand = t;
   }
   if (cur.length > 1) subpaths.push(cur);
   return subpaths;

@@ -10,8 +10,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@renderer/*": ["./app/renderer/src/*"],
-      "@types/*": ["./app/types/*"]
+      "@renderer/*": ["./src/renderer/src/*"],
+      "@types/*": ["./src/types/*"]
     }
   },
   "include": [
@@ -20,5 +20,6 @@
     "src/renderer/**/*.d.ts",
     "src/workers/**/*.ts",
     "src/types/**/*.ts"
-  ]
+  ],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

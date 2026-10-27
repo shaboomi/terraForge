@@ -208,12 +208,14 @@ export function parseGcode(gcode: string): GcodeToolpath {
     const yw = getW("Y");
     const fw = getW("F");
 
-    // Skip lines with no X/Y motion
+    const scale = inMillimeters ? 1 : 25.4;
+    // Feedrate is modal even on lines with no XY motion (including F-only
+    // blocks and Z moves). Convert in/min → mm/min when G20 is active.
+    if (fw !== undefined) feedrate = fw * scale;
+
+    // Skip geometry for lines with no X/Y motion after updating modal state.
     if (xw === undefined && yw === undefined) continue;
 
-    const scale = inMillimeters ? 1 : 25.4;
-    // Update feedrate if an F word is present (convert in/min → mm/min when G20)
-    if (fw !== undefined) feedrate = fw * scale;
     const nx =
       xw !== undefined ? (isAbsolute ? xw * scale : x + xw * scale) : x;
     const ny =

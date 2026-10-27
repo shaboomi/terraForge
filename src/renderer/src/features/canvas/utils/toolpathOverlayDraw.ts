@@ -472,8 +472,9 @@ export function drawToolpathLayer({
     } else {
       const byColor = new Map<string, number[]>();
       for (let i = 0; i < rapidSegmentCount; i++) {
-        const key = rapidColors[i]
-          ? rapidStrokeFromCutColor(rapidColors[i])
+        const color = rapidColors[i];
+        const key = color
+          ? rapidStrokeFromCutColor(color)
           : defaultRapidColor;
         const bucket = byColor.get(key) ?? [];
         bucket.push(i);

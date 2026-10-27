@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SvgImport, PassMode } from "../../../../types";
+import type { SvgImport, PassMode } from "../../../../../types";
 import { FlyoutPanel } from "../../../components/FlyoutPanel";
 import { LayerRow } from "./LayerRow";
 import { ColorGroupRow } from "./ColorGroupRow";

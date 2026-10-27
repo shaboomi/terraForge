@@ -3,7 +3,7 @@ import { Button } from "../../../ui";
 import type {
   InkServiceStation,
   InkServiceStationAction,
-} from "../../../../../types";
+} from "../../../../../../types";
 import { defaultStationActionForType } from "../../utils/stationDefaults";
 
 interface StationRowProps {

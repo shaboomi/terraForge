@@ -253,12 +253,13 @@ function transformArcParams(
   const Qx = -a * ry * sinP + c * ry * cosP;
   const Qy = -b * ry * sinP + d * ry * cosP;
 
-  // The quadratic form of the transformed ellipse has matrix:
+  // The transformed ellipse's shape matrix in output XY coordinates is
+  // B Bᵀ, where B has the transformed spanning vectors P and Q as columns:
   //   [[A, C], [C, B]]
-  // where A = Px²+Py², B = Qx²+Qy², C = Px·Qx+Py·Qy
-  const A = Px * Px + Py * Py;
-  const B = Qx * Qx + Qy * Qy;
-  const C = Px * Qx + Py * Qy;
+  // Its eigenvectors give the ellipse axes in that output coordinate space.
+  const A = Px * Px + Qx * Qx;
+  const B = Py * Py + Qy * Qy;
+  const C = Px * Py + Qx * Qy;
 
   // Eigenvalues λ₁ ≥ λ₂ of [[A,C],[C,B]] give the squared semi-axes.
   const avg = (A + B) / 2;

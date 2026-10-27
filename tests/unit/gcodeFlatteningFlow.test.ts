@@ -54,4 +54,46 @@ describe("gcode flattening flow stage", () => {
     expect(subpaths).toHaveLength(1);
     expect(subpaths[0].length).toBeGreaterThan(4);
   });
+
+  it.each([
+    [
+      "M0 0 Q10 20 20 0 S30 -20 40 0",
+      "M0 0 Q10 20 20 0 C20 0 30 -20 40 0",
+    ],
+    [
+      "M0 0 Q10 20 20 0 T40 0 S50 20 60 0",
+      "M0 0 Q10 20 20 0 T40 0 C40 0 50 20 60 0",
+    ],
+    [
+      "M0 0 C10 20 20 20 30 0 T60 0",
+      "M0 0 C10 20 20 20 30 0 Q30 0 60 0",
+    ],
+    [
+      "M0 0 S20 20 30 0 T60 0",
+      "M0 0 S20 20 30 0 Q30 0 60 0",
+    ],
+    [
+      "M0 0 20 0 S30 20 40 0",
+      "M0 0 20 0 C20 0 30 20 40 0",
+    ],
+  ])("uses the current point for an incompatible smooth curve in %s", (smooth, explicit) => {
+    expect(flattenToSubpaths(createVectorObject({ path: smooth }), cfg)).toEqual(
+      flattenToSubpaths(createVectorObject({ path: explicit }), cfg),
+    );
+  });
+
+  it.each([
+    [
+      "M0 0 C10 20 20 20 30 0 S50 -20 60 0 80 20 90 0",
+      "M0 0 C10 20 20 20 30 0 C40 -20 50 -20 60 0 C70 20 80 20 90 0",
+    ],
+    [
+      "M0 0 Q10 20 20 0 T40 0 60 0",
+      "M0 0 Q10 20 20 0 Q30 -20 40 0 Q50 20 60 0",
+    ],
+  ])("preserves reflection within the same curve family in %s", (smooth, explicit) => {
+    expect(flattenToSubpaths(createVectorObject({ path: smooth }), cfg)).toEqual(
+      flattenToSubpaths(createVectorObject({ path: explicit }), cfg),
+    );
+  });
 });

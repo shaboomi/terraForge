@@ -1189,6 +1189,58 @@ describe("Toolbar", () => {
       localStorage.removeItem("terraforge.gcodePrefs");
     });
 
+    it.each(["100mm", "10cm", "4in", "100px"])(
+      "preserves CSS pixel geometry for an SVG with width %s and no viewBox",
+      async (width) => {
+        vi.mocked(window.terraForge.fs.openImportDialog).mockResolvedValue("/units.svg");
+        vi.mocked(window.terraForge.fs.readFile).mockResolvedValue(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="100mm">
+            <path d="M0 0 L96 96" fill="none" stroke="black" />
+          </svg>`,
+        );
+
+        render(<Toolbar />);
+        await userEvent.click(screen.getByText("Import"));
+        await waitFor(() => expect(useCanvasStore.getState().imports).toHaveLength(1));
+
+        const imp = useCanvasStore.getState().imports[0];
+        expect(imp.scale).toBeCloseTo(25.4 / 96);
+        expect(imp.svgWidth * imp.scale).toBeCloseTo(25.4);
+        expect(imp.svgHeight * imp.scale).toBeCloseTo(25.4);
+        expect(Number.isFinite(imp.x)).toBe(true);
+        expect(Number.isFinite(imp.y)).toBe(true);
+      },
+    );
+
+    it("excludes SVG definitions and individually hidden shapes from plot geometry", async () => {
+      vi.mocked(window.terraForge.fs.openImportDialog).mockResolvedValue("/definitions.svg");
+      vi.mocked(window.terraForge.fs.readFile).mockResolvedValue(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <style>.hidden { display: none; }</style>
+          <defs><path id="definition" d="M0 0 L1000 1000" /></defs>
+          <clipPath id="clip"><rect width="900" height="900" /></clipPath>
+          <mask id="mask"><rect width="800" height="800" /></mask>
+          <symbol id="symbol"><path d="M0 0 L700 700" /></symbol>
+          <marker id="marker"><path d="M0 0 L600 600" /></marker>
+          <pattern id="pattern"><path d="M0 0 L500 500" /></pattern>
+          <path d="M0 0 L400 400" style="display:none" />
+          <path d="M0 0 L300 300" display="none" />
+          <path d="M0 0 L200 200" class="hidden" />
+          <path id="visible" d="M0 0 L10 10" stroke="black" fill="none" />
+        </svg>`,
+      );
+
+      render(<Toolbar />);
+      await userEvent.click(screen.getByText("Import"));
+      await waitFor(() => expect(useCanvasStore.getState().imports).toHaveLength(1));
+
+      const imp = useCanvasStore.getState().imports[0];
+      expect(imp.paths.map((path) => path.label)).toEqual(["visible"]);
+      expect(imp.svgWidth).toBe(10);
+      expect(imp.svgHeight).toBe(10);
+      expect(useCanvasStore.getState().toVectorObjects()).toHaveLength(1);
+    });
+
     it("imports circles from SVG", async () => {
       const svgXml = `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
         <circle cx="50" cy="50" r="30" stroke="black" stroke-width="1" fill="none" />

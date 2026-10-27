@@ -96,7 +96,7 @@ npm run dev          # Electron dev server with hot reload
 npm run build        # Production build → out/
 npm test             # Vitest unit + component tests
 npm run test:e2e     # Playwright E2E (builds first)
-npm run typecheck    # TypeScript strict check
+npm run typecheck    # TypeScript strict check for renderer, workers, and main process
 ```
 
 ### Distributable packages
