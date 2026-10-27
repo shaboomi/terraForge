@@ -328,12 +328,12 @@ export interface CanvasItemBase {
   svgHeight: number;
   viewBoxX: number;
   viewBoxY: number;
+  pluginSource?: PluginProvenance;
 }
 
 /** One vector import. An absent kind remains valid for legacy layouts. */
 export interface SvgImport extends CanvasItemBase {
   kind?: "vector";
-  pluginSource?: { pluginId: string; pluginVersion: string; parameters: PluginParameters };
   paths: SvgPath[];
   /** Per-import hatch fill settings (override the global GcodePrefs defaults).
    *  Optional at creation — `addImport` fills in defaults if absent. */
@@ -740,6 +740,27 @@ declare global {
 export type PluginCategory = "bitmap-processor" | "generator" | "font-tool";
 export type PluginParameters = Record<string, string | number | boolean>;
 
+export interface PluginProvenance {
+  pluginId: string;
+  pluginVersion: string;
+  parameters: PluginParameters;
+  apiVersion?: 1;
+  seed?: number;
+  sourceId?: string;
+  sourceRevision?: string;
+  outputGroupId?: string;
+  outputGroupName?: string;
+  outputIndex?: number;
+  /** Host-generated identity of the logical output and optional pen partition. */
+  outputKey?: string;
+  /** Declared local output frame, retained independently of a raster asset's resolution. */
+  outputWidth?: number;
+  outputHeight?: number;
+}
+
+export interface PluginPen { id: string; name: string; color: string }
+export interface PluginPlacement { x: number; y: number; scale: number; scaleX?: number; scaleY?: number; rotation: number }
+
 interface PluginControlBase {
   key: string;
   label: string;
@@ -775,7 +796,7 @@ export interface PluginManifest {
   description: string;
   category: PluginCategory;
   input: "none" | "bitmap" | "vector";
-  outputs: ["vector"];
+  outputs: ("vector" | "bitmap")[];
   controls?: PluginControl[];
 }
 
@@ -786,32 +807,53 @@ export interface PluginEntry {
   error?: string;
 }
 
-/** Stage 1 supports generators; selection inputs follow with the bitmap model. */
-export interface PluginInput {
-  kind: "none";
+interface PluginInputBase {
   page: { widthMM: number; heightMM: number };
+  palette?: PluginPen[];
 }
+
+interface PluginSelectionInput extends PluginInputBase {
+  sourceId: string;
+  width: number;
+  height: number;
+  placement: PluginPlacement;
+}
+
+/** Processing snapshots are detached from the document. Pixel edges span the full frame. */
+export type PluginInput =
+  | (PluginInputBase & { kind: "none" })
+  | (PluginSelectionInput & { kind: "bitmap"; widthPx: number; heightPx: number; data: Uint8Array })
+  | (PluginSelectionInput & { kind: "vector"; paths: PluginPolyline[] });
 
 export interface PluginRunRequest {
   runId: string;
   pluginId: string;
   input: PluginInput;
   parameters: PluginParameters;
+  seed?: number;
 }
 
-/** All coordinates are local millimetres, with top-left origin and Y down. */
+/** Top-left origin and Y down; generator millimetres or processor source-local units. */
 export interface PluginPolyline {
   points: { x: number; y: number }[];
   closed?: boolean;
   color?: string;
+  penId?: string;
 }
 
-export interface PluginResult {
+export interface PluginVectorResult {
   width: number;
   height: number;
   paths: PluginPolyline[];
   warnings?: string[];
 }
+
+export type PluginOutputItem =
+  | { kind: "vector"; width: number; height: number; paths: PluginPolyline[]; name?: string }
+  | { kind: "bitmap"; width: number; height: number; widthPx: number; heightPx: number; data: Uint8Array; name?: string };
+
+/** The original single-vector result stays valid for existing API-1 generators. */
+export type PluginResult = PluginVectorResult | { items: PluginOutputItem[]; warnings?: string[] };
 
 export interface PluginContext {
   runId: string;

@@ -32,11 +32,11 @@ describe("plugin validation", () => {
     expect(() => parsePluginSource("é".repeat(PLUGIN_LIMITS.sourceBytes))).toThrow(/1 MiB/);
   });
 
-  it("accepts declared future input categories without pretending the current runner supports them", () => {
+  it("accepts processor declarations while rejecting incomplete selected input snapshots", () => {
     expect(validatePluginManifest({ ...manifest(), category: "bitmap-processor", input: "bitmap" }).input).toBe("bitmap");
     expect(validatePluginManifest({ ...manifest(), category: "font-tool", input: "vector" }).category).toBe("font-tool");
     const request = { runId: "run-1", pluginId: "test.generator", input: { kind: "bitmap", page: { widthMM: 100, heightMM: 100 } }, parameters: {} };
-    expect(() => validatePluginRunRequest(request)).toThrow(/later stage/);
+    expect(() => validatePluginRunRequest(request)).toThrow(/Source width/);
   });
 
   it.each([

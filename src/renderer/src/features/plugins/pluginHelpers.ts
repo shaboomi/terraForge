@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import type { MachineConfig, PluginControl, PluginManifest, PluginParameters, PluginResult, SvgImport } from "../../../../types";
+import type { MachineConfig, PluginControl, PluginManifest, PluginParameters, PluginVectorResult, SvgImport } from "../../../../types";
 import type { CanvasState } from "../../store/canvasStore/types";
 import { resolvePageBounds } from "../properties-panel/utils/pageBounds";
 
@@ -31,7 +31,7 @@ export function generatorPage(state: CanvasState, machine: MachineConfig | undef
 }
 
 /** The host constructs all SVG markup; plugins only supply validated coordinates. */
-export function importPluginResult(result: PluginResult, manifest: PluginManifest, parameters: PluginParameters, page: { widthMM: number; heightMM: number }, machine?: MachineConfig): SvgImport {
+export function importPluginResult(result: PluginVectorResult, manifest: PluginManifest, parameters: PluginParameters, page: { widthMM: number; heightMM: number }, machine?: MachineConfig): SvgImport {
   if (!Number.isFinite(result.width) || !Number.isFinite(result.height) || result.width <= 0 || result.height <= 0) throw new Error("The plugin returned invalid artwork dimensions.");
   if (result.width > page.widthMM || result.height > page.heightMM) throw new Error("The artwork is larger than the page. Reduce its dimensions and run the plugin again.");
   if (!result.paths.length) throw new Error("The plugin did not return any vector paths.");

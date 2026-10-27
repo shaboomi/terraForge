@@ -1,20 +1,27 @@
-import { isVectorImport, type CanvasItem, type PluginEntry, type SvgImport } from "../../../../types";
+import { isBitmapImport, type CanvasItem, type PluginEntry } from "../../../../types";
 import { validatePluginParameters } from "../../../../types/pluginValidation";
 
 /** Reopen only with the exact available plugin that created this artwork. */
-export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEntry[]) {
-  if (!artwork || !isVectorImport(artwork) || !artwork.pluginSource) return { error: "Select artwork created by a plugin." };
+export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEntry[], imports?: CanvasItem[]) {
+  if (!artwork?.pluginSource) return { error: "Select artwork created by a plugin." };
   const source = artwork.pluginSource;
   const entry = entries.find((item) => item.manifest?.id === source.pluginId);
-  if (!entry?.manifest) return { error: "This artwork's plugin is not installed. You can still edit its vectors normally." };
+  if (!entry?.manifest) return { error: "This artwork's plugin is not installed. The saved artwork is still available." };
   if (!entry.enabled || entry.error) return { error: "Enable this plugin in Plugins to edit its settings." };
   if (entry.manifest.version !== source.pluginVersion) return { error: `This artwork requires plugin version ${source.pluginVersion} to edit its settings.` };
-  if (entry.manifest.input !== "none") return { error: "This plugin's settings cannot be edited in this version of TerraForge." };
+  if (entry.manifest.input !== "none") {
+    if (!source.sourceId) return { error: "This result has no saved source reference. Select source artwork and open the plugin from Plugins to create a new result." };
+    if (imports) {
+      const input = imports.find((item) => item.id === source.sourceId);
+      if (!input) return { error: "The source artwork is missing. The saved result remains available; restore its source to edit these settings." };
+      if ((entry.manifest.input === "bitmap") !== isBitmapImport(input)) return { error: "The source artwork is no longer compatible with this plugin." };
+    }
+  }
   try {
     const parameters = validatePluginParameters(entry.manifest, source.parameters);
     return { entry: { ...entry, manifest: entry.manifest }, parameters };
   } catch {
-    return { error: "The saved settings are incompatible with this plugin. You can still edit the artwork's vectors normally." };
+    return { error: "The saved settings are incompatible with this plugin. The saved artwork is still available." };
   }
 }
 
@@ -23,11 +30,11 @@ export function resolvePluginTarget(
   pluginId: string,
   imports: CanvasItem[],
   entries: PluginEntry[],
-): { target?: SvgImport; error?: string } {
+): { target?: CanvasItem; error?: string } {
   if (!importId) return {};
   const target = imports.find((item) => item.id === importId);
-  const editor = pluginEditor(target, entries);
-  if (!target || !isVectorImport(target) || editor.error || target.pluginSource?.pluginId !== pluginId) {
+  const editor = pluginEditor(target, entries, imports);
+  if (!target || editor.error || target.pluginSource?.pluginId !== pluginId) {
     return { error: editor.error ?? "The artwork or its plugin is no longer available." };
   }
   return { target };

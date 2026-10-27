@@ -2,6 +2,8 @@
 
 Stage 1 proves a directory-based JavaScript plugin engine using vector generators. It is the first implementation milestone in [the plugin/bitmap design proposal](plugin-engine-design.md), not completion of the entire bitmap and plugin roadmap.
 
+These notes record Stage 1. The current processing workflow is documented in [Stage 3](plugin-stage-3.md).
+
 ## Included
 
 - Discover one self-contained `.tf-plugin.js` file per tool at launch; read the JSON metadata header without executing plugin code.

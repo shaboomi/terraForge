@@ -4,6 +4,11 @@ import type {
   PluginParameters,
   PluginResult,
   PluginRunRequest,
+  PluginInput,
+  PluginOutputItem,
+  PluginPen,
+  PluginPlacement,
+  PluginPolyline,
 } from "./index";
 
 export const PLUGIN_LIMITS = Object.freeze({
@@ -16,6 +21,11 @@ export const PLUGIN_LIMITS = Object.freeze({
   points: 100000,
   dimensionMM: 10000,
   executionMs: 30000,
+  outputItems: 16,
+  pixels: 16 * 1024 * 1024,
+  pixelDimension: 8192,
+  sourceDimension: 1e6,
+  palette: 256,
 });
 
 const ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
@@ -145,14 +155,16 @@ export function validatePluginManifest(value: unknown): PluginManifest {
   const description = nonempty(item.description, "Description", 1000);
   if (item.category !== "bitmap-processor" && item.category !== "generator" && item.category !== "font-tool") throw new Error("Unsupported plugin category.");
   if (item.input !== "none" && item.input !== "bitmap" && item.input !== "vector") throw new Error("Unsupported plugin input.");
-  if (!Array.isArray(item.outputs) || item.outputs.length !== 1 || item.outputs[0] !== "vector") throw new Error("This release supports vector output only.");
+  if (!Array.isArray(item.outputs) || item.outputs.length < 1 || item.outputs.length > 2 ||
+      item.outputs.some((kind) => kind !== "vector" && kind !== "bitmap") ||
+      new Set(item.outputs).size !== item.outputs.length) throw new Error("Outputs must declare unique vector and/or bitmap kinds.");
   let controls: PluginControl[] | undefined;
   if (item.controls !== undefined) {
     if (!Array.isArray(item.controls) || item.controls.length > PLUGIN_LIMITS.controls) throw new Error(`At most ${PLUGIN_LIMITS.controls} controls are supported.`);
     controls = Array.from(item.controls, control);
     if (new Set(controls.map((entry) => entry.key)).size !== controls.length) throw new Error("Control keys must be unique.");
   }
-  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: ["vector"], ...(controls === undefined ? {} : { controls }) };
+  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }) };
 }
 
 export function parsePluginSource(source: string): PluginManifest {
@@ -213,30 +225,115 @@ export function validatePluginParameters(manifest: PluginManifest, value: unknow
 
 export function validatePluginRunRequest(value: unknown): PluginRunRequest {
   const item = object(value, "Plugin request");
-  fields(item, ["runId", "pluginId", "input", "parameters"], "Plugin request");
+  fields(item, ["runId", "pluginId", "input", "parameters", "seed"], "Plugin request");
   const runId = nonempty(item.runId, "Run ID", 128);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(runId)) throw new Error("Invalid run ID.");
-  const input = object(item.input, "Plugin input");
-  fields(input, ["kind", "page"], "Plugin input");
-  if (input.kind !== "none") throw new Error("Selection-based plugins will be supported in a later stage.");
-  const page = object(input.page, "Page");
+  const supplied = object(item.input, "Plugin input");
+  const page = object(supplied.page, "Page");
   fields(page, ["widthMM", "heightMM"], "Page");
-  return { runId, pluginId: identifier(item.pluginId), input: { kind: "none", page: { widthMM: dimension(page.widthMM, "Page width"), heightMM: dimension(page.heightMM, "Page height") } }, parameters: parametersObject(item.parameters) };
+  const common = {
+    page: { widthMM: dimension(page.widthMM, "Page width"), heightMM: dimension(page.heightMM, "Page height") },
+    ...(supplied.palette === undefined ? {} : { palette: palette(supplied.palette) }),
+  };
+  let input: PluginInput;
+  if (supplied.kind === "none") {
+    fields(supplied, ["kind", "page", "palette"], "Plugin input");
+    input = { ...common, kind: "none" };
+  } else {
+    const allowed = ["kind", "page", "palette", "sourceId", "width", "height", "placement"];
+    const frame = { width: sourceDimension(supplied.width, "Source width"), height: sourceDimension(supplied.height, "Source height") };
+    const selection = { ...common, ...frame, sourceId: reference(supplied.sourceId, "Source ID"), placement: placement(supplied.placement) };
+    if (supplied.kind === "bitmap") {
+      fields(supplied, [...allowed, "widthPx", "heightPx", "data"], "Bitmap input");
+      const pixels = rgba(supplied, { pixels: 0 });
+      if (frame.width !== pixels.widthPx || frame.height !== pixels.heightPx) throw new Error("Bitmap source frame must match its pixel dimensions.");
+      input = { ...selection, kind: "bitmap", ...pixels };
+    } else if (supplied.kind === "vector") {
+      fields(supplied, [...allowed, "paths"], "Vector input");
+      input = { ...selection, kind: "vector", paths: polylines(supplied.paths, frame.width, frame.height, { paths: 0, points: 0 }) };
+    } else throw new Error("Unsupported plugin input kind.");
+    validatePenReferences(input.kind === "vector" ? input.paths : [], common.palette ?? []);
+  }
+  const seed = item.seed === undefined ? undefined : uint32(item.seed, "Seed");
+  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }) };
 }
 
-export function validatePluginResult(value: unknown): PluginResult {
-  const item = object(value, "Plugin result");
-  fields(item, ["width", "height", "paths", "warnings"], "Plugin result");
-  const width = dimension(item.width, "Output width");
-  const height = dimension(item.height, "Output height");
-  if (!Array.isArray(item.paths) || item.paths.length < 1 || item.paths.length > PLUGIN_LIMITS.paths) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.paths} paths.`);
-  let count = 0;
-  const paths = Array.from(item.paths, (entry: unknown) => {
+function reference(value: unknown, label: string): string {
+  const result = nonempty(value, label, 256);
+  if (RESERVED.has(result) || /[\u0000-\u001f]/.test(result)) throw new Error(`${label} is invalid.`);
+  return result;
+}
+
+function uint32(value: unknown, label: string): number {
+  const result = finite(value, label);
+  if (!Number.isInteger(result) || result < 0 || result > 0xffffffff) throw new Error(`${label} must be an unsigned 32-bit integer.`);
+  return result;
+}
+
+function sourceDimension(value: unknown, label: string): number {
+  const result = finite(value, label);
+  if (result <= 0 || result > PLUGIN_LIMITS.sourceDimension) throw new Error(`${label} is outside the supported source frame.`);
+  return result;
+}
+
+function placement(value: unknown): PluginPlacement {
+  const item = object(value, "Placement");
+  fields(item, ["x", "y", "scale", "scaleX", "scaleY", "rotation"], "Placement");
+  const bounded = (value: unknown, label: string) => {
+    const result = finite(value, label);
+    if (Math.abs(result) > 1e6) throw new Error(`${label} is outside the supported range.`);
+    return result;
+  };
+  const scale = (value: unknown, label: string) => {
+    const result = bounded(value, label);
+    if (result === 0) throw new Error(`${label} must not be zero.`);
+    return result;
+  };
+  return { x: bounded(item.x, "Placement X"), y: bounded(item.y, "Placement Y"), scale: scale(item.scale, "Scale"), rotation: bounded(item.rotation, "Rotation"),
+    ...(item.scaleX === undefined ? {} : { scaleX: scale(item.scaleX, "Scale X") }), ...(item.scaleY === undefined ? {} : { scaleY: scale(item.scaleY, "Scale Y") }) };
+}
+
+function palette(value: unknown): PluginPen[] {
+  if (!Array.isArray(value) || value.length > PLUGIN_LIMITS.palette) throw new Error(`Palette supports at most ${PLUGIN_LIMITS.palette} pens.`);
+  const result = Array.from(value, (entry: unknown) => {
+    const pen = object(entry, "Palette pen");
+    fields(pen, ["id", "name", "color"], "Palette pen");
+    return { id: reference(pen.id, "Pen ID"), name: nonempty(pen.name, "Pen name", 1000), color: colour(pen.color, "Pen colour") };
+  });
+  if (new Set(result.map((pen) => pen.id)).size !== result.length) throw new Error("Palette pen IDs must be unique.");
+  return result;
+}
+
+function validatePenReferences(paths: PluginPolyline[], pens: PluginPen[]): void {
+  const ids = new Set(pens.map((pen) => pen.id));
+  for (const path of paths) if (path.penId !== undefined && !ids.has(path.penId)) throw new Error("Output references a pen outside the supplied palette.");
+}
+
+function rgba(item: UnknownRecord, budget: { pixels: number }): { widthPx: number; heightPx: number; data: Uint8Array } {
+  const edge = (value: unknown, label: string) => {
+    const result = finite(value, label);
+    if (!Number.isInteger(result) || result < 1 || result > PLUGIN_LIMITS.pixelDimension) throw new Error(`${label} must be between 1 and ${PLUGIN_LIMITS.pixelDimension} pixels.`);
+    return result;
+  };
+  const widthPx = edge(item.widthPx, "Pixel width"), heightPx = edge(item.heightPx, "Pixel height");
+  budget.pixels += widthPx * heightPx;
+  if (budget.pixels > PLUGIN_LIMITS.pixels) throw new Error("Plugin bitmap data exceeds the total pixel budget.");
+  const data = item.data;
+  if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray) || !(data.buffer instanceof ArrayBuffer) ||
+      data.byteLength !== widthPx * heightPx * 4 || data.byteOffset !== 0 || data.byteLength !== data.buffer.byteLength) {
+    throw new Error("Bitmap data must be a tightly sized, non-shared RGBA8 byte array.");
+  }
+  return { widthPx, heightPx, data: new Uint8Array(data) };
+}
+
+function polylines(value: unknown, width: number, height: number, budget: { paths: number; points: number }): PluginPolyline[] {
+  if (!Array.isArray(value) || value.length < 1 || (budget.paths += value.length) > PLUGIN_LIMITS.paths) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.paths} paths in total.`);
+  return Array.from(value, (entry: unknown) => {
     const path = object(entry, "Path");
-    fields(path, ["points", "closed", "color"], "Path");
+    fields(path, ["points", "closed", "color", "penId"], "Path");
     if (!Array.isArray(path.points) || path.points.length < 2) throw new Error("A path must contain at least two points.");
-    count += path.points.length;
-    if (count > PLUGIN_LIMITS.points) throw new Error(`Output exceeds ${PLUGIN_LIMITS.points} points.`);
+    budget.points += path.points.length;
+    if (budget.points > PLUGIN_LIMITS.points) throw new Error(`Output exceeds ${PLUGIN_LIMITS.points} points.`);
     const points = Array.from(path.points, (entry: unknown) => {
       const point = object(entry, "Point");
       fields(point, ["x", "y"], "Point");
@@ -246,12 +343,58 @@ export function validatePluginResult(value: unknown): PluginResult {
       return { x, y };
     });
     if (path.closed !== undefined && typeof path.closed !== "boolean") throw new Error("Path closed flag must be boolean.");
-    return { points, ...(path.closed === undefined ? {} : { closed: path.closed }), ...(path.color === undefined ? {} : { color: colour(path.color, "Path colour") }) };
+    return { points, ...(path.closed === undefined ? {} : { closed: path.closed }), ...(path.color === undefined ? {} : { color: colour(path.color, "Path colour") }), ...(path.penId === undefined ? {} : { penId: reference(path.penId, "Pen ID") }) };
   });
+}
+
+/** Normalise the legacy generator return without altering its public shape. */
+export function pluginResultItems(result: PluginResult): PluginOutputItem[] {
+  return "items" in result ? result.items : [{ kind: "vector", width: result.width, height: result.height, paths: result.paths }];
+}
+
+/** Copies/bounds output before IPC; request-aware checks bind it to its source and palette. */
+export function validatePluginResult(value: unknown, request?: PluginRunRequest, manifest?: PluginManifest): PluginResult {
+  const item = object(value, "Plugin result");
+  const budget = { paths: 0, points: 0, pixels: 0 };
+  const frame = (output: UnknownRecord) => {
+    const size = request && request.input.kind !== "none" ? sourceDimension : dimension;
+    const width = size(output.width, "Output width"), height = size(output.height, "Output height");
+    if (request && request.input.kind !== "none" && (width !== request.input.width || height !== request.input.height)) throw new Error("Processor output must preserve the complete source frame.");
+    return { width, height };
+  };
   let warnings: string[] | undefined;
   if (item.warnings !== undefined) {
     if (!Array.isArray(item.warnings) || item.warnings.length > 20) throw new Error("At most 20 warnings are allowed.");
     warnings = Array.from(item.warnings, (entry: unknown) => string(entry, "Warning", 512));
   }
-  return { width, height, paths, ...(warnings === undefined ? {} : { warnings }) };
+  const diagnostics = warnings === undefined ? {} : { warnings };
+  let result: PluginResult;
+  if (item.items === undefined) {
+    fields(item, ["width", "height", "paths", "warnings"], "Plugin result");
+    const dimensions = frame(item);
+    result = { ...dimensions, paths: polylines(item.paths, dimensions.width, dimensions.height, budget), ...diagnostics };
+  } else {
+    fields(item, ["items", "warnings"], "Plugin result");
+    if (!Array.isArray(item.items) || item.items.length < 1 || item.items.length > PLUGIN_LIMITS.outputItems) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.outputItems} items.`);
+    const items: PluginOutputItem[] = Array.from(item.items, (entry: unknown) => {
+      const output = object(entry, "Output item");
+      const dimensions = frame(output);
+      const name = output.name === undefined ? {} : { name: nonempty(output.name, "Output name") };
+      if (output.kind === "vector") {
+        fields(output, ["kind", "width", "height", "paths", "name"], "Vector output");
+        return { ...dimensions, ...name, kind: "vector", paths: polylines(output.paths, dimensions.width, dimensions.height, budget) };
+      }
+      if (output.kind === "bitmap") {
+        fields(output, ["kind", "width", "height", "widthPx", "heightPx", "data", "name"], "Bitmap output");
+        return { ...dimensions, ...name, kind: "bitmap", ...rgba(output, budget) };
+      }
+      throw new Error("Unsupported output item kind.");
+    });
+    result = { items, ...diagnostics };
+  }
+  for (const output of pluginResultItems(result)) {
+    if (manifest && !manifest.outputs.includes(output.kind)) throw new Error(`Plugin returned undeclared ${output.kind} output.`);
+    if (request && output.kind === "vector") validatePenReferences(output.paths, request.input.palette ?? []);
+  }
+  return result;
 }

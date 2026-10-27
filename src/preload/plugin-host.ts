@@ -1,5 +1,6 @@
 import { ipcRenderer } from "electron";
 import { validatePluginResult } from "../types/pluginValidation";
+import type { PluginManifest, PluginRunRequest } from "../types";
 
 declare const __TERRAFORGE_PLUGIN_WORKER__: string;
 
@@ -7,6 +8,9 @@ const report = (message: unknown) => ipcRenderer.send("plugins:host-event", mess
 
 // No application API is exposed to the plugin's worker or the page.
 function startPluginWorker(payload: unknown): void {
+  if (!payload || typeof payload !== "object") throw new Error("Invalid plugin startup message.");
+  // Startup data comes exclusively from the main process's validated execution request.
+  const { request, manifest } = payload as { request: PluginRunRequest; manifest: PluginManifest };
   const workerUrl = URL.createObjectURL(
     new Blob([__TERRAFORGE_PLUGIN_WORKER__], { type: "text/javascript" }),
   );
@@ -33,7 +37,7 @@ function startPluginWorker(payload: unknown): void {
         // Copy and bound untrusted output before it crosses into the main process.
         report(message.type === "error"
           ? { type: "error", error: String(message.error).slice(0, 2000) }
-          : { type: "result", result: validatePluginResult(message.result) });
+          : { type: "result", result: validatePluginResult(message.result, request, manifest) });
       } catch (error) {
         report({ type: "error", error: String(error).slice(0, 2000) });
       }

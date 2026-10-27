@@ -13,9 +13,10 @@ Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create v
 - [User Guide](docs/terraForge-user-guide.md) — full feature walkthrough with screenshots
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
+- [Plugin processing Stage 3](docs/plugin-stage-3.md) — preview bitmap/vector processors and generate artwork with your pens
 - [Bitmap Stage 2](docs/plugin-stage-2.md) — image import, editing and portable layouts
 - [Plugin Stage 1](docs/plugin-stage-1.md) — supported features and a quick start
-- [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator
+- [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator or processor
 
 ---
 
@@ -42,7 +43,7 @@ Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create v
 - Import PNG and JPEG images with transparency and JPEG orientation preserved.
 - Move, resize, rotate, copy, hide and group bitmap items; adjust opacity and use Undo.
 - Save portable version-2 `.tforge` layouts with embedded, deduplicated image assets; open existing version-1 vector layouts.
-- Bitmaps are reference artwork. Plotting uses vector items; bitmap-processing plugins and vectorisation follow in Stage 3.
+- Bitmaps are reference artwork. Plotting uses vector items; Stage 3 processors can generate separate vectors from bitmap input.
 
 See [Stage 2](docs/plugin-stage-2.md) for instructions and supported limits.
 
@@ -54,7 +55,18 @@ See [Stage 2](docs/plugin-stage-2.md) for instructions and supported limits.
 - Minimise or close plugin controls without deleting artwork; select a generated item and use **Edit with [plugin name]** to restore saved settings and **Update artwork** in place. Updates preserve placement and support Undo.
 - Isolated execution with progress, cancellation and a default 30-second deadline. Validated polyline results become ordinary vector artwork in one undoable edit and remain usable in saved layouts without the plugin.
 
-This stage runs generators with no selected input. PNG/JPEG import is available in Stage 2. Bitmap/vector processors and preview/apply overlays follow in Stage 3. Font Tools currently supplies a category for plugins that generate their own vector geometry. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
+Stage 1 generators remain compatible. Font Tools supplies a category for plugins that generate their own vector geometry; font loading and shaping remain future work. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
+
+### Plugin Processing — Stage 3
+
+- Process one selected bitmap or vector with local JavaScript plugins.
+- Preview temporary artwork, then Apply the complete result in one undoable edit. The source stays unchanged.
+- Generate separate bitmap/vector results with the source's full frame and placement, including rotation and independent X/Y scaling.
+- Supply the user's configured pen palette to plugins, keeping multi-colour vector output assigned to those pens.
+- Reopen saved processor settings from Properties and update a named result group together.
+- Try the original greyscale/invert, pen-matched scanline and reverse-vector [example plugins](docs/examples/README.md).
+
+See [Stage 3](docs/plugin-stage-3.md) for installation, verification and the boundary before detailed artistic filters.
 
 ### G-code Generation
 

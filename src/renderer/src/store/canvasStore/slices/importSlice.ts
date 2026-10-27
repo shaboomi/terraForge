@@ -86,6 +86,51 @@ export function createImportSlice(
       });
       return true;
     },
+    commitPluginResult: ({ items, assets: incomingAssets, replaceIds = [], penAssignments = {} }) => {
+      const current = get();
+      const removed = new Set(replaceIds);
+      if (!items.length || removed.size !== replaceIds.length ||
+          replaceIds.some((id) => !current.imports.some((item) => item.id === id))) return false;
+      const ids = new Set<string>();
+      const normalized = items.map(withDefaultHatchSettings);
+      for (const item of normalized) {
+        if (!item.id || ids.has(item.id) || current.imports.some((existing) => existing.id === item.id && !removed.has(existing.id))) {
+          throw new Error("Plugin result contains a duplicate artwork ID.");
+        }
+        ids.add(item.id);
+        if (![item.x, item.y, item.scale, item.scaleX ?? item.scale, item.scaleY ?? item.scale,
+          item.rotation, item.svgWidth, item.svgHeight, item.viewBoxX, item.viewBoxY].every(Number.isFinite) ||
+          item.scale === 0 || (item.scaleX ?? item.scale) === 0 || (item.scaleY ?? item.scale) === 0 ||
+          item.svgWidth <= 0 || item.svgHeight <= 0) throw new Error("Plugin result has an invalid artwork frame.");
+      }
+      for (const [itemId, penId] of Object.entries(penAssignments)) {
+        const item = normalized.find((candidate) => candidate.id === itemId);
+        if (!item || !isVectorImport(item) || !current.layerGroups.some((group) => group.id === penId)) {
+          throw new Error("A plugin result references an unavailable pen.");
+        }
+      }
+      const insertion = replaceIds.length ? current.imports.findIndex((item) => removed.has(item.id)) : current.imports.length;
+      const next = current.imports.filter((item) => !removed.has(item.id));
+      next.splice(Math.min(insertion, next.length), 0, ...normalized);
+      // Asset and membership validation precede history changes, so any failure is atomic.
+      const available = prepareCanvasAssets(current, next, incomingAssets);
+      pushUndo();
+      set((state) => {
+        state.imports = next;
+        state.assets = available;
+        for (const group of state.layerGroups) {
+          group.importIds = group.importIds.filter((id) => !removed.has(id));
+          for (const [itemId, penId] of Object.entries(penAssignments)) {
+            if (group.id === penId && !group.importIds.includes(itemId)) group.importIds.push(itemId);
+          }
+        }
+        state.selectedImportId = normalized[0].id;
+        state.selectedPathId = null;
+        state.selectedGroupId = null;
+        state.allImportsSelected = false;
+      });
+      return true;
+    },
     removeImport: (id) => {
       if (!get().imports.some((item) => item.id === id)) return;
       pushUndo();

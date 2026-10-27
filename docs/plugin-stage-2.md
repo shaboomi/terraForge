@@ -2,6 +2,8 @@
 
 Stage 2 adds PNG and JPEG images as positioned bitmap objects alongside existing vector artwork. It extends the document foundation for future bitmap-processing plugins; bitmap-to-vector conversion and new artistic algorithms are not part of this stage.
 
+These notes record Stage 2. [Stage 3](plugin-stage-3.md) subsequently connects selected artwork to processor plugins, previews and separate generated results.
+
 ## Import and place an image
 
 1. Choose **Import** and select a `.png`, `.jpg` or `.jpeg` file. Uppercase extensions work too.
