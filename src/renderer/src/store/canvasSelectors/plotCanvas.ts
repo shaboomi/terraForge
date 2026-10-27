@@ -2,6 +2,7 @@ import type { CanvasState } from "../canvasStore/types";
 
 export const selectPlotCanvasCanvasState = (state: CanvasState) => ({
   imports: state.imports,
+  assets: state.assets,
   selectedImportId: state.selectedImportId,
   allImportsSelected: state.allImportsSelected,
   selectedGroupId: state.selectedGroupId,

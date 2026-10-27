@@ -2,7 +2,7 @@
 
 Desktop control app for FluidNC-based pen plotters (TerraPen and compatible machines).
 
-Import SVG and PDF artwork or create it with local JavaScript generators, position it on the machine bed, generate optimised G-code, and plot — all without leaving the app.
+Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create vectors with local JavaScript generators. Arrange your artwork, generate optimised G-code from vectors, and plot without leaving the app.
 
 ![Application screenshot](docs/resources/terraForge-quick-demo.gif)
 
@@ -13,6 +13,7 @@ Import SVG and PDF artwork or create it with local JavaScript generators, positi
 - [User Guide](docs/terraForge-user-guide.md) — full feature walkthrough with screenshots
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
+- [Bitmap Stage 2](docs/plugin-stage-2.md) — image import, editing and portable layouts
 - [Plugin Stage 1](docs/plugin-stage-1.md) — supported features and a quick start
 - [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator
 
@@ -36,6 +37,15 @@ Import SVG and PDF artwork or create it with local JavaScript generators, positi
 - Live plot progress overlay — completed cuts in red, rapids in orange
 - Pen position crosshair tracking work coordinates in real time
 
+### Bitmap Images — Stage 2
+
+- Import PNG and JPEG images with transparency and JPEG orientation preserved.
+- Move, resize, rotate, copy, hide and group bitmap items; adjust opacity and use Undo.
+- Save portable version-2 `.tforge` layouts with embedded, deduplicated image assets; open existing version-1 vector layouts.
+- Bitmaps are reference artwork. Plotting uses vector items; bitmap-processing plugins and vectorisation follow in Stage 3.
+
+See [Stage 2](docs/plugin-stage-2.md) for instructions and supported limits.
+
 ### Local Plugins — Stage 1
 
 - Save a self-contained `.tf-plugin.js` file in the folder opened by **Plugins → Open Plugin Folder**, then restart TerraForge to discover it without executing its code.
@@ -44,7 +54,7 @@ Import SVG and PDF artwork or create it with local JavaScript generators, positi
 - Minimise or close plugin controls without deleting artwork; select a generated item and use **Edit with [plugin name]** to restore saved settings and **Update artwork** in place. Updates preserve placement and support Undo.
 - Isolated execution with progress, cancellation and a default 30-second deadline. Validated polyline results become ordinary vector artwork in one undoable edit and remain usable in saved layouts without the plugin.
 
-This stage runs generators with no selected input and keeps the existing version-1 vector layout format. PNG/JPEG import, bitmap/vector processors and preview/apply overlays are planned separately. Font Tools currently supplies a category for plugins that generate their own vector geometry. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
+This stage runs generators with no selected input. PNG/JPEG import is available in Stage 2. Bitmap/vector processors and preview/apply overlays follow in Stage 3. Font Tools currently supplies a category for plugins that generate their own vector geometry. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
 
 ### G-code Generation
 

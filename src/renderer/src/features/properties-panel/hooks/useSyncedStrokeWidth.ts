@@ -1,11 +1,11 @@
 import { useCallback } from "react";
-import type { LayerGroup, SvgImport } from "../../../../../types";
+import type { LayerGroup, CanvasItem } from "../../../../../types";
 
 interface UseSyncedStrokeWidthArgs {
-  imports: SvgImport[];
+  imports: CanvasItem[];
   layerGroups: LayerGroup[];
   importGroupId: (importId: string) => string | null;
-  updateImport: (importId: string, changes: Partial<SvgImport>) => void;
+  updateImport: (importId: string, changes: Partial<CanvasItem>) => void;
 }
 
 export function useSyncedStrokeWidth({
@@ -24,7 +24,7 @@ export function useSyncedStrokeWidth({
             .map((imp) => imp.id);
 
       for (const id of siblingIds) {
-        updateImport(id, { strokeWidthMM: widthMM });
+        if (imports.some((item) => item.id === id && item.kind !== "bitmap")) updateImport(id, { strokeWidthMM: widthMM });
       }
     },
     [imports, layerGroups, importGroupId, updateImport],

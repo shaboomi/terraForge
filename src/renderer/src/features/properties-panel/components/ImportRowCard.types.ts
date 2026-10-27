@@ -1,10 +1,10 @@
 import type { DragEvent } from "react";
-import type { SvgImport, SvgPath } from "../../../../../types";
+import type { CanvasItem, SvgPath } from "../../../../../types";
 import type { OriginType } from "../../../../../types";
 import type { RotStep } from "../utils/rotation";
 
 export interface ImportRowCardProps {
-  imp: SvgImport;
+  imp: CanvasItem;
   indented: boolean;
   isSelected: boolean;
   isExpanded: boolean;
@@ -70,7 +70,7 @@ export interface ImportRowCardProps {
     >,
   ) => void;
   onRemovePath: (importId: string, pathId: string) => void;
-  onUpdate: (changes: Partial<SvgImport>) => void;
+  onUpdate: (changes: Partial<CanvasItem>) => void;
   onTemplateAlignEnabledChange: (v: boolean) => void;
   onTemplateAlignTargetChange: (v: "page" | "margin") => void;
   onTemplateScaleEnabledChange: (v: boolean) => void;

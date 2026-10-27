@@ -12,12 +12,12 @@ Stage 1 proves a directory-based JavaScript plugin engine using vector generator
 - Run generators in a dedicated Electron sandbox host and worker, without the normal application bridge or Node integration.
 - Host-controlled cancellation and a 30-second deadline; progress and errors in the existing task display.
 - Validate input, parameters and vector results before adding ordinary editable vector imports. Add one result as one undoable edit.
-- Keep generated artwork in existing version-1 `.tforge` vector layouts, with plugin identity/version/parameters, independently of the plugin file.
+- Keep generated artwork in existing `.tforge` saves, with plugin identity/version/parameters, independently of the plugin file.
 - Refuse stale results when document/page/machine context changes.
 
-## Planned extensions
+## Following stages
 
-PNG/JPEG import, image assets, a shared vector/bitmap model, portable image layouts, bitmap/vector processing inputs, raster output, preview/apply overlays, atomic plugin multi-item/group changes and detailed stylised-vector algorithms are planned separately. Font Tools currently means a category for generator code that supplies its own geometry; there is no installed-font browser, font shaping service or editable text object.
+Stage 2 adds PNG/JPEG import, image assets, the shared vector/bitmap canvas-item model and portable version-2 image layouts; see [the Stage 2 notes](plugin-stage-2.md). Bitmap/vector processing inputs, raster output, preview/apply overlays, atomic plugin multi-item/group changes and detailed stylised-vector algorithms remain later milestones. Font Tools currently means a category for generator code that supplies its own geometry; there is no installed-font browser, font shaping service or editable text object.
 
 Stage 1 vector results are polylines in local millimetres. The later bitmap input contract must preserve the bitmap's complete source frame and placement so traced vectors align with the image. It must not reuse SVG file-import tight cropping or auto-placement.
 
@@ -53,7 +53,7 @@ A successful Stage 1 desktop test run demonstrates the tested development build 
 
 ## Previous Stage 1 validation — 27 October 2026
 
-These results were recorded for the earlier Stage 1 implementation on Windows x64 with Electron 40.6.0, after the panel/reopen update. The reconstructed Stage 1 pull request requires its own validation; the following record is historical.
+These results were recorded for the earlier Stage 1 implementation on Windows x64 with Electron 40.6.0, after the panel/reopen update. Current bitmap-foundation validation is recorded in [the Stage 2 notes](plugin-stage-2.md).
 
 - 1,699 unit/component tests passed.
 - All nine plugin desktop workflows were covered: the existing eight passed together, then the new minimise/close/reopen/update workflow passed separately against the final build. The new check verifies a stable item ID, preserved nontrivial placement/scale/rotation, one-step undo, and restored settings after saving and restarting.

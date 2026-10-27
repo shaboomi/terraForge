@@ -1,5 +1,5 @@
 import type { DragEvent, ReactNode } from "react";
-import type { LayerGroup, SvgImport } from "../../../../../types";
+import type { LayerGroup, CanvasItem } from "../../../../../types";
 
 export interface NameEditState {
   id: string;
@@ -8,7 +8,7 @@ export interface NameEditState {
 
 export interface GroupedImportsSectionProps {
   layerGroups: LayerGroup[];
-  imports: SvgImport[];
+  imports: CanvasItem[];
   collapsedGroupIds: Set<string>;
   dragOverGroupId: string | null;
   selectedGroupId: string | null;
@@ -31,12 +31,12 @@ export interface GroupedImportsSectionProps {
   ) => void;
   onCancelGroupRename: () => void;
   onRemoveLayerGroup: (groupId: string) => void;
-  renderImport: (imp: SvgImport, indented: boolean) => ReactNode;
+  renderImport: (imp: CanvasItem, indented: boolean) => ReactNode;
 }
 
 export interface GroupedImportsGroupView {
   group: LayerGroup;
-  members: SvgImport[];
+  members: CanvasItem[];
   isCollapsed: boolean;
   isDropTarget: boolean;
   isSelected: boolean;

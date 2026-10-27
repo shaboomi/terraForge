@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, Image as ImageIcon, X } from "lucide-react";
 import { Button } from "../../../components/ui";
 import { useImportHeaderRowModel } from "../hooks/useImportHeaderRowModel";
 import { ImportNameField } from "./ImportNameField";
@@ -58,7 +58,7 @@ export function ImportHeaderRow({
         <GripVertical size={10} />
       </span>
 
-      <Button
+      {imp.kind !== "bitmap" ? <Button
         aria-expanded={isExpanded}
         aria-label={isExpanded ? "Collapse paths" : "Expand paths"}
         variant="ghost"
@@ -67,7 +67,7 @@ export function ImportHeaderRow({
         onClick={onExpandClick}
       >
         {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-      </Button>
+      </Button> : <ImageIcon size={11} className="text-content-faint shrink-0" aria-label="Bitmap" />}
 
       <span
         className="text-content-faint hover:text-content text-[10px] cursor-pointer shrink-0"
@@ -88,7 +88,7 @@ export function ImportHeaderRow({
       />
 
       <span className="text-[9px] text-content-faint shrink-0 ml-1">
-        {imp.paths.length}p
+        {imp.kind === "bitmap" ? "Bitmap" : `${imp.paths.length}p`}
       </span>
       <Button
         variant="ghost"

@@ -1,16 +1,20 @@
 import {
   DEFAULT_HATCH_ANGLE_DEG,
   DEFAULT_HATCH_SPACING_MM,
-  type SvgImport,
+  type CanvasItem,
+  isBitmapImport,
+  isVectorImport,
 } from "../../../../../types";
 import {
   applyImportHatch,
   regenerateImportHatching,
 } from "../services/hatching";
+import { prepareCanvasAssets, pruneCanvasAssets } from "../services/history";
 import { vectorObjectsForImports } from "../services/vectorObjects";
 import type { CanvasStateCreator, ImportSlice } from "../types";
 
-function withDefaultHatchSettings(imp: SvgImport): SvgImport {
+function withDefaultHatchSettings(imp: CanvasItem): CanvasItem {
+  if (isBitmapImport(imp)) return { ...imp };
   const normalizedPaths = imp.paths.map((path) => {
     const sourceOutlineVisible =
       typeof path.sourceOutlineVisible === "boolean"
@@ -51,11 +55,16 @@ export function createImportSlice(
 ): CanvasStateCreator<ImportSlice> {
   return (set, get) => ({
     imports: [],
+    assets: {},
 
-    addImport: (imp) => {
+    addImport: (imp, asset) => {
+      if (get().imports.some((item) => item.id === imp.id)) throw new Error("Canvas item ID already exists.");
+      const normalized = withDefaultHatchSettings(imp);
+      const assets = prepareCanvasAssets(get(), [...get().imports, normalized], asset ? { [asset.id]: asset } : {});
       pushUndo();
       set((state) => {
-        state.imports.push(withDefaultHatchSettings(imp));
+        state.imports.push(normalized);
+        state.assets = assets;
       });
     },
 
@@ -63,19 +72,23 @@ export function createImportSlice(
       const index = get().imports.findIndex((item) => item.id === id);
       if (index < 0) return false;
       const normalized = withDefaultHatchSettings({ ...replacement, id });
+      const items = [...get().imports];
+      items[index] = normalized;
+      const assets = prepareCanvasAssets(get(), items);
       pushUndo();
       set((state) => {
         state.imports[index] = normalized;
+        state.assets = assets;
         if (state.selectedImportId === id) state.selectedPathId = null;
       });
       return true;
     },
-
     removeImport: (id) => {
       if (!get().imports.some((item) => item.id === id)) return;
       pushUndo();
       set((state) => {
         state.imports = state.imports.filter((item) => item.id !== id);
+        for (const group of state.layerGroups ?? []) group.importIds = group.importIds.filter((itemId) => itemId !== id);
         if (state.selectedImportId === id) {
           state.selectedImportId = null;
           state.selectedPathId = null;
@@ -91,13 +104,25 @@ export function createImportSlice(
       });
     },
 
+    editImport: (id, patch) => {
+      const current = get().imports.find((item) => item.id === id);
+      if (!current || Object.entries(patch).every(([key, value]) => current[key as keyof CanvasItem] === value)) return;
+      const normalized = withDefaultHatchSettings({ ...current, ...patch, id, kind: current.kind } as CanvasItem);
+      const items = get().imports.map((item) => item.id === id ? normalized : item);
+      const assets = prepareCanvasAssets(get(), items);
+      pushUndo();
+      set((state) => {
+        state.imports = items;
+        state.assets = assets;
+      });
+    },
     updateImport: (id, patch) =>
       set((state) => {
         const imp = state.imports.find((item) => item.id === id);
         if (!imp) return;
         Object.assign(imp, patch);
         if (
-          imp.hatchEnabled &&
+          isVectorImport(imp) && imp.hatchEnabled &&
           ("scale" in patch || "scaleX" in patch || "scaleY" in patch)
         ) {
           regenerateImportHatching(imp);
@@ -107,7 +132,7 @@ export function createImportSlice(
     updatePath: (importId, pathId, patch) =>
       set((state) => {
         const imp = state.imports.find((item) => item.id === importId);
-        if (!imp) return;
+        if (!imp || !isVectorImport(imp)) return;
         const path = imp.paths.find((item) => item.id === pathId);
         if (path) Object.assign(path, patch);
       }),
@@ -115,7 +140,7 @@ export function createImportSlice(
     updateImportLayer: (importId, layerId, visible) =>
       set((state) => {
         const imp = state.imports.find((item) => item.id === importId);
-        if (!imp?.layers) return;
+        if (!imp || !isVectorImport(imp) || !imp.layers) return;
         const layer = imp.layers.find((item) => item.id === layerId);
         if (layer) layer.visible = visible;
       }),
@@ -123,13 +148,13 @@ export function createImportSlice(
     removePath: (importId, pathId) =>
       set((state) => {
         const imp = state.imports.find((item) => item.id === importId);
-        if (!imp) return;
+        if (!imp || !isVectorImport(imp)) return;
         imp.paths = imp.paths.filter((item) => item.id !== pathId);
         if (state.selectedPathId === pathId) state.selectedPathId = null;
       }),
 
     clearImports: () => {
-      if (get().imports.length === 0) return;
+      if (get().imports.length === 0 && get().layerGroups.length === 0 && !get().pageTemplate) return;
       pushUndo();
       set((state) => {
         state.imports = [];
@@ -138,13 +163,18 @@ export function createImportSlice(
         state.allImportsSelected = false;
         state.selectedGroupId = null;
         state.layerGroups = [];
+        state.pageTemplate = null;
+        pruneCanvasAssets(state);
       });
     },
 
-    loadLayout: (imports, layerGroups, pageTemplate) => {
+    loadLayout: (imports, layerGroups, pageTemplate, incomingAssets) => {
+      const normalized = imports.map(withDefaultHatchSettings);
+      const assets = prepareCanvasAssets(get(), normalized, incomingAssets);
       pushUndo();
       set((state) => {
-        state.imports = imports.map(withDefaultHatchSettings);
+        state.imports = normalized;
+        state.assets = assets;
         state.selectedImportId = null;
         state.selectedPathId = null;
         state.allImportsSelected = false;
@@ -164,7 +194,7 @@ export function createImportSlice(
     applyHatch: (importId, spacingMM, angleDeg, enabled) =>
       set((state) => {
         const imp = state.imports.find((item) => item.id === importId);
-        if (!imp) return;
+        if (!imp || !isVectorImport(imp)) return;
         applyImportHatch(imp, spacingMM, angleDeg, enabled);
       }),
   });

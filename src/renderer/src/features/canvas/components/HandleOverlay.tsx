@@ -1,13 +1,13 @@
 import { useCanvasStore } from "../../../store/canvasStore";
 import { selectPlotCanvasHandleOverlayState } from "../../../store/canvasSelectors";
-import { type SvgImport } from "../../../../../types";
+import { type CanvasItem } from "../../../../../types";
 import { HANDLE_SCREEN_R, MM_TO_PX, PAD, ROTATE_CURSOR } from "../constants";
 import type { HandlePos } from "../types";
 import { DeleteActionBadge } from "./DeleteActionBadge";
 import { SelectionOverlay } from "./SelectionOverlay";
 
 interface HandleOverlayProps {
-  imp: SvgImport;
+  imp: CanvasItem;
   zoom: number;
   panX: number;
   panY: number;

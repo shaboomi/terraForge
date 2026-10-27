@@ -1,5 +1,5 @@
 import type {
-  SvgImport,
+  CanvasItem,
   LayerGroup,
   PageSize,
   PageTemplate,
@@ -31,7 +31,7 @@ interface CanvasSvgContentProps {
   isCenter: boolean;
   isRight: boolean;
   isBottom: boolean;
-  imports: SvgImport[];
+  imports: CanvasItem[];
   selectedImportId: string | null;
   allImportsSelected: boolean;
   selectedGroupId: string | null;

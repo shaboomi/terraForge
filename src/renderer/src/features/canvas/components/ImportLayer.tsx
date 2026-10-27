@@ -1,8 +1,8 @@
-import { type SvgImport } from "../../../../../types";
+import { type CanvasItem } from "../../../../../types";
 import { MM_TO_PX, PAD } from "../constants";
 
 interface ImportLayerProps {
-  imp: SvgImport;
+  imp: CanvasItem;
   selected: boolean;
   onImportMouseDown: (e: React.MouseEvent, id: string) => void;
   getBedY: (mm: number) => number;

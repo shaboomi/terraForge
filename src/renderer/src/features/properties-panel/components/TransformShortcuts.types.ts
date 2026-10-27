@@ -17,6 +17,7 @@ export interface TransformShortcutsProps {
   onFitHorizontal: () => void;
   onFitVertical: () => void;
   onResetScale: () => void;
+  resetScaleTitle?: string;
   onTemplateScaleEnabledChange: (v: boolean) => void;
   onTemplateScaleTargetChange: (v: "page" | "margin") => void;
   onRotateCcw: () => void;

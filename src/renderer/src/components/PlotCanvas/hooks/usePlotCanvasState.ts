@@ -11,6 +11,7 @@ import { useStableMachineState } from "../../../hooks/useStableMachineState";
 
 export function usePlotCanvasState() {
   const canvas = useCanvasStore(useShallow(selectPlotCanvasCanvasState));
+  const assets = useCanvasStore((state) => state.assets);
   const toolpath = useCanvasStore(useShallow(selectPlotCanvasToolpathState));
 
   const activeConfig = useMachineStore((s) => s.activeConfig);
@@ -34,6 +35,7 @@ export function usePlotCanvasState() {
 
   return {
     canvas,
+    assets,
     toolpath,
     activeConfig,
     theme,

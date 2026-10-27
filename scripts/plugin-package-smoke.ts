@@ -111,8 +111,6 @@ async function main(): Promise<void> {
       catch { return 0; }
     }, { timeout: 10000 }).toBe(1);
     const layout = JSON.parse(readFileSync(layoutFile, "utf8")) as CanvasLayout;
-    expect(layout.tfVersion).toBe(1);
-    expect(layout).not.toHaveProperty("assets");
     expect(layout.imports[0]).toMatchObject({
       name: "Example Grid", svgWidth: 50, svgHeight: 40,
       pluginSource: { pluginId: "terraforge.example-grid", pluginVersion: "1.0.0",
@@ -208,7 +206,7 @@ async function main(): Promise<void> {
     expect(existsSync(path.join(profileDirectory, "plugins-dev"))).toBe(false);
     expect(existsSync(ignoredOverride)).toBe(false);
     success = { status: "passed", packaged: true, executable: EXECUTABLE, version: first.version,
-      electronVersion: first.electronVersion, layoutVersion: layout.tfVersion, generatedPaths: layout.imports[0].paths.length,
+      electronVersion: first.electronVersion, generatedPaths: layout.imports[0].paths.length,
       pluginDirectory: "plugins", testingDirectoryOverrideIgnored: true, testingTimeoutOverrideIgnored: true,
       exampleDiscoveredAfterRestart: true, updatedInPlace: true, updateUndoRestored: true,
       savedControlsRestored: true, temporaryProfileRemoved: true,

@@ -1,11 +1,11 @@
 import type { DragEvent, ReactNode } from "react";
-import type { LayerGroup, SvgImport } from "../../../../../types";
+import type { LayerGroup, CanvasItem } from "../../../../../types";
 import { EmptyGroupDropHint } from "./EmptyGroupDropHint";
 import { GroupHeaderRow } from "./GroupHeaderRow";
 
 interface GroupedImportsGroupProps {
   group: LayerGroup;
-  members: SvgImport[];
+  members: CanvasItem[];
   isCollapsed: boolean;
   isDropTarget: boolean;
   isSelected: boolean;
@@ -30,7 +30,7 @@ interface GroupedImportsGroupProps {
   ) => void;
   onCancelGroupRename: () => void;
   onRemoveLayerGroup: (groupId: string) => void;
-  renderImport: (imp: SvgImport, indented: boolean) => ReactNode;
+  renderImport: (imp: CanvasItem, indented: boolean) => ReactNode;
 }
 
 export function GroupedImportsGroup({

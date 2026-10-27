@@ -136,8 +136,6 @@ test("generator controls work on an empty canvas and output supports edit, undo,
     catch { return 0; }
   }).toBe(1);
   const saved = JSON.parse(readFileSync(savedPath, "utf8"));
-  expect(saved.tfVersion).toBe(1);
-  expect(saved).not.toHaveProperty("assets");
   expect(saved.imports[0]).toMatchObject({ name: NAME, svgWidth: 55, svgHeight: 12 });
   expect(saved.imports[0].paths).toHaveLength(1);
 

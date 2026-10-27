@@ -4,10 +4,12 @@ export const selectPropertiesPanelStoreBindingsState = (
   state: CanvasState,
 ) => ({
   imports: state.imports,
+  assets: state.assets,
   selectedImportId: state.selectedImportId,
   selectImport: state.selectImport,
   removeImport: state.removeImport,
   updateImport: state.updateImport,
+  editImport: state.editImport,
   updatePath: state.updatePath,
   updateImportLayer: state.updateImportLayer,
   removePath: state.removePath,

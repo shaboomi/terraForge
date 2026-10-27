@@ -26,6 +26,8 @@ beforeEach(() => {
   });
   useCanvasStore.setState({
     imports: [],
+    assets: {}, layerGroups: [], pageTemplate: null, undoStack: [], redoStack: [], clipboardImport: null,
+    selectedGroupId: null, allImportsSelected: false,
     selectedImportId: null,
     selectedPathId: null,
     gcodeToolpath: null,

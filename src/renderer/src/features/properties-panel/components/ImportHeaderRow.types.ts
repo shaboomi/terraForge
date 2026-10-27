@@ -1,8 +1,8 @@
 import type { DragEvent } from "react";
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 
 export interface ImportHeaderRowProps {
-  imp: SvgImport;
+  imp: CanvasItem;
   indented: boolean;
   isExpanded: boolean;
   isEditingName: boolean;

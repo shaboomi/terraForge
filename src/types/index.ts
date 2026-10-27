@@ -312,35 +312,29 @@ export const DEFAULT_HATCH_ANGLE_DEG = 45;
 /** Default stroke width in mm — used on import and as the UI default. */
 export const DEFAULT_STROKE_WIDTH_MM = 0.5;
 
-/** One imported SVG file, treated as a positioned group on the bed */
-export interface SvgImport {
-  pluginSource?: { pluginId: string; pluginVersion: string; parameters: PluginParameters };
+/** Shared placement and source-local frame for vector and bitmap artwork. */
+export interface CanvasItemBase {
   id: string;
-  /** Display name — defaults to filename without extension */
   name: string;
-  paths: SvgPath[];
-  /** Position of the SVG's bottom-left corner on the bed (mm) */
   x: number;
   y: number;
-  /** Uniform scale factor (SVG user units → mm).  Used for both axes when
-   *  scaleX / scaleY are absent (ratio locked). */
   scale: number;
-  /**
-   * Per-axis scale overrides — only set when ratio lock is OFF.
-   * When present these replace `scale` for the respective axis so that
-   * W and H can be set independently.  Drag-to-resize handles always
-   * restore uniform scale.
-   */
   scaleX?: number;
   scaleY?: number;
   rotation: number;
   visible: boolean;
-  /** SVG viewBox dimensions in user units */
+  /** Source-local width/height: vector user units or bitmap pixels. */
   svgWidth: number;
   svgHeight: number;
-  /** ViewBox origin (for SVGs with non-zero viewBox x/y offset) */
   viewBoxX: number;
   viewBoxY: number;
+}
+
+/** One vector import. An absent kind remains valid for legacy layouts. */
+export interface SvgImport extends CanvasItemBase {
+  kind?: "vector";
+  pluginSource?: { pluginId: string; pluginVersion: string; parameters: PluginParameters };
+  paths: SvgPath[];
   /** Per-import hatch fill settings (override the global GcodePrefs defaults).
    *  Optional at creation — `addImport` fills in defaults if absent. */
   hatchEnabled?: boolean;
@@ -361,6 +355,40 @@ export interface SvgImport {
   layers?: SvgLayer[];
 }
 
+/** A bitmap references an immutable, embedded, normalized PNG asset. */
+export interface BitmapImport extends CanvasItemBase {
+  kind: "bitmap";
+  assetId: string;
+  opacity: number;
+}
+
+export type CanvasItem = SvgImport | BitmapImport;
+
+export interface BitmapAsset {
+  readonly id: string;
+  readonly mimeType: "image/png";
+  /** Raw base64, without a data: URL prefix. */
+  readonly data: string;
+  readonly widthPx: number;
+  readonly heightPx: number;
+}
+
+export type BitmapAssetTable = Readonly<Record<string, BitmapAsset>>;
+
+export function isBitmapImport(item: CanvasItem): item is BitmapImport {
+  return item.kind === "bitmap";
+}
+
+export function isVectorImport(item: CanvasItem): item is SvgImport {
+  return item.kind !== "bitmap";
+}
+
+/** Asset bytes live outside history; snapshots retain their item references. */
+export interface CanvasSnapshot {
+  imports: CanvasItem[];
+  layerGroups: LayerGroup[];
+  pageTemplate: PageTemplate | null;
+}
 // ─── Page Templates ──────────────────────────────────────────────────────────
 
 /** A named paper/page size definition. Dimensions are in portrait orientation. */
@@ -401,7 +429,8 @@ export interface CanvasLayout {
   /** Format version — increment if the schema changes in a breaking way. */
   tfVersion: number;
   savedAt: string;
-  imports: SvgImport[];
+  imports: CanvasItem[];
+  assets?: BitmapAssetTable;
   /** Layer groups — optional for backward compatibility with older layout files. */
   layerGroups?: LayerGroup[];
   /** Active page template — optional for backward compatibility. */
@@ -474,6 +503,7 @@ export interface GcodeOptions {
 // ─── Background Tasks ─────────────────────────────────────────────────────────
 
 export type TaskType =
+  | "bitmap-import"
   | "plugin-run"
   | "svg-parse"
   | "gcode-generate"
@@ -600,6 +630,8 @@ export interface FsApi {
   readFile: (filePath: string) => Promise<string>;
   /** Read a file as raw bytes — required for binary formats such as PDF. */
   readFileBinary: (filePath: string) => Promise<Uint8Array>;
+  readBitmapFile: (filePath: string) => Promise<Uint8Array>;
+  readLayoutFile: (filePath: string) => Promise<string>;
   writeFile: (filePath: string, content: string) => Promise<void>;
   saveGcodeDialog: (defaultName: string) => Promise<string | null>;
   saveFileDialog: (defaultName: string) => Promise<string | null>;

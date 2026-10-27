@@ -1,8 +1,8 @@
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import { ROT_PRESETS, ROT_STEPS, type RotStep } from "../utils/rotation";
 
 interface UseImportPropertiesFormModelArgs {
-  imp: SvgImport;
+  imp: CanvasItem;
   bedW: number;
   bedH: number;
   origin: "bottom-left" | "top-left" | "bottom-right" | "top-right" | "center";
@@ -16,7 +16,7 @@ interface UseImportPropertiesFormModelArgs {
   rotStep: RotStep;
   stepFlyoutOpen: boolean;
   showCentreMarker: boolean;
-  onUpdate: (changes: Partial<SvgImport>) => void;
+  onUpdate: (changes: Partial<CanvasItem>) => void;
   onRatioLockedChange: (v: boolean) => void;
   onTemplateScaleEnabledChange: (v: boolean) => void;
   onTemplateScaleTargetChange: (v: "page" | "margin") => void;
@@ -176,9 +176,10 @@ export function useImportPropertiesFormModel({
             : {}),
       });
     },
+    resetScaleTitle: imp.kind === "bitmap" ? "Reset image size to 96 DPI" : undefined,
     onResetScale: () => {
       onRatioLockedChange(true);
-      onUpdate({ scale: 1, scaleX: undefined, scaleY: undefined });
+      onUpdate({ scale: imp.kind === "bitmap" ? 25.4 / 96 : 1, scaleX: undefined, scaleY: undefined });
     },
     onRotateCcw: () => onUpdate({ rotation: imp.rotation - rotStep }),
     onRotateCw: () => onUpdate({ rotation: imp.rotation + rotStep }),

@@ -1,4 +1,4 @@
-import type { SvgImport } from "../../../../../types";
+import type { CanvasItem } from "../../../../../types";
 import type { UngroupedImportsSectionProps } from "../components/UngroupedImportsSection.types";
 
 export function useUngroupedImportsSectionModel({
@@ -14,7 +14,7 @@ export function useUngroupedImportsSectionModel({
   );
 
   return {
-    ungroupedImports: ungroupedImports as SvgImport[],
+    ungroupedImports: ungroupedImports as CanvasItem[],
     isDropTarget: dragOverGroupId === "none",
   };
 }

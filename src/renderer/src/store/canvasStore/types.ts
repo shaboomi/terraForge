@@ -1,6 +1,9 @@
 import type { StateCreator } from "zustand";
 import type {
-  SvgImport,
+  CanvasItem,
+  BitmapAsset,
+  BitmapAssetTable,
+  CanvasSnapshot,
   SvgPath,
   VectorObject,
   LayerGroup,
@@ -10,11 +13,13 @@ import type {
 import type { GcodeToolpath } from "../../utils/gcodeParser";
 
 export interface ImportSlice {
-  imports: SvgImport[];
-  addImport: (imp: SvgImport) => void;
-  replaceImport: (id: string, replacement: SvgImport) => boolean;
+  imports: CanvasItem[];
+  assets: BitmapAssetTable;
+  addImport: (imp: CanvasItem, asset?: BitmapAsset) => void;
+  replaceImport: (id: string, replacement: CanvasItem) => boolean;
   removeImport: (id: string) => void;
-  updateImport: (id: string, patch: Partial<SvgImport>) => void;
+  updateImport: (id: string, patch: Partial<CanvasItem>) => void;
+  editImport: (id: string, patch: Partial<CanvasItem>) => void;
   updatePath: (
     importId: string,
     pathId: string,
@@ -28,11 +33,12 @@ export interface ImportSlice {
   removePath: (importId: string, pathId: string) => void;
   clearImports: () => void;
   loadLayout: (
-    imports: SvgImport[],
+    imports: CanvasItem[],
     layerGroups?: LayerGroup[],
     pageTemplate?: PageTemplate | null,
+    assets?: BitmapAssetTable,
   ) => void;
-  selectedImport: () => SvgImport | undefined;
+  selectedImport: () => CanvasItem | undefined;
   toVectorObjects: () => VectorObject[];
   applyHatch: (
     importId: string,
@@ -54,7 +60,7 @@ export interface SelectionSlice {
 }
 
 export interface ClipboardSlice {
-  clipboardImport: SvgImport | null;
+  clipboardImport: CanvasItem | null;
   copyImport: (id: string) => void;
   cutImport: (id: string) => void;
   pasteImport: () => void;
@@ -62,8 +68,8 @@ export interface ClipboardSlice {
 }
 
 export interface UndoRedoSlice {
-  undoStack: SvgImport[][];
-  redoStack: SvgImport[][];
+  undoStack: CanvasSnapshot[];
+  redoStack: CanvasSnapshot[];
   undo: () => void;
   redo: () => void;
   snapshotForGesture: () => void;

@@ -25,6 +25,7 @@ import {
 import { generateHatchPaths } from "../../../utils/hatchFill";
 import { parseGcode } from "../../../utils/gcodeParser";
 import { importPdf } from "../../../utils/pdfImport";
+import { useBitmapImportActions } from "./useBitmapImportActions";
 import {
   type SvgImport,
   type SvgPath,
@@ -77,8 +78,9 @@ function computeRenderedPathBounds(pathDs: string[]) {
   return { minX, minY, maxX, maxY };
 }
 
-/** Orchestrates SVG, PDF, and G-code file imports into the canvas store. */
+/** Orchestrates SVG, PDF, bitmap and G-code imports into the canvas store. */
 export function useImportActions() {
+  const handleImportBitmapFile = useBitmapImportActions();
   const { addImport, setGcodeToolpath, setGcodeSource, selectToolpath } =
     useCanvasStore(useShallow(selectImportActionsCanvasState));
   const upsertTask = useTaskStore((s) => s.upsertTask);
@@ -454,8 +456,13 @@ export function useImportActions() {
       await handleImportSvgFile(filePath);
     } else if (ext === "pdf") {
       await handleImportPdfFile(filePath);
-    } else {
+    } else if (["png", "jpg", "jpeg"].includes(ext)) {
+      await handleImportBitmapFile(filePath);
+    } else if (["gcode", "nc", "g", "gc", "gco", "ngc", "ncc", "cnc", "tap"].includes(ext)) {
       await handleImportGcodeFile(filePath);
+    } else {
+      upsertTask({ id: uuid(), type: "bitmap-import", label: "Unsupported import format", progress: null,
+        status: "error", error: "Choose an SVG, PDF, PNG, JPG, JPEG or supported G-code file." });
     }
   };
 
@@ -463,6 +470,7 @@ export function useImportActions() {
     handleImport,
     handleImportSvgFile,
     handleImportPdfFile,
+    handleImportBitmapFile,
     handleImportGcodeFile,
   };
 }

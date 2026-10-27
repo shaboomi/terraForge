@@ -8,7 +8,7 @@ export function ImportRowCardDetails(props: ImportPropertiesFormProps) {
       className="px-3 pb-3 pt-2 border-t border-border-ui/30"
       onDragStart={(e) => e.stopPropagation()}
     >
-      <PluginArtworkAction artwork={props.imp} />
+      {props.imp.kind !== "bitmap" && <PluginArtworkAction artwork={props.imp} />}
       <ImportPropertiesForm {...props} />
     </div>
   );

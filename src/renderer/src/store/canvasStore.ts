@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { canvasSnapshot, pruneCanvasAssets } from "./canvasStore/services/history";
 import { immer } from "zustand/middleware/immer";
 import type { CanvasState } from "./canvasStore/types";
 import { generateCopyName } from "./canvasStore/services/clipboard";
@@ -15,13 +16,14 @@ export { generateCopyName };
 export const useCanvasStore = create<CanvasState>()(
   immer((set, get, store) => {
     const pushUndo = () => {
-      const snap = structuredClone(get().imports);
+      const snap = canvasSnapshot(get());
       set((state) => {
         state.undoStack.push(snap);
         if (state.undoStack.length > 50)
           state.undoStack.splice(0, state.undoStack.length - 50);
         // Any new edit invalidates the redo history.
         state.redoStack = [];
+        pruneCanvasAssets(state);
       });
     };
 

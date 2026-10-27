@@ -150,9 +150,9 @@ Properties renders declared number, slider, boolean, select, text and colour con
 
 Add artwork commits one ordinary vector import at unit scale as one undo step, with `pluginSource` identity/version/parameters. Oversized frames are rejected rather than cropped or silently scaled. Generated artwork uses existing editing, layout persistence and G-code conversion, and remains usable without the plugin. Cancelled, failed and stale-context runs leave the document unchanged.
 
-The plugin panel can be minimised, expanded or closed without deleting generated artwork. Selecting an existing generated item exposes Edit with its plugin, which restores its saved parameters when a compatible enabled plugin is available. Update artwork replaces that item while preserving its identity and placement; one Undo restores the previous geometry and parameters. This works with existing version-1 vector layouts.
+The plugin panel can be minimised, expanded or closed without deleting generated artwork. Selecting an existing generated item exposes Edit with its plugin, which restores its saved parameters when a compatible enabled plugin is available. Update artwork replaces that item while preserving its identity and placement; one Undo restores the previous geometry and parameters. Saved layouts preserve this workflow.
 
-PNG/JPEG import, bitmap assets, selected bitmap/vector inputs, raster output and preview/apply overlays are planned separately.
+Stage 2 adds PNG/JPEG import, a shared bitmap/vector canvas model, embedded image assets, version-2 layouts and undoable groups. Selected bitmap/vector plugin inputs, raster output and preview/apply overlays remain Stage 3.
 
 4. Data Models (Mandatory)
    MachineConfig
@@ -197,7 +197,7 @@ PNG/JPEG import, bitmap assets, selected bitmap/vector inputs, raster output and
    name: string // human-readable label (inkscape:label, id, class, or positional fallback)
    visible: boolean // initial value mirrors the SVG source (display:none → false); toggled in UI
    }
-   SvgImport (positioned vector import)
+   SvgImport (vector variant of CanvasItem)
    Code
    {
    id: string
@@ -259,7 +259,8 @@ PNG/JPEG import, bitmap assets, selected bitmap/vector inputs, raster output and
    {
    tfVersion: number
    savedAt: string
-   imports: SvgImport[] // version-1 vector layout contents
+   imports: CanvasItem[]
+   assets?: BitmapAssetTable // embedded normalized PNG assets in version 2
    layerGroups?: LayerGroup[]
    pageTemplate?: PageTemplate | null
    }
@@ -694,3 +695,15 @@ allows cancellation of any long‑running operation
 
 If you understand this specification, respond with:
 “terraForge specification loaded and ready.”
+
+4b. Bitmap Document Foundation — Stage 2
+
+The live canvas uses `CanvasItem = SvgImport | BitmapImport`. Both share placement, visibility and source-frame dimensions; bitmaps have an asset reference and opacity, with no vector paths or stroke/hatch controls. Immutable normalized PNG assets sit outside mutable item/history snapshots and are retained while referenced by the document, undo/redo or clipboard.
+
+PNG/JPG/JPEG import checks encoded size and source dimensions before decoding, applies EXIF orientation, normalizes to sRGB PNG, and deduplicates by content hash. Initial sizing uses 96 pixels per inch, uniformly fitted to the available page/bed.
+
+Version-2 `.tforge` JSON contains canvas items, embedded assets, groups and page settings. Version-1 vector layouts migrate without changing geometry. Structural validation, PNG integrity and actual pixel decoding complete before document replacement; unsupported future versions and corrupt data leave the current document intact.
+
+Current limits: 20 MiB imported source, 8192 pixels per side, 16 Mi pixels per image, 32 Mi aggregate retained pixels, 32 MiB per normalized PNG, 64 MiB retained encoded assets, 96 MiB layout file. See [Stage 2](plugin-stage-2.md).
+
+Bitmap items never project into G-code. Mixed layouts use the existing vector pipeline; bitmap-only scenes explain that vector artwork is needed. Plugin bitmap/vector inputs, raster output and preview processing remain Stage 3.

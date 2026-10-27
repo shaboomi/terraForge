@@ -1,4 +1,4 @@
-import type { SvgImport } from "../../../../../types";
+import { isVectorImport, type CanvasItem } from "../../../../../types";
 
 export interface LayerDipOption {
   id: string;
@@ -7,7 +7,7 @@ export interface LayerDipOption {
   colorCode: string | undefined;
 }
 
-export function buildLayerDipOptions(imports: SvgImport[]): LayerDipOption[] {
+export function buildLayerDipOptions(imports: CanvasItem[]): LayerDipOption[] {
   const orderedLayerIds: string[] = [];
   const layerNamesById = new Map<string, string>();
   const layerColorById = new Map<string, string>();
@@ -34,7 +34,7 @@ export function buildLayerDipOptions(imports: SvgImport[]): LayerDipOption[] {
     }
   };
 
-  for (const importedSvg of imports) {
+  for (const importedSvg of imports.filter(isVectorImport)) {
     for (const layer of importedSvg.layers ?? []) {
       if (!orderedLayerIds.includes(layer.id)) {
         orderedLayerIds.push(layer.id);

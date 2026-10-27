@@ -7,7 +7,7 @@ import { useTaskStore } from "../../../store/taskStore";
 import { useMachineStore } from "../../../store/machineStore";
 import { useAppConfigStore } from "../../../store/appConfigStore";
 import { parseGcode } from "../../../utils/gcodeParser";
-import { type GcodeOptions, type VectorObject } from "../../../../../types";
+import { isVectorImport, type GcodeOptions, type VectorObject } from "../../../../../types";
 import type { GcodePrefs } from "../../../components/GcodeOptionsDialog";
 import { normalizeSvgColor } from "../../imports/services/svgImportHelpers";
 import { vectorObjectsForImportLayer } from "../../../store/canvasStore/services/vectorObjects";
@@ -230,6 +230,11 @@ export function useJobActions() {
   const handleGenerateGcode = async (prefs: GcodePrefs) => {
     const cfg = activeConfig();
     if (!cfg || imports.length === 0) return;
+    if (!imports.some(isVectorImport)) {
+      upsertTask({ id: uuid(), type: "gcode-generate", label: "Vector artwork required",
+        progress: null, status: "warning", error: "Bitmaps are reference images. Convert an image to vectors before plotting." });
+      return;
+    }
 
     if (prefs.exportPerLayer) {
       await handleGenerateGcodePerLayer(prefs, cfg);
@@ -533,7 +538,7 @@ export function useJobActions() {
 
     const allEntries: LayerEntry[] = useCanvasStore
       .getState()
-      .imports.flatMap((imp) => {
+      .imports.filter(isVectorImport).flatMap((imp) => {
         const layerIds = new Set(
           imp.paths
             .map((path) => path.layer)

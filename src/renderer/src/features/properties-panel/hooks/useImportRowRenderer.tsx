@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { SvgImport, SvgPath } from "../../../../../types";
+import type { CanvasItem, SvgPath } from "../../../../../types";
 import type { OriginType } from "../../../../../types";
 import type { RotStep } from "../utils/rotation";
 import { ImportRowCard } from "../components/ImportRowCard";
@@ -34,7 +34,7 @@ interface UseImportRowRendererArgs {
   importGroupId: (importId: string) => string | null;
   onSelectImport: (importId: string | null) => void;
   onToggleExpand: (importId: string) => void;
-  onUpdateImport: (importId: string, changes: Partial<SvgImport>) => void;
+  onUpdateImport: (importId: string, changes: Partial<CanvasItem>) => void;
   onStartImportRename: (importId: string, currentName: string) => void;
   onChangeImportRename: (nextValue: string) => void;
   onCommitImportRename: (importId: string, nextName: string) => void;
@@ -130,7 +130,7 @@ export function useImportRowRenderer({
   onApplyHatch,
 }: UseImportRowRendererArgs) {
   return useCallback(
-    (imp: SvgImport, indented: boolean) => {
+    (imp: CanvasItem, indented: boolean) => {
       const isSelected = imp.id === selectedImportId;
       const isExpanded = expandedIds.has(imp.id);
       const groupId = importGroupId(imp.id);

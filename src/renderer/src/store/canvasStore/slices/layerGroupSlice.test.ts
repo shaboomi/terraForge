@@ -74,6 +74,7 @@ describe("layerGroupSlice", () => {
 
   it("assignImportToGroup moves membership between groups", () => {
     const store = makeStore();
+    store.setState({ imports: [{ id: "imp1", name: "One", paths: [], x: 0, y: 0, scale: 1, rotation: 0, visible: true, svgWidth: 1, svgHeight: 1 }] as any });
     store.setState({
       layerGroups: [
         { id: "g1", name: "One", color: "#111", importIds: ["imp1"] },
