@@ -302,6 +302,30 @@ describe("parseGcode", () => {
     expect(r.feedrate).toBe(2000);
   });
 
+  it("applies feedrate-only blocks to subsequent moves without adding geometry", () => {
+    const r = parse("G1 F600\nX10 Y0\nF1200\nX20 Y0\nF1800");
+
+    expect(r.segments).toHaveLength(2);
+    expect(r.segments?.map((segment) => segment.feed)).toEqual([600, 1200]);
+    expect(r.segments?.map((segment) => segment.lineNum)).toEqual([2, 4]);
+    expect(r.feedrate).toBe(1800);
+  });
+
+  it("retains feedrate changes from Z-only moves", () => {
+    const r = parse("G1 X10 Y0 F600\nG1 Z-1 F120\nX20 Y0");
+
+    expect(r.segments).toHaveLength(2);
+    expect(r.segments?.[1].feed).toBe(120);
+    expect(r.feedrate).toBe(120);
+  });
+
+  it("converts feedrate-only blocks in inches and preserves the physical feed across unit switches", () => {
+    const r = parse("G20 F10\nG1 X1\nG21\nX50\nF600\nX60");
+
+    expect(r.segments?.map((segment) => segment.feed)).toEqual([254, 254, 600]);
+    expect(r.feedrate).toBe(600);
+  });
+
   // ── Targeted branch coverage ──────────────────────────────────────────────
 
   it("updates minX when a later move goes to a smaller X (line 94)", () => {

@@ -195,26 +195,26 @@ export class FluidNCClient extends EventEmitter {
 
   async pauseJob(): Promise<void> {
     // '!' is the Grbl/FluidNC realtime Feed Hold character — must be sent raw
-    this.sendRealtime("!");
+    await this.sendRealtime("!");
   }
 
   async resumeJob(): Promise<void> {
     // '~' is the Grbl/FluidNC realtime Cycle Start / Resume character — must be sent raw
-    this.sendRealtime("~");
+    await this.sendRealtime("~");
   }
 
   async abortJob(): Promise<void> {
     // 0x18 is the Grbl/FluidNC realtime Soft Reset character — must be sent raw
-    this.sendRealtime("\x18");
+    await this.sendRealtime("\x18");
   }
 
   /** Send a realtime command byte directly over the WebSocket (bypasses HTTP). */
-  private sendRealtime(char: string): void {
+  private async sendRealtime(char: string): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(char);
     } else {
       // Fallback: send via HTTP command endpoint (may work depending on FW version)
-      this.sendCommand(char).catch(() => {});
+      await this.sendCommand(char);
     }
   }
 

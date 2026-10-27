@@ -6,7 +6,7 @@ interface ConsoleToolbarProps {
   status: MachineStatus | null;
   connected: boolean;
   isAlarm: boolean;
-  displayState: string;
+  displayState: MachineStatus["state"] | null | undefined;
   showMachineCoordinates: boolean;
   resetting: boolean;
   showRestartConfirm: boolean;

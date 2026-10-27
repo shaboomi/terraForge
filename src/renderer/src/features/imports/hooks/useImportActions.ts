@@ -113,18 +113,25 @@ export function useImportActions() {
         .map(Number);
       const viewBoxX = vbParts?.[0] ?? 0;
       const viewBoxY = vbParts?.[1] ?? 0;
-      const svgWidth = vbParts?.[2] ?? +(svgEl?.getAttribute("width") ?? 100);
-      const svgHeight = vbParts?.[3] ?? +(svgEl?.getAttribute("height") ?? 100);
 
       // Compute initial scale: mm per SVG user-unit.
       const physW = parseSvgLengthMM(svgEl?.getAttribute("width"));
       const physH = parseSvgLengthMM(svgEl?.getAttribute("height"));
+      // Without a viewBox, user units are CSS pixels even when the viewport
+      // dimensions use physical units such as mm or in.
+      const mmPerPixel = 25.4 / 96;
+      const svgWidth =
+        vbParts?.[2] ?? (physW != null ? physW / mmPerPixel : 100);
+      const svgHeight =
+        vbParts?.[3] ?? (physH != null ? physH / mmPerPixel : 100);
       const initScale =
-        physW != null
-          ? physW / svgWidth
-          : physH != null
-            ? physH / svgHeight
-            : 25.4 / 96;
+        !vbParts
+          ? mmPerPixel
+          : physW != null
+            ? physW / svgWidth
+            : physH != null
+              ? physH / svgHeight
+              : mmPerPixel;
 
       const name =
         filePath
@@ -134,7 +141,9 @@ export function useImportActions() {
 
       // Detect logical layer groups (<g> elements with explicit display or Inkscape markers).
       const layerGroupEls = Array.from(doc.querySelectorAll("g")).filter(
-        (g) => !g.closest("defs, clipPath, mask, symbol") && isLayerGroup(g),
+        (g) =>
+          !g.closest("defs, clipPath, mask, symbol, marker, pattern") &&
+          isLayerGroup(g),
       );
       const layers: SvgLayer[] = layerGroupEls.map((g, i) => ({
         id: g.id || `layer_${i}`,
@@ -147,6 +156,9 @@ export function useImportActions() {
       const layerGroupIds = new Set(layers.map((l) => l.id));
 
       const isIncludedByDisplayRules = (el: Element): boolean => {
+        if (el.closest("defs, clipPath, mask, symbol, marker, pattern"))
+          return false;
+        if (isDisplayNone(el, stylesheet)) return false;
         let cur = el.parentElement;
         while (cur && cur.tagName.toLowerCase() !== "svg") {
           if (isDisplayNone(cur, stylesheet)) {

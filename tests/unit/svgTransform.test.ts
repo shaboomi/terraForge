@@ -4,6 +4,8 @@ import {
   computePathsBounds,
   getAccumulatedTransform,
 } from "../../src/renderer/src/utils/svgTransform";
+import { tokenizePath } from "../../src/workers/gcodeEngine/stages/pathParsing";
+import { arcToBeziers } from "../../src/workers/gcodeEngine/stages/geometryFlattening";
 
 // ── applyMatrixToPathD ────────────────────────────────────────────────────────
 
@@ -69,6 +71,53 @@ describe("applyMatrixToPathD", () => {
     expect(result).toContain("A ");
     // endpoint should be scaled
     expect(result).toContain(",100,0"); // 50*2=100
+  });
+
+  it("rotates an elliptical arc's axes with its endpoints", () => {
+    const result = applyMatrixToPathD(
+      "M100 0 A100 50 0 0 1 0 50",
+      new DOMMatrix([0, 1, -1, 0, 0, 0]),
+    );
+
+    expect(result).toBe("M 0,100 A 100,50,90,0,1,-50,0");
+  });
+
+  it.each([
+    { name: "translation", phi: 32, matrix: [1, 0, 0, 1, 20, -15] },
+    { name: "rotation", phi: 0, matrix: [0, 1, -1, 0, 0, 0] },
+    { name: "scale and shear", phi: 25, matrix: [2, 0.3, 0.5, 0.8, 5, 10] },
+    { name: "reflection", phi: 45, matrix: [-1, 0, 0, 1, 10, 0] },
+  ])("preserves sampled ellipse geometry under $name", ({ phi, matrix }) => {
+    const radians = (phi * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const rx = 100;
+    const ry = 50;
+    const source = `M${rx * cos} ${rx * sin} A${rx} ${ry} ${phi} 0 1 ${-ry * sin} ${ry * cos}`;
+    const m = new DOMMatrix(matrix);
+    const commands = tokenizePath(applyMatrixToPathD(source, m));
+    const [startX, startY] = commands[0].args;
+    const [outRx, outRy, outPhi, largeArc, sweep, endX, endY] = commands[1].args;
+    const samples = arcToBeziers(
+      startX, startY, outRx, outRy, outPhi, largeArc, sweep, endX, endY,
+    );
+
+    const end = m.transformPoint({ x: -ry * sin, y: ry * cos });
+    expect(endX).toBeCloseTo(end.x, 5);
+    expect(endY).toBeCloseTo(end.y, 5);
+    expect(sweep).toBe(m.a * m.d - m.b * m.c < 0 ? 0 : 1);
+    expect(samples.length).toBeGreaterThan(2);
+
+    for (const point of samples) {
+      // Map each generated point back to the source ellipse and check its
+      // analytic equation. Cubic arc approximation adds less than 0.1% error.
+      const det = m.a * m.d - m.b * m.c;
+      const x = (m.d * (point.x - m.e) - m.c * (point.y - m.f)) / det;
+      const y = (-m.b * (point.x - m.e) + m.a * (point.y - m.f)) / det;
+      const localX = cos * x + sin * y;
+      const localY = -sin * x + cos * y;
+      expect(Math.abs((localX / rx) ** 2 + (localY / ry) ** 2 - 1)).toBeLessThan(0.001);
+    }
   });
 
   it("handles relative commands by converting to absolute first", () => {

@@ -13,7 +13,7 @@ import { createUndoRedoSlice } from "./canvasStore/slices/undoRedoSlice";
 export { generateCopyName };
 
 export const useCanvasStore = create<CanvasState>()(
-  immer((set, get) => {
+  immer((set, get, store) => {
     const pushUndo = () => {
       const snap = structuredClone(get().imports);
       set((state) => {
@@ -26,13 +26,13 @@ export const useCanvasStore = create<CanvasState>()(
     };
 
     return {
-      ...createToolpathSlice(set, get),
-      ...createUndoRedoSlice(set, get),
-      ...createPageTemplateSlice(set, get),
-      ...createClipboardSlice(pushUndo)(set, get),
-      ...createImportSlice(pushUndo)(set, get),
-      ...createLayerGroupSlice(set, get),
-      ...createSelectionSlice(set, get),
+      ...createToolpathSlice(set, get, store),
+      ...createUndoRedoSlice(set, get, store),
+      ...createPageTemplateSlice(set, get, store),
+      ...createClipboardSlice(pushUndo)(set, get, store),
+      ...createImportSlice(pushUndo)(set, get, store),
+      ...createLayerGroupSlice(set, get, store),
+      ...createSelectionSlice(set, get, store),
     };
   }),
 );

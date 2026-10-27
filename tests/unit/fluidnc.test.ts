@@ -335,6 +335,29 @@ describe("FluidNCClient", () => {
     expect(mockFetch).toHaveBeenCalled();
   });
 
+  it.each(["pauseJob", "resumeJob", "abortJob"] as const)(
+    "%s waits for the HTTP fallback and reports failures",
+    async (action) => {
+      let rejectCommand!: (error: Error) => void;
+      vi.spyOn(client, "sendCommand").mockReturnValue(
+        new Promise<string>((_resolve, reject) => {
+          rejectCommand = reject;
+        }),
+      );
+      const settled = vi.fn();
+      const result = client[action]().then(settled, (error: Error) => error);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+
+      const error = new Error("Controller unreachable");
+      rejectCommand(error);
+      await expect(result).resolves.toBe(error);
+      expect(settled).not.toHaveBeenCalled();
+    },
+  );
+
   // ── fetchFileText ───────────────────────────────────────────────────────
 
   it("fetches SD card file text via /sd/ prefix", async () => {

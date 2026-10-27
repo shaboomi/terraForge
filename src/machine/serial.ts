@@ -63,6 +63,11 @@ interface PendingCommand {
   timer: NodeJS.Timeout;
 }
 
+interface QueuedCommand {
+  run: () => void;
+  reject: (err: Error) => void;
+}
+
 // ─── SerialClient ─────────────────────────────────────────────────────────────
 
 /**
@@ -84,7 +89,7 @@ export class SerialClient extends EventEmitter {
   private parser: ReadlineParser | null = null;
 
   private pending: PendingCommand | null = null;
-  private queue: Array<() => void> = [];
+  private queue: QueuedCommand[] = [];
 
   private statusInterval: NodeJS.Timeout | null = null;
 
@@ -123,7 +128,10 @@ export class SerialClient extends EventEmitter {
       this.pending.reject(new Error("Serial port disconnected"));
       this.pending = null;
     }
-    this.queue = [];
+    const queued = this.queue.splice(0);
+    for (const command of queued) {
+      command.reject(new Error("Serial port disconnected"));
+    }
 
     if (this.port?.isOpen) {
       await new Promise<void>((resolve, reject) => {
@@ -173,10 +181,11 @@ export class SerialClient extends EventEmitter {
           reject(new Error(`Serial command timed out: ${cmd}`));
         }, timeoutMs);
 
-        this.pending = { lines, resolve, reject, timer };
+        const pending = { lines, resolve, reject, timer };
+        this.pending = pending;
 
         this.port.write(`${cmd}\n`, (err) => {
-          if (err) {
+          if (err && this.pending === pending) {
             clearTimeout(timer);
             this.pending = null;
             this.drainQueue();
@@ -186,7 +195,7 @@ export class SerialClient extends EventEmitter {
       };
 
       if (this.pending) {
-        this.queue.push(run);
+        this.queue.push({ run, reject });
       } else {
         run();
       }
@@ -195,7 +204,7 @@ export class SerialClient extends EventEmitter {
 
   private drainQueue(): void {
     const next = this.queue.shift();
-    if (next) next();
+    if (next) next.run();
   }
 
   // ─── Incoming data handler ────────────────────────────────────────────────
