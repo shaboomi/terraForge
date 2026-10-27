@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PluginsMenu } from "../features/plugins/PluginsMenu";
 import { useShallow } from "zustand/react/shallow";
 import TerraForgeLogotype from "../assets/terraForgeLogotype.svg?react";
 import { useCanvasStore } from "../store/canvasStore";
@@ -128,6 +129,8 @@ export function Toolbar({
           importsEmpty={imports.length === 0}
         />
       </div>
+
+      <PluginsMenu />
 
       <div className="h-4 w-px bg-border-ui" />
 

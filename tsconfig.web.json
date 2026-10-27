@@ -19,6 +19,7 @@
     "src/renderer/**/*.tsx",
     "src/renderer/**/*.d.ts",
     "src/workers/**/*.ts",
+    "src/plugin-runtime/**/*.ts",
     "src/types/**/*.ts"
   ],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]

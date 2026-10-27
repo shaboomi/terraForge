@@ -1,4 +1,4 @@
-﻿terraForge — Master Project Specification (Updated 2026-05-10)
+terraForge — Master Project Specification (Updated 2026-10-27)
 You are the primary software engineer for terraForge, a cross‑platform Electron + React application that serves as a full UI, job manager, and SVG→G‑code engine for the TerraPen pen plotter (FluidNC‑based). You must design and implement the entire application in a consistent, modular, production‑ready way.
 
 Your outputs must always follow the architecture, constraints, and definitions below. Do not invent APIs, libraries, or patterns not explicitly allowed here.
@@ -39,6 +39,8 @@ Dark and light theme support
 Page template overlays for print-size artwork
 
 Layout save/open/close
+
+Local JavaScript generators through the Stage 1 plugin engine
 
 The target hardware is the TerraPen, but the app must support multiple FluidNC‑based machines via configuration profiles.
 
@@ -95,6 +97,7 @@ UI feedback (spinner or progress bar)
    /preload (contextBridge API)
    /renderer (React UI)
    /workers (SVG/G-code engine)
+   /plugin-runtime (isolated plugin computation worker)
    /machine (FluidNC API client)
    /types (shared TypeScript interfaces)
    /tasks (background task orchestration)
@@ -128,9 +131,28 @@ loadPageSizes, openPageSizesFile
 },
 tasks: { cancel, onTaskUpdate },
 app: { getVersion, openExternal, onMenuAbout },
-edit: { onMenuCopy, onMenuCut, onMenuPaste, onMenuSelectAll, setHasSelection }
+edit: { onMenuCopy, onMenuCut, onMenuPaste, onMenuSelectAll, setHasSelection },
+plugins: { list, openFolder, installExample, setEnabled, run, cancel }
 }
 All methods must be explicitly typed.
+
+3.1. Local Plugin Engine — Stage 1
+
+The implemented contract is documented in [Plugin Stage 1](plugin-stage-1.md) and [Plugin Author Guide](plugin-author-guide.md). The broader [plugin/bitmap design](plugin-engine-design.md) remains a staged roadmap.
+
+Main process scans regular UTF-8 `.tf-plugin.js` files in the user plugin folder at startup. A strict JSON header declares identity/version/API version, category, accepted input, vector output and optional controls. Discovery parses metadata without evaluating JavaScript. Duplicate IDs, invalid metadata and incompatible versions are reported per file. The folder action reveals its actual location; explicit example installation refreshes the registry. Ordinary file changes require restart.
+
+Categories are Bitmap Processors, Generators and Font Tools. Stage 1 executes only `input: "none"` generators; the other input kinds have a visible explanation and disabled execution. Font Tools does not provide installed-font discovery, font shaping or editable text objects.
+
+The typed `window.terraForge.plugins` bridge manages discovery, settings and explicit runs. Plugin code runs in a dedicated sandboxed host and worker with no normal application bridge or Node integration. The host supervises progress, cancellation and a default 30-second deadline; it closes the runtime on completion, cancellation, timeout or application closure. Runs require the application's security protections to be enabled.
+
+Properties renders declared number, slider, boolean, select, text and colour controls. These controls remain available on an empty canvas. A run receives page dimensions in millimetres and validated parameters. Its result contains a positive width/height and polylines with local top-left coordinates, X right and Y down. Points must be finite and inside the declared frame; output size/count limits are enforced. The application constructs safe SVG paths rather than accepting plugin HTML or SVG markup.
+
+Add artwork commits one ordinary vector import at unit scale as one undo step, with `pluginSource` identity/version/parameters. Oversized frames are rejected rather than cropped or silently scaled. Generated artwork uses existing editing, layout persistence and G-code conversion, and remains usable without the plugin. Cancelled, failed and stale-context runs leave the document unchanged.
+
+The plugin panel can be minimised, expanded or closed without deleting generated artwork. Selecting an existing generated item exposes Edit with its plugin, which restores its saved parameters when a compatible enabled plugin is available. Update artwork replaces that item while preserving its identity and placement; one Undo restores the previous geometry and parameters. This works with existing version-1 vector layouts.
+
+PNG/JPEG import, bitmap assets, selected bitmap/vector inputs, raster output and preview/apply overlays are planned separately.
 
 4. Data Models (Mandatory)
    MachineConfig
@@ -175,12 +197,13 @@ All methods must be explicitly typed.
    name: string // human-readable label (inkscape:label, id, class, or positional fallback)
    visible: boolean // initial value mirrors the SVG source (display:none → false); toggled in UI
    }
-   SvgImport (primary canvas model — replaces VectorObject as the canvas unit)
+   SvgImport (positioned vector import)
    Code
    {
    id: string
    name: string // display name, defaults to filename without extension
    paths: SvgPath[] // all paths extracted from the import
+   pluginSource?: { pluginId: string; pluginVersion: string; parameters: Record<string, string | number | boolean> } // generator provenance
    x: number // bed position of SVG bottom-left corner (mm)
    y: number
    scale: number // uniform scale (SVG user units → mm)
@@ -236,7 +259,7 @@ All methods must be explicitly typed.
    {
    tfVersion: number
    savedAt: string
-   imports: SvgImport[]
+   imports: SvgImport[] // version-1 vector layout contents
    layerGroups?: LayerGroup[]
    pageTemplate?: PageTemplate | null
    }

@@ -196,6 +196,12 @@ export default function App() {
     setShowCollapsedAbortConfirm(true);
   };
 
+  useEffect(() => {
+    const revealProperties = () => setShowProperties(true);
+    window.addEventListener("terraforge:show-properties", revealProperties);
+    return () => window.removeEventListener("terraforge:show-properties", revealProperties);
+  }, []);
+
   // ─── Bootstrap ─────────────────────────────────────────────────────────────
 
   useEffect(() => {

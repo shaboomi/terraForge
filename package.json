@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:plugin-package": "node --experimental-strip-types scripts/plugin-package-smoke.ts",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "electron-vite build && playwright test --config=tests/e2e/playwright.config.ts",
