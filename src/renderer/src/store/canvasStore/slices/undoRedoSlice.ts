@@ -31,6 +31,7 @@ export const createUndoRedoSlice: CanvasStateCreator<UndoRedoSlice> = (set, get)
       const snapshot = structuredClone(before);
       state.imports = snapshot.imports;
       state.layerGroups = snapshot.layerGroups;
+      state.activePenId = snapshot.activePenId && state.layerGroups.some((group) => group.id === snapshot.activePenId) ? snapshot.activePenId : null;
       state.pageTemplate = snapshot.pageTemplate;
       state.undoStack.pop();
       state.redoStack.push(current);
@@ -48,6 +49,7 @@ export const createUndoRedoSlice: CanvasStateCreator<UndoRedoSlice> = (set, get)
       const snapshot = structuredClone(next);
       state.imports = snapshot.imports;
       state.layerGroups = snapshot.layerGroups;
+      state.activePenId = snapshot.activePenId && state.layerGroups.some((group) => group.id === snapshot.activePenId) ? snapshot.activePenId : null;
       state.pageTemplate = snapshot.pageTemplate;
       state.redoStack.pop(); state.undoStack.push(current);
       if (state.undoStack.length > 50) state.undoStack.splice(0, state.undoStack.length - 50);

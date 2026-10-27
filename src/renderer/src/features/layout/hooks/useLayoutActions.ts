@@ -10,16 +10,18 @@ import { parseCanvasLayout, serializeCanvasLayout } from "../../../../../types/l
 
 /** Orchestrates save, load, and close operations for canvas layout files. */
 export function useLayoutActions() {
-  const { imports, assets, layerGroups, pageTemplate, loadLayout, clearImports } =
+  const { imports, assets, layerGroups, activePenId, pageTemplate, loadLayout, clearImports } =
     useCanvasStore(useShallow(selectLayoutActionsCanvasState));
   const upsertTask = useTaskStore((s) => s.upsertTask);
 
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [pendingLayout, setPendingLayout] = useState<CanvasLayout | null>(null);
 
+  const hasLayout = imports.length > 0 || layerGroups.length > 0 || !!pageTemplate;
+
   /** Prompts for a save path and writes the current canvas layout to disk. */
   const handleSaveLayout = async () => {
-    if (imports.length === 0) return;
+    if (!hasLayout) return;
     const taskId = uuid();
     const baseName = imports.length === 1 ? imports[0].name : "layout";
     const defaultFilename = `${baseName}.tforge`;
@@ -40,6 +42,7 @@ export function useLayoutActions() {
         savedAt: new Date().toISOString(),
         imports,
         layerGroups,
+        activePenId,
         pageTemplate,
       };
       await window.terraForge.fs.writeFile(
@@ -88,10 +91,11 @@ export function useLayoutActions() {
         progress: 100,
         status: "completed",
       });
-      if (useCanvasStore.getState().imports.length > 0) {
+      const current = useCanvasStore.getState();
+      if (current.imports.length > 0 || current.layerGroups.length > 0 || current.pageTemplate) {
         setPendingLayout(layout);
       } else {
-        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate, layout.assets);
+        loadLayout(layout.imports, layout.layerGroups, layout.pageTemplate, layout.assets, layout.activePenId);
       }
     } catch (err) {
       upsertTask({
@@ -107,7 +111,7 @@ export function useLayoutActions() {
 
   /** Initiates the close-layout flow — shows a confirmation dialog if the canvas has content. */
   const handleCloseLayout = () => {
-    if (imports.length === 0) return;
+    if (!hasLayout) return;
     setShowCloseDialog(true);
   };
 

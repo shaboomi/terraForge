@@ -280,6 +280,8 @@ export function PlotCanvas() {
         canvasH={canvasH}
         imports={imports}
         assets={assets}
+        pageTemplate={pageTemplate}
+        pageSizes={pageSizes}
         selectedImportId={selectedImportId}
         allImportsSelected={allImportsSelected}
         selectedGroupId={selectedGroupId}

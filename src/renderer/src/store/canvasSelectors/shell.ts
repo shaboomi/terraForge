@@ -1,6 +1,7 @@
 import { isVectorImport } from "../../../../types";
 import type { CanvasState } from "../canvasStore/types";
 import { normalizeSvgColor } from "../../features/imports/services/svgImportHelpers";
+import { vectorObjectsForImports } from "../canvasStore/services/vectorObjects";
 
 export const selectToolbarCanvasState = (state: CanvasState) => ({
   imports: state.imports,
@@ -30,11 +31,9 @@ export const selectGcodeOptionsDialogCanvasState = (state: CanvasState) => ({
     ),
   ).size,
   colorGroupCount: new Set(
-    state.imports.filter(isVectorImport).flatMap((imp) =>
-      imp.paths
-        .map((p) => normalizeSvgColor(p.sourceColor ?? ""))
-        .filter((color): color is string => !!color),
-    ),
+    vectorObjectsForImports(state.imports, state.layerGroups)
+      .map((object) => normalizeSvgColor(object.sourceColor ?? ""))
+      .filter((color) => !!color),
   ).size,
   pageTemplate: state.pageTemplate,
 });

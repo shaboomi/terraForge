@@ -1,6 +1,7 @@
 import { PenLine } from "lucide-react";
 import type { PageSize, PageTemplate } from "../../../../types";
 import { Button } from "../ui";
+import { ColourPicker } from "./ColourPicker";
 
 interface PageTemplateControlsProps {
   pageTemplate: PageTemplate | null;
@@ -19,6 +20,7 @@ export function PageTemplateControls({
     <div className="flex items-center gap-1">
       <select
         className="bg-app border border-border-ui rounded px-2 py-1 text-sm text-content max-w-[110px]"
+        aria-label="Page size"
         value={pageTemplate?.sizeId ?? "none"}
         title="Page template — adds a size guide overlay to the canvas"
         onChange={(e) => {
@@ -27,6 +29,7 @@ export function PageTemplateControls({
             setPageTemplate(null);
           } else {
             setPageTemplate({
+              ...pageTemplate,
               sizeId: id,
               landscape: pageTemplate?.landscape ?? true,
               marginMM: pageTemplate?.marginMM ?? 20,
@@ -41,6 +44,15 @@ export function PageTemplateControls({
           </option>
         ))}
       </select>
+
+      <ColourPicker
+        label="Page colour"
+        value={pageTemplate?.color ?? "#ffffff"}
+        disabled={!pageTemplate}
+        onChange={(color) => {
+          if (pageTemplate) setPageTemplate({ ...pageTemplate, color });
+        }}
+      />
 
       {/* Portrait / landscape toggle — only shown when a page is selected */}
       {pageTemplate && (

@@ -15,7 +15,7 @@ import { BitmapImageCache } from "../utils/bitmapImageCache";
 import { useRef, useEffect, useState } from "react";
 import { MM_TO_PX, PAD } from "../constants";
 import type { Vp } from "../types";
-import type { CanvasItem, BitmapAssetTable, LayerGroup } from "../../../../../types";
+import type { CanvasItem, BitmapAssetTable, LayerGroup, PageTemplate, PageSize } from "../../../../../types";
 import type { GcodeToolpath } from "../../../utils/gcodeParser";
 import type { Theme } from "../../../store/themeStore";
 import {
@@ -41,6 +41,8 @@ export interface ToolpathOverlayProps {
   canvasH: number;
   imports: CanvasItem[];
   assets?: BitmapAssetTable;
+  pageTemplate?: PageTemplate | null;
+  pageSizes?: PageSize[];
   selectedImportId: string | null;
   allImportsSelected: boolean;
   selectedGroupId: string | null;
@@ -73,6 +75,8 @@ export function ToolpathOverlay({
   canvasH,
   imports,
   assets = EMPTY_ASSETS,
+  pageTemplate = null,
+  pageSizes = [],
   selectedImportId,
   allImportsSelected,
   selectedGroupId,
@@ -165,6 +169,22 @@ export function ToolpathOverlay({
           .getPropertyValue("--tf-bg-terminal")
           .trim() || "#0d1117";
       ctx.fillRect(bedXMin, bedYMin, bedXMax - bedXMin, bedYMax - bedYMin);
+
+      // Paint paper before artwork, in the same bed-relative SVG coordinates
+      // as PageTemplateOverlay. Its guides remain above the drawing canvas.
+      const pageSize = pageTemplate && pageSizes.find((size) => size.id === pageTemplate.sizeId);
+      if (pageTemplate && pageSize) {
+        const pageW = pageTemplate.landscape ? pageSize.heightMM : pageSize.widthMM;
+        const pageH = pageTemplate.landscape ? pageSize.widthMM : pageSize.heightMM;
+        ctx.setTransform(vp.zoom * dpr, 0, 0, vp.zoom * dpr, vp.panX * dpr, vp.panY * dpr);
+        ctx.fillStyle = pageTemplate.color ?? "#ffffff";
+        ctx.fillRect(
+          isRight ? PAD + (bedW - pageW) * MM_TO_PX : PAD,
+          isBottom ? PAD + (bedH - pageH) * MM_TO_PX : PAD,
+          pageW * MM_TO_PX,
+          pageH * MM_TO_PX,
+        );
+      }
       ctx.restore();
 
       drawImportsLayer({
@@ -239,6 +259,8 @@ export function ToolpathOverlay({
     respectSvgColorsOnCanvas,
     theme,
     assets,
+    pageTemplate,
+    pageSizes,
     imageRevision,
   ]);
 

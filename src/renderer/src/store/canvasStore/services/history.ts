@@ -3,8 +3,8 @@ import { isBitmapImport } from "../../../../../types";
 import { assertBitmapAssetBudget, validateBitmapAsset } from "../../../../../types/bitmapValidation";
 import type { CanvasState } from "../types";
 
-export function canvasSnapshot(state: Pick<CanvasState, "imports" | "layerGroups" | "pageTemplate">): CanvasSnapshot {
-  return structuredClone({ imports: state.imports, layerGroups: state.layerGroups ?? [], pageTemplate: state.pageTemplate ?? null });
+export function canvasSnapshot(state: Pick<CanvasState, "imports" | "layerGroups" | "pageTemplate"> & Partial<Pick<CanvasState, "activePenId">>): CanvasSnapshot {
+  return structuredClone({ imports: state.imports, layerGroups: state.layerGroups ?? [], pageTemplate: state.pageTemplate ?? null, ...(state.activePenId ? { activePenId: state.activePenId } : {}) });
 }
 
 function references(items: CanvasItem[], ids: Set<string>): void {

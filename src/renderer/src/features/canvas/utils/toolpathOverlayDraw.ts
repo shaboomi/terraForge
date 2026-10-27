@@ -195,24 +195,12 @@ export function drawImportsLayer({
     ctx.setLineDash([]);
 
     const groupColor = groupColorMap.get(imp.id);
-    const outlineColor = groupColor
-      ? isImpSelected
-        ? scaleHexColor(groupColor, 1.35)
-        : groupColor
-      : isImpSelected
-        ? "#60a0ff"
-        : "#3a6aaa";
-    const hatchColor = groupColor
-      ? isImpSelected
-        ? groupColor
-        : scaleHexColor(groupColor, 0.65)
-      : isImpSelected
-        ? "#4a88cc"
-        : "#2a5a8a";
+    const outlineColor = groupColor ?? (isImpSelected ? "#60a0ff" : "#3a6aaa");
+    const hatchColor = groupColor ?? (isImpSelected ? "#4a88cc" : "#2a5a8a");
 
     ctx.lineWidth =
       ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * MM_TO_PX) / avgImpScale;
-    if (respectSvgColorsOnCanvas) {
+    if (respectSvgColorsOnCanvas && !groupColor) {
       for (const entry of impCache.outlineByColor) {
         ctx.strokeStyle = entry.color ?? outlineColor;
         ctx.stroke(entry.path);
@@ -225,7 +213,7 @@ export function drawImportsLayer({
     ctx.lineWidth =
       ((imp.strokeWidthMM ?? DEFAULT_STROKE_WIDTH_MM) * 0.5 * MM_TO_PX) /
       avgImpScale;
-    if (respectSvgColorsOnCanvas) {
+    if (respectSvgColorsOnCanvas && !groupColor) {
       for (const entry of impCache.hatchByColor) {
         ctx.strokeStyle = entry.color ?? hatchColor;
         ctx.stroke(entry.path);
@@ -430,38 +418,7 @@ export function drawToolpathLayer({
     return rapidCalls;
   };
 
-  if (gcodeToolpath.cutPaths.length > 0) {
-    const defaultCutColor = toolpathSelected ? "#38bdf8" : "#0ea5e9";
-    const cutPathColors = useMetadataColors
-      ? gcodeToolpath.cutPathColors
-      : null;
-    const usePerPathColors =
-      !!cutPathColors &&
-      cutPathColors.length === gcodeToolpath.cutPaths.length &&
-      cutPathColors.some((value) => !!value);
-
-    if (!usePerPathColors) {
-      const allIndexes = gcodeToolpath.cutPaths.map((_, idx) => idx);
-      drawCutPaths(allIndexes, defaultCutColor);
-    } else {
-      const byColor = new Map<string, number[]>();
-      for (let i = 0; i < gcodeToolpath.cutPaths.length; i++) {
-        const key = cutPathColors[i] ?? defaultCutColor;
-        const bucket = byColor.get(key) ?? [];
-        bucket.push(i);
-        byColor.set(key, bucket);
-      }
-
-      let remainingCalls = MAX_CUT_CALLS;
-      for (const [strokeStyle, indexes] of byColor.entries()) {
-        if (remainingCalls <= 0) break;
-        const before = remainingCalls;
-        const used = drawCutPaths(indexes, strokeStyle);
-        remainingCalls = Math.max(0, before - used);
-      }
-    }
-  }
-
+  // Travel is a guide underneath the ink: overlapping rapids must never hide pen colours.
   const rp = gcodeToolpath.rapidPaths;
   if (rp.length >= 4) {
     const defaultRapidColor = "#4a5568";
@@ -495,6 +452,38 @@ export function drawToolpathLayer({
         if (remainingCalls <= 0) break;
         const before = remainingCalls;
         const used = drawRapidSegments(indexes, strokeStyle);
+        remainingCalls = Math.max(0, before - used);
+      }
+    }
+  }
+
+  if (gcodeToolpath.cutPaths.length > 0) {
+    const defaultCutColor = toolpathSelected ? "#38bdf8" : "#0ea5e9";
+    const cutPathColors = useMetadataColors
+      ? gcodeToolpath.cutPathColors
+      : null;
+    const usePerPathColors =
+      !!cutPathColors &&
+      cutPathColors.length === gcodeToolpath.cutPaths.length &&
+      cutPathColors.some((value) => !!value);
+
+    if (!usePerPathColors) {
+      const allIndexes = gcodeToolpath.cutPaths.map((_, idx) => idx);
+      drawCutPaths(allIndexes, defaultCutColor);
+    } else {
+      const byColor = new Map<string, number[]>();
+      for (let i = 0; i < gcodeToolpath.cutPaths.length; i++) {
+        const key = cutPathColors[i] ?? defaultCutColor;
+        const bucket = byColor.get(key) ?? [];
+        bucket.push(i);
+        byColor.set(key, bucket);
+      }
+
+      let remainingCalls = MAX_CUT_CALLS;
+      for (const [strokeStyle, indexes] of byColor.entries()) {
+        if (remainingCalls <= 0) break;
+        const before = remainingCalls;
+        const used = drawCutPaths(indexes, strokeStyle);
         remainingCalls = Math.max(0, before - used);
       }
     }

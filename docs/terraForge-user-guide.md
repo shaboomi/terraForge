@@ -1029,6 +1029,16 @@ Press **Ctrl+O** or choose **File → Open Layout**. Select a `.tforge` file. Th
 
 Choose **File → Close Layout**. If you have imports on the canvas, a confirmation dialog appears before clearing.
 
+### Page and Pen Colours
+
+Choose a page size, then click **Page colour** beside it. Pick a preset swatch, use **Custom colour** to open the system colour picker, or enter a three- or six-digit hex code (for example, `#fff` or `#fff4d6`). Press Enter or leave the hex field to apply it. The paper preview changes immediately; artwork stays above the paper. The page colour is a preview of your paper and is not plotted.
+
+Click **Pens** to add named pens using the same colour picker. Pens automatically sort from lightest to darkest by perceived brightness whenever a colour changes. Choose a pen in **Pens** to apply it immediately to selected vector artwork and automatically to future SVG, PDF or generated vector imports. The active pen name appears in the toolbar. Choose **Original SVG colours** to keep source colours for future imports and restore them on selected artwork. **Apply pen to selection** also lets you apply the current pen after selecting more artwork. The pen colour appears in the preview and generated colour metadata; the source artwork colours remain available if the pen is removed. Bitmap reference images cannot be assigned a pen.
+
+Pens also appear as layer groups in the Properties panel. Use **Export per layer group** to generate a separate G-code file for each pen, in lightest-first order; any unassigned artwork is exported separately. Change the physical pen between files. This does not add automatic pen changing.
+
+Use **File → Save Layout** (Ctrl+S) to keep page colour, pens and assignments in a `.tforge` file. You can save a page and pens before importing artwork. Open that layout to reuse them. Undo and redo also restore page colours, pen edits and assignments.
+
 ### Page Templates
 
 A page template overlays a paper-size boundary on the canvas as a visual guide for print-size artwork. The overlay is non-interactive and renders below your imports.

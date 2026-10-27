@@ -10,6 +10,7 @@ import {
   regenerateImportHatching,
 } from "../services/hatching";
 import { prepareCanvasAssets, pruneCanvasAssets } from "../services/history";
+import { compareColorsLightFirst } from "../../../../../types/colorUtils";
 import { vectorObjectsForImports } from "../services/vectorObjects";
 import type { CanvasStateCreator, ImportSlice } from "../types";
 
@@ -65,6 +66,8 @@ export function createImportSlice(
       set((state) => {
         state.imports.push(normalized);
         state.assets = assets;
+        const activePen = state.layerGroups.find((group) => group.id === state.activePenId);
+        if (isVectorImport(normalized) && activePen) activePen.importIds.push(normalized.id);
       });
     },
 
@@ -163,12 +166,13 @@ export function createImportSlice(
         state.allImportsSelected = false;
         state.selectedGroupId = null;
         state.layerGroups = [];
+        state.activePenId = null;
         state.pageTemplate = null;
         pruneCanvasAssets(state);
       });
     },
 
-    loadLayout: (imports, layerGroups, pageTemplate, incomingAssets) => {
+    loadLayout: (imports, layerGroups, pageTemplate, incomingAssets, activePenId) => {
       const normalized = imports.map(withDefaultHatchSettings);
       const assets = prepareCanvasAssets(get(), normalized, incomingAssets);
       pushUndo();
@@ -179,7 +183,8 @@ export function createImportSlice(
         state.selectedPathId = null;
         state.allImportsSelected = false;
         state.selectedGroupId = null;
-        state.layerGroups = layerGroups ?? [];
+        state.layerGroups = [...(layerGroups ?? [])].sort((a, b) => compareColorsLightFirst(a.color, b.color));
+        state.activePenId = state.layerGroups.some((group) => group.id === activePenId) ? activePenId! : null;
         state.pageTemplate = pageTemplate ?? null;
       });
     },
@@ -189,7 +194,7 @@ export function createImportSlice(
       return imports.find((item) => item.id === selectedImportId);
     },
 
-    toVectorObjects: () => vectorObjectsForImports(get().imports),
+    toVectorObjects: () => vectorObjectsForImports(get().imports, get().layerGroups),
 
     applyHatch: (importId, spacingMM, angleDeg, enabled) =>
       set((state) => {

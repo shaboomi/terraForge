@@ -8,7 +8,7 @@ interface ToolbarEffectsParams {
   closeLayoutRef: React.RefObject<() => void>;
   setShowAbout: (v: boolean) => void;
   setPageSizes: (sizes: PageSize[]) => void;
-  importsLength: number;
+  hasLayout: boolean;
   selectedImportId: string | null;
 }
 
@@ -26,7 +26,7 @@ export function useToolbarEffects({
   closeLayoutRef,
   setShowAbout,
   setPageSizes,
-  importsLength,
+  hasLayout,
   selectedImportId,
 }: ToolbarEffectsParams) {
   // ── Menu IPC subscriptions (layout actions + import + about) ─────────────
@@ -67,8 +67,8 @@ export function useToolbarEffects({
 
   // ── Layout menu state ────────────────────────────────────────────────────
   useEffect(() => {
-    window.terraForge.fs.setLayoutMenuState(importsLength > 0);
-  }, [importsLength]);
+    window.terraForge.fs.setLayoutMenuState(hasLayout);
+  }, [hasLayout]);
 
   // ── Edit menu state ──────────────────────────────────────────────────────
   useEffect(() => {
