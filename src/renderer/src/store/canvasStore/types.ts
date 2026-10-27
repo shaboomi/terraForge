@@ -12,6 +12,7 @@ import type { GcodeToolpath } from "../../utils/gcodeParser";
 export interface ImportSlice {
   imports: SvgImport[];
   addImport: (imp: SvgImport) => void;
+  replaceImport: (id: string, replacement: SvgImport) => boolean;
   removeImport: (id: string) => void;
   updateImport: (id: string, patch: Partial<SvgImport>) => void;
   updatePath: (

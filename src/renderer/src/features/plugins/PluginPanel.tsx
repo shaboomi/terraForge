@@ -1,0 +1,64 @@
+import { useId } from "react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { Button } from "../../components/ui";
+import { usePluginStore } from "./pluginStore";
+import { PluginControlField } from "./PluginControlField";
+import { useCanvasStore } from "../../store/canvasStore";
+
+export function PluginPanel() {
+  const bodyId = useId();
+  const entries = usePluginStore((state) => state.entries);
+  const activeFilename = usePluginStore((state) => state.activeFilename);
+  const editingImportId = usePluginStore((state) => state.editingImportId);
+  const collapsed = usePluginStore((state) => state.collapsed);
+  const editingArtwork = useCanvasStore((state) => state.imports.find((item) => item.id === editingImportId));
+  const parameters = usePluginStore((state) => state.parameters);
+  const running = usePluginStore((state) => state.running);
+  const error = usePluginStore((state) => state.runError);
+  const setCollapsed = usePluginStore((state) => state.setCollapsed);
+  const closePanel = usePluginStore((state) => state.closePanel);
+  const setParameter = usePluginStore((state) => state.setParameter);
+  const resetParameters = usePluginStore((state) => state.resetParameters);
+  const run = usePluginStore((state) => state.run);
+  const cancel = usePluginStore((state) => state.cancel);
+  const entry = entries.find((item) => item.filename === activeFilename);
+  const manifest = entry?.manifest;
+  if (!manifest) return null;
+  const pluginUnavailable = !entry.enabled || !!entry.error;
+  const unavailable = pluginUnavailable || (!!editingImportId && !editingArtwork);
+  const supported = manifest.input === "none";
+  const busy = !!running;
+  const toggleLabel = collapsed ? "Expand plugin panel" : "Minimise plugin panel";
+  return (
+    <section aria-label={`Plugin: ${manifest.name}`} className="shrink-0 max-h-[55%] overflow-y-auto border-b border-border-ui p-3 space-y-3">
+      <div className="flex items-center gap-1">
+        <Button type="button" size="icon-sm" variant="ghost" aria-label={toggleLabel} title={toggleLabel}
+          aria-expanded={!collapsed} aria-controls={bodyId} onClick={() => setCollapsed(!collapsed)}>
+          {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+        </Button>
+        <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-content" title={manifest.name}>{manifest.name}</h3>
+        <Button type="button" size="icon-sm" variant="ghost" aria-label="Close plugin panel" title="Close plugin panel" onClick={closePanel}>
+          <X size={15} />
+        </Button>
+      </div>
+      {!collapsed && <div id={bodyId} className="space-y-3">
+        <div>
+          <p className="text-[10px] text-content-faint">Plugin · v{manifest.version}</p>
+          {editingArtwork && <p className="text-xs text-content-muted">Editing {editingArtwork.name}</p>}
+          {editingImportId && !editingArtwork && <p className="text-xs text-content-muted">This artwork no longer exists. Open a plugin from Plugins to create new artwork.</p>}
+          <p className="mt-1 text-xs text-content-muted">{manifest.description}</p>
+        </div>
+        {pluginUnavailable && <p className="text-xs text-content-muted">This plugin is disabled or unavailable. Enable it from Plugins to use it.</p>}
+        {!supported && <p className="text-xs text-content-muted">{manifest.input === "bitmap" ? "Bitmap" : "Vector"} processing will be available in a later stage. This version supports generators.</p>}
+        <form noValidate onSubmit={(event) => { event.preventDefault(); void run(); }} className="space-y-3">
+          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable || !supported} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+          {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <Button size="sm" variant="primary" type="submit" disabled={unavailable || !supported}>{editingImportId ? "Update artwork" : "Add artwork"}</Button>}
+            <Button size="sm" type="button" disabled={busy || unavailable} onClick={() => resetParameters(manifest.id)}>Reset</Button>
+          </div>
+        </form>
+      </div>}
+    </section>
+  );
+}

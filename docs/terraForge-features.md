@@ -2,6 +2,18 @@
 
 ## Implemented
 
+### Local Plugins — Stage 1
+
+- [x] Discover `.tf-plugin.js` files at launch by parsing a strict JSON metadata header without executing plugin code; malformed files and duplicate IDs have individual error messages.
+- [x] Plugins menu with Bitmap Processors, Generators and Font Tools categories, persisted enable/disable, Open Plugin Folder and Add Example Generator.
+- [x] Host-rendered Properties controls: number, slider, boolean, select, text and colour; generators also work on an empty canvas.
+- [x] Generators receive page dimensions and parameters, run in a dedicated sandboxed computation host/worker, and report progress/errors through background tasks; cancellation and the default 30-second deadline terminate execution.
+- [x] Validated local-millimetre polylines become an ordinary vector import with plugin identity, version and parameters. Adding one result creates one undo step; artwork survives layout save/open without the plugin installed.
+- [x] Minimise/expand or close the plugin panel without deleting artwork. Select a generated item to reopen saved settings with Edit with its plugin; Update artwork replaces that item, preserves placement and creates one undoable edit, including after saving/reopening a version-1 layout.
+- [x] Cancelled, failed and stale runs do not add artwork. The application constructs the SVG markup from validated coordinates.
+
+See [Stage 1](plugin-stage-1.md) for the completion boundary and [the author guide](plugin-author-guide.md) for the supported file/API contract. Category availability does not imply bitmap/vector input or font-loading support.
+
 ### SVG & PDF Import & Canvas
 
 - [x] Import SVG files via native open dialog (filtered to `.svg`)
@@ -237,6 +249,13 @@
 ---
 
 ## Not Yet Implemented
+
+### Plugin and Bitmap Roadmap
+
+- [ ] PNG/JPEG import, editable bitmap items, embedded image assets and portable bitmap layouts.
+- [ ] Selected bitmap/vector inputs and bitmap processing outputs.
+- [ ] Temporary preview/apply overlays and atomic multi-item/group transactions.
+- [ ] Host font loading/shaping and detailed stylised-vector plugins.
 
 - [ ] **Pen pressure** Encode pen height into source drawing (3d model with z height). how do we do this?
 

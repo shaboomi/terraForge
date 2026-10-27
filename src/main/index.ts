@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { registerPluginHandlers } from "./plugins";
 import { registerAppLifecycleHandlers } from "./bootstrap/lifecycle";
 import { createMainWindow, getMainWindow, safeSend } from "./bootstrap/window";
 import {
@@ -22,13 +23,17 @@ import { TaskManager } from "../tasks/taskManager";
 registerMenuStateHandlers();
 
 registerAppLifecycleHandlers({
-  createMainWindow,
+  createMainWindow: () => {
+    const window = createMainWindow();
+    window.on("closed", () => pluginHandlers.cancelAll());
+  },
   onReady: () => buildApplicationMenu(safeSend),
   // Gracefully close the FluidNC WebSocket before the process exits so the
   // machine receives a proper WS close frame instead of a TCP RST.  A TCP RST
   // (from os-level socket teardown on process kill) can wedge the ESP32's WS
   // server slot, requiring a power cycle to recover.
   onBeforeQuit: () => {
+    pluginHandlers.cancelAll();
     fluidnc.disconnectWebSocket();
   },
 });
@@ -38,6 +43,7 @@ registerAppLifecycleHandlers({
 const fluidnc = new FluidNCClient();
 const serial = new SerialClient();
 const taskManager = new TaskManager();
+const pluginHandlers = registerPluginHandlers({ getMainWindow, taskManager });
 const persistence = createPersistence(app.getPath("userData"));
 
 // Tracks which transport is currently active so IPC handlers can route correctly.

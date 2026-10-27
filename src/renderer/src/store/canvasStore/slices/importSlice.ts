@@ -59,6 +59,18 @@ export function createImportSlice(
       });
     },
 
+    replaceImport: (id, replacement) => {
+      const index = get().imports.findIndex((item) => item.id === id);
+      if (index < 0) return false;
+      const normalized = withDefaultHatchSettings({ ...replacement, id });
+      pushUndo();
+      set((state) => {
+        state.imports[index] = normalized;
+        if (state.selectedImportId === id) state.selectedPathId = null;
+      });
+      return true;
+    },
+
     removeImport: (id) => {
       if (!get().imports.some((item) => item.id === id)) return;
       pushUndo();

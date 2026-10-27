@@ -2,7 +2,7 @@
 
 Desktop control app for FluidNC-based pen plotters (TerraPen and compatible machines).
 
-Import SVG and PDF artwork, position it on the machine bed, generate optimised G-code, and plot — all without leaving the app.
+Import SVG and PDF artwork or create it with local JavaScript generators, position it on the machine bed, generate optimised G-code, and plot — all without leaving the app.
 
 ![Application screenshot](docs/resources/terraForge-quick-demo.gif)
 
@@ -13,6 +13,8 @@ Import SVG and PDF artwork, position it on the machine bed, generate optimised G
 - [User Guide](docs/terraForge-user-guide.md) — full feature walkthrough with screenshots
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
+- [Plugin Stage 1](docs/plugin-stage-1.md) — supported features and a quick start
+- [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator
 
 ---
 
@@ -33,6 +35,16 @@ Import SVG and PDF artwork, position it on the machine bed, generate optimised G
 - Multi-select (Ctrl+A), undo/redo (50 steps), copy/paste
 - Live plot progress overlay — completed cuts in red, rapids in orange
 - Pen position crosshair tracking work coordinates in real time
+
+### Local Plugins — Stage 1
+
+- Save a self-contained `.tf-plugin.js` file in the folder opened by **Plugins → Open Plugin Folder**, then restart TerraForge to discover it without executing its code.
+- Browse Bitmap Processors, Generators and Font Tools; enable/disable plugins and view per-file errors.
+- Run generators with optional controls beneath **Properties**, including on an empty canvas. **Add Example Generator** installs a working grid example.
+- Minimise or close plugin controls without deleting artwork; select a generated item and use **Edit with [plugin name]** to restore saved settings and **Update artwork** in place. Updates preserve placement and support Undo.
+- Isolated execution with progress, cancellation and a default 30-second deadline. Validated polyline results become ordinary vector artwork in one undoable edit and remain usable in saved layouts without the plugin.
+
+This stage runs generators with no selected input and keeps the existing version-1 vector layout format. PNG/JPEG import, bitmap/vector processors and preview/apply overlays are planned separately. Font Tools currently supplies a category for plugins that generate their own vector geometry. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
 
 ### G-code Generation
 

@@ -221,7 +221,16 @@ const editApi: TerraForgeAPI["edit"] = {
 
 // ─── Expose to renderer ───────────────────────────────────────────────────────
 
+const plugins: TerraForgeAPI["plugins"] = {
+  list: () => invoke("plugins:list"),
+  openFolder: () => invoke("plugins:openFolder"),
+  installExample: () => invoke("plugins:installExample"),
+  setEnabled: (pluginId, enabled) => invoke("plugins:setEnabled", pluginId, enabled),
+  run: (request) => invoke("plugins:run", request),
+  cancel: (runId) => invoke("plugins:cancel", runId),
+};
 const api: TerraForgeAPI = {
+  plugins,
   fluidnc,
   serial,
   fs,

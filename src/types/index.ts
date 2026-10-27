@@ -314,6 +314,7 @@ export const DEFAULT_STROKE_WIDTH_MM = 0.5;
 
 /** One imported SVG file, treated as a positioned group on the bed */
 export interface SvgImport {
+  pluginSource?: { pluginId: string; pluginVersion: string; parameters: PluginParameters };
   id: string;
   /** Display name — defaults to filename without extension */
   name: string;
@@ -473,6 +474,7 @@ export interface GcodeOptions {
 // ─── Background Tasks ─────────────────────────────────────────────────────────
 
 export type TaskType =
+  | "plugin-run"
   | "svg-parse"
   | "gcode-generate"
   | "gcode-preview"
@@ -680,6 +682,7 @@ export interface TerraForgeAPI {
   config: ConfigApi;
   app: AppApi;
   edit: EditApi;
+  plugins: PluginsApi;
 }
 
 // ─── Jog ─────────────────────────────────────────────────────────────────────
@@ -693,4 +696,98 @@ declare global {
   interface Window {
     terraForge: TerraForgeAPI;
   }
+}
+
+// ─── User plugins ────────────────────────────────────────────────────────────
+
+export type PluginCategory = "bitmap-processor" | "generator" | "font-tool";
+export type PluginParameters = Record<string, string | number | boolean>;
+
+interface PluginControlBase {
+  key: string;
+  label: string;
+}
+
+export type PluginControl =
+  | (PluginControlBase & {
+      type: "number" | "slider";
+      default: number;
+      min: number;
+      max: number;
+      step?: number;
+      unit?: string;
+    })
+  | (PluginControlBase & { type: "boolean"; default: boolean })
+  | (PluginControlBase & {
+      type: "select";
+      default: string;
+      options: { label: string; value: string }[];
+    })
+  | (PluginControlBase & {
+      type: "text";
+      default: string;
+      multiline?: boolean;
+    })
+  | (PluginControlBase & { type: "colour"; default: string });
+
+export interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: 1;
+  description: string;
+  category: PluginCategory;
+  input: "none" | "bitmap" | "vector";
+  outputs: ["vector"];
+  controls?: PluginControl[];
+}
+
+export interface PluginEntry {
+  filename: string;
+  manifest?: PluginManifest;
+  enabled: boolean;
+  error?: string;
+}
+
+/** Stage 1 supports generators; selection inputs follow with the bitmap model. */
+export interface PluginInput {
+  kind: "none";
+  page: { widthMM: number; heightMM: number };
+}
+
+export interface PluginRunRequest {
+  runId: string;
+  pluginId: string;
+  input: PluginInput;
+  parameters: PluginParameters;
+}
+
+/** All coordinates are local millimetres, with top-left origin and Y down. */
+export interface PluginPolyline {
+  points: { x: number; y: number }[];
+  closed?: boolean;
+  color?: string;
+}
+
+export interface PluginResult {
+  width: number;
+  height: number;
+  paths: PluginPolyline[];
+  warnings?: string[];
+}
+
+export interface PluginContext {
+  runId: string;
+  signal: AbortSignal;
+  progress: (percent: number | null) => void;
+  seed: number;
+}
+
+export interface PluginsApi {
+  list: () => Promise<PluginEntry[]>;
+  openFolder: () => Promise<void>;
+  installExample: () => Promise<void>;
+  setEnabled: (pluginId: string, enabled: boolean) => Promise<void>;
+  run: (request: PluginRunRequest) => Promise<PluginResult>;
+  cancel: (runId: string) => Promise<void>;
 }

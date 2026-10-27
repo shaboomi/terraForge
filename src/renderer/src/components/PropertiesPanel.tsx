@@ -1,3 +1,4 @@
+import { PluginPanel } from "../features/plugins/PluginPanel";
 import { PanelHeading } from "../features/properties-panel/components/PanelHeading";
 import { PanelContainer } from "../features/properties-panel/components/PanelContainer";
 import { LayersPanelContent } from "../features/properties-panel/components/LayersPanelContent";
@@ -16,7 +17,10 @@ export function PropertiesPanel({ onHide }: PropertiesPanelProps = {}) {
   return (
     <PanelContainer>
       <PanelHeading onHide={onHide} />
-      <LayersPanelContent />
+      <PluginPanel />
+      <div className="flex-1 min-h-0 flex flex-col">
+        <LayersPanelContent />
+      </div>
     </PanelContainer>
   );
 }
