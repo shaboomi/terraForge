@@ -1,3 +1,4 @@
+import { assertRunnableFilePath } from "../types/gcodeFileNames";
 import { EventEmitter } from "events";
 import { WebSocket } from "ws";
 import { createWriteStream, createReadStream } from "fs";
@@ -228,6 +229,7 @@ export class FluidNCClient extends EventEmitter {
     remotePath: string,
     filesystem: "sd" | "fs" = "sd",
   ): Promise<void> {
+    assertRunnableFilePath(remotePath);
     const cmd =
       filesystem === "sd"
         ? `$SD/Run=${remotePath}`

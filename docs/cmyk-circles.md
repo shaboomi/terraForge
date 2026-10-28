@@ -6,7 +6,7 @@ CMYK Circles converts one selected bitmap into four overlapping, editable vector
 
 This plugin requires the engine additions on the `codex/cmyk-circles` branch of **shaboomi/terraForge**. Older TerraForge builds do not understand its pen dropdowns or ordered passes. Copying the plugin into an older build is insufficient.
 
-1. For the supplied Windows test build, open `release/cmyk-circles/win-unpacked/terraForge.exe` from this repository. Keep the entire `win-unpacked` folder together. This is an unsigned unpacked build, not an installer. It uses the normal packaged-app profile; the automated checks use isolated temporary profiles.
+1. For the supplied Windows test build, open `release/cmyk-circles-filename-fix/win-unpacked/terraForge.exe` from this repository. Keep the entire `win-unpacked` folder together. This is an unsigned unpacked build, not an installer. It uses the normal packaged-app profile; the automated checks use isolated temporary profiles.
 2. Choose **Pens** and define your actual Cyan, Magenta, Yellow and Black pens. Four distinct pen IDs are required even when an image leaves a channel empty. Ink colours should correspond to the channel you assign them to.
 3. Choose **Plugins → Open Plugin Folder**. Copy `cmyk-circles.tf-plugin.js` from the supplied ZIP or `docs/examples/` into that folder. Restart TerraForge. Development and packaged builds use different plugin folders; always use the menu to open the correct one.
 4. Import a PNG or JPEG and select the bitmap itself. Choose **Plugins → Bitmap to Vector → CMYK Circles**.
@@ -78,6 +78,14 @@ Use either:
 - **Split output into separate files → Export one file per group:** outputs are produced in that same order with numbered filenames such as `1-Cyan`, `2-Magenta`, `3-Yellow`, `4-Black` (and optional `_opt`). Run the files in numbered order and change to the matching physical pen between them. Empty channels produce no file. Saving files cannot enforce the order in which a person later starts them.
 
 Colour-based splitting can combine distinct real pens that share a display colour; SVG-layer splitting can omit these generated imports. The engine therefore reports a clear instruction to choose combined or per-group output when either unsupported split mode is selected for ordered plugin artwork. Missing real pen assignments and vinyl-cutting mode are rejected. The app never sends this plugin's output to a physical plotter during verification.
+
+## If an SD file reports fopen failed / errno 2
+
+The controller could not open the exact requested name. Generated vector display names may contain a typographic dash, such as **CMYK Cyan — Cyan**. FluidNC's Run command channel treats non-ASCII bytes and **! ? ~** as control input. A name accepted by the SD filesystem or shown by its browser can therefore be altered when passed to Run. See the [firmware character classification](https://github.com/bdring/FluidNC/blob/main/FluidNC/src/RealtimeCmd.cpp) and [channel handling](https://github.com/bdring/FluidNC/blob/main/FluidNC/src/Channel.cpp).
+
+Generated G-code defaults now use plain ASCII names such as **CMYK_Cyan_Cyan_opt.gcode**; per-pen files retain the **1-Cyan_opt.gcode** through **4-Black_opt.gcode** order. Existing incompatible paths are rejected before a Run command is transmitted; they are never silently rewritten to another filename.
+
+For an already uploaded file, regenerate/export with the corrected build using **one file per group**, upload the newly numbered files, refresh the SD-card browser and select the new exact entry. Replacing the app does not rename old files on the card. An ASCII filename can still fail if its directory listing is stale or the upload did not finish, so refresh/reselect after a successful upload. These checks are verified with mocked machine commands; no plotter is operated.
 
 ## Artwork previews and limitations
 

@@ -171,8 +171,16 @@ test("CMYK source, previews, grouped apply/update, undo, reopen and real K-last 
   await page.getByRole("button",{name:"Generate G-code",exact:true}).click();
   await page.getByRole("tab",{name:/^paths$/i}).click();await page.getByLabel("Optimise paths",{exact:false}).check();
   await page.getByRole("tab",{name:/^output$/i}).click();await page.getByLabel("Save to computer",{exact:false}).check();
-  await mockSaveDialog(application!,output);await page.getByRole("button",{name:"Generate",exact:true}).click();
+  await application!.evaluate(({dialog},filePath)=>{
+    (dialog as unknown as {showSaveDialog:(...args:unknown[])=>Promise<unknown>}).showSaveDialog=async(...args)=>{
+      const options=args.at(-1) as {defaultPath?:string};
+      (globalThis as {cmykDefaultFilename?:string}).cmykDefaultFilename=options.defaultPath;
+      return {canceled:false,filePath};
+    };
+  },output);
+  await page.getByRole("button",{name:"Generate",exact:true}).click();
   await expect.poll(()=>{try{return readFileSync(output,"utf8")}catch{return ""}},{timeout:30_000}).toContain("pen=k");
+  expect(await application!.evaluate(()=>(globalThis as {cmykDefaultFilename?:string}).cmykDefaultFilename)).toBe("CMYK_Cyan_Cyan_opt.gcode");
   const gcode=readFileSync(output,"utf8");
   expect([...gcode.matchAll(/^;@tf .*pen=([^\s]+)/gm)].map(match=>match[1])).toEqual(["c","m","y","k"]);
   await page.screenshot({path:test.info().outputPath("cmyk-reopened.png")});

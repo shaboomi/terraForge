@@ -1,3 +1,4 @@
+import { safeGcodeFilenameBase } from "../../../../../types/gcodeFileNames";
 import { useState, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import { useShallow } from "zustand/react/shallow";
@@ -308,9 +309,7 @@ export function useJobActions() {
           selectedImport?.name ||
           imports[0]?.name ||
           "untitled";
-        const safeName = baseName
-          .replace(/\.[^.]+$/, "")
-          .replace(/[\\/:*?"<>|]/g, "_");
+        const safeName = safeGcodeFilenameBase(baseName.replace(/\.[^.]+$/, ""));
         const defaultFilename = prefs.optimise
           ? `${safeName}_opt.gcode`
           : `${safeName}.gcode`;
@@ -442,7 +441,7 @@ export function useJobActions() {
       const objects = group.objects;
       const taskId = uuid();
       const rank = objects.reduce((rank, object) => Math.max(rank, object.plotOrder ?? -1), -1);
-      const safeName = `${rank < 0 ? "" : `${rank + 1}-`}${group.name.replace(/[\\/:*?"<>|]/g, "_")}`;
+      const safeName = `${rank < 0 ? "" : `${rank + 1}-`}${safeGcodeFilenameBase(group.name)}`;
       const defaultFilename = prefs.optimise
         ? `${safeName}_opt.gcode`
         : `${safeName}.gcode`;
