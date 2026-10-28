@@ -19,13 +19,18 @@ scope.onmessage = async ({ data }) => {
     const context = Object.freeze({
       runId: data.request.runId,
       signal: controller.signal,
-      seed: 1,
+      seed: data.request.seed ?? 1,
       progress: (percent: number | null) => send({ type: "progress", progress: percent }),
     });
-    const input = Object.freeze({
-      ...data.request.input,
-      page: Object.freeze({ ...data.request.input.page }),
-    });
+    // All data is a private structured clone; freeze object/geometry metadata too.
+    // Typed pixel arrays cannot be frozen, but mutations affect only this run's copy.
+    const freezeSnapshot = (value: unknown): void => {
+      if (!value || typeof value !== "object" || ArrayBuffer.isView(value)) return;
+      for (const child of Object.values(value)) freezeSnapshot(child);
+      Object.freeze(value);
+    };
+    const input = data.request.input;
+    freezeSnapshot(input);
     const result = await plugin.default(input, Object.freeze({ ...data.request.parameters }), context);
     send({ type: "result", result });
   } catch (error) {

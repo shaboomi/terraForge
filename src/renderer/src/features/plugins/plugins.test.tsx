@@ -159,11 +159,11 @@ describe("plugin interface", () => {
     finish(); await toggling;
     expect(usePluginStore.getState().entries[0].enabled).toBe(false);
   });
-  it("shows an explanation instead of running unsupported bitmap inputs", () => {
+  it("explains the required bitmap selection before a processor can preview", () => {
     usePluginStore.setState({ entries: [{ ...entry, manifest: { ...manifest, input: "bitmap", category: "bitmap-processor" } }] });
     render(<PluginPanel />);
-    expect(screen.getByText(/Bitmap processing will be available/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add artwork" })).toBeDisabled();
+    expect(screen.getByText(/Select one bitmap to use this plugin/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
   });
   it("validates parameter values and resets defaults", async () => {
     render(<PluginPanel />);

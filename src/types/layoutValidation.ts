@@ -1,10 +1,10 @@
-import type { BitmapAsset, CanvasItem, CanvasLayout, CanvasItemBase, LayerGroup, PageTemplate, SvgImport, SvgPath } from "./index";
+import type { BitmapAsset, CanvasItem, CanvasLayout, CanvasItemBase, LayerGroup, PageTemplate, PluginProvenance, SvgImport, SvgPath } from "./index";
 import { isBitmapImport } from "./index";
 import { assertBitmapAssetBudget, BITMAP_LIMITS, validateBitmapAsset } from "./bitmapValidation";
 
 type Row = Record<string, unknown>;
 const BAD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
-const BASE_FIELDS = ["kind", "id", "name", "x", "y", "scale", "scaleX", "scaleY", "rotation", "visible", "svgWidth", "svgHeight", "viewBoxX", "viewBoxY"];
+const BASE_FIELDS = ["kind", "id", "name", "x", "y", "scale", "scaleX", "scaleY", "rotation", "visible", "svgWidth", "svgHeight", "viewBoxX", "viewBoxY", "pluginSource"];
 const VECTOR_FLAGS = ["hatchEnabled", "strokeEnabled", "plotPointsEnabled", "generatedStrokeForNoStroke"];
 const PATH_FLAGS = ["hasFill", "sourceOutlineVisible", "outlineVisible", "strokeEnabled", "fillEnabled", "generatedStrokeEnabled"];
 const COLOURS = ["fillColor", "strokeColor", "sourceColor"];
@@ -93,6 +93,45 @@ function base(item: Row): CanvasItemBase {
     result[key] = number(item[key], key, -1e6, 1e6);
     if (result[key] === 0) throw new Error("Item scale must not be zero.");
   }
+  if (item.pluginSource !== undefined) result.pluginSource = pluginProvenance(item.pluginSource);
+  return result;
+}
+
+function pluginProvenance(value: unknown): PluginProvenance {
+  const provenance = row(value, "Plugin provenance");
+  fields(provenance, ["pluginId", "pluginVersion", "parameters", "apiVersion", "seed", "sourceId", "sourceRevision", "outputGroupId", "outputGroupName", "outputIndex", "outputKey", "outputWidth", "outputHeight"], "Plugin provenance");
+  const parameters = row(provenance.parameters, "Plugin parameters");
+  if (Object.keys(parameters).length > 32) throw new Error("Too many saved plugin parameters.");
+  const safeParameters: Record<string, string | number | boolean> = {};
+  for (const [key, entry] of Object.entries(parameters)) {
+    id(key, "Parameter key");
+    if (typeof entry === "string") safeParameters[key] = text(entry, "Plugin parameter", 4096);
+    else if (typeof entry === "number") safeParameters[key] = number(entry, "Plugin parameter");
+    else if (typeof entry === "boolean") safeParameters[key] = entry;
+    else throw new Error("Saved plugin parameters must be primitive values.");
+  }
+  const result: PluginProvenance = { pluginId: id(provenance.pluginId, "Plugin ID"), pluginVersion: text(provenance.pluginVersion, "Plugin version", 80), parameters: safeParameters };
+  if (provenance.apiVersion !== undefined) {
+    if (provenance.apiVersion !== 1) throw new Error("Unsupported saved plugin API version.");
+    result.apiVersion = 1;
+  }
+  if (provenance.seed !== undefined) {
+    const seed = number(provenance.seed, "Plugin seed", 0, 0xffffffff);
+    if (!Number.isInteger(seed)) throw new Error("Plugin seed must be an integer.");
+    result.seed = seed;
+  }
+  for (const key of ["sourceId", "outputGroupId"] as const) if (provenance[key] !== undefined) result[key] = id(provenance[key], key);
+  if (provenance.sourceRevision !== undefined) result.sourceRevision = text(provenance.sourceRevision, "Source revision", 256);
+  if (provenance.outputGroupName !== undefined) result.outputGroupName = text(provenance.outputGroupName, "Output group name", 120);
+  if (provenance.outputKey !== undefined) result.outputKey = text(provenance.outputKey, "Output key", 512);
+  if (provenance.outputIndex !== undefined) {
+    const index = number(provenance.outputIndex, "Output index", 0, 15);
+    if (!Number.isInteger(index)) throw new Error("Output index must be an integer.");
+    result.outputIndex = index;
+  }
+  for (const key of ["outputWidth", "outputHeight"] as const) if (provenance[key] !== undefined) {
+    result[key] = number(provenance[key], key, Number.MIN_VALUE, 1e6);
+  }
   return result;
 }
 
@@ -137,20 +176,6 @@ function vector(item: Row): SvgImport {
   for (const key of VECTOR_FLAGS) if (item[key] !== undefined) Object.assign(result, { [key]: bool(item[key], key) });
   for (const key of ["hatchSpacingMM", "strokeWidthMM"]) if (item[key] !== undefined) Object.assign(result, { [key]: number(item[key], key, Number.MIN_VALUE, 1e6) });
   if (item.hatchAngleDeg !== undefined) result.hatchAngleDeg = number(item.hatchAngleDeg, "Hatch angle", -1e6, 1e6);
-  if (item.pluginSource !== undefined) {
-    const provenance = row(item.pluginSource, "Plugin provenance"); fields(provenance, ["pluginId", "pluginVersion", "parameters"], "Plugin provenance");
-    const parameters = row(provenance.parameters, "Plugin parameters");
-    if (Object.keys(parameters).length > 32) throw new Error("Too many saved plugin parameters.");
-    const safeParameters: Record<string, string | number | boolean> = {};
-    for (const [key, value] of Object.entries(parameters)) {
-      id(key, "Parameter key");
-      if (typeof value === "string") safeParameters[key] = text(value, "Plugin parameter", 4096);
-      else if (typeof value === "number") safeParameters[key] = number(value, "Plugin parameter");
-      else if (typeof value === "boolean") safeParameters[key] = value;
-      else throw new Error("Saved plugin parameters must be primitive values.");
-    }
-    result.pluginSource = { pluginId: id(provenance.pluginId, "Plugin ID"), pluginVersion: text(provenance.pluginVersion, "Plugin version", 80), parameters: safeParameters };
-  }
   return result;
 }
 

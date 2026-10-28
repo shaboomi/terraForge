@@ -72,6 +72,26 @@ describe("bitmap assets and versioned layouts", () => {
     expect(restored.pageTemplate).toEqual(value.pageTemplate);
   });
 
+  it("roundtrips processor provenance on raster/vector siblings independently of source or installed plugins", () => {
+    const image = asset();
+    const provenance = { pluginId: "test.processor", pluginVersion: "1.0.0", parameters: { threshold: 127 }, apiVersion: 1 as const, seed: 42, sourceId: "missing-source", sourceRevision: "revision-hash", outputGroupId: "result-group", outputGroupName: "Processed artwork", outputWidth: 120.5, outputHeight: 60 };
+    const first = { ...bitmap(image), pluginSource: { ...provenance, outputIndex: 0, outputKey: "0:bitmap:" } };
+    const second = createSvgImport({ id: "vector-result", pluginSource: { ...provenance, outputIndex: 1, outputKey: "1:vector:blue-pen" } });
+    const restored = parseCanvasLayout(serializeCanvasLayout(layout([first, second], { [image.id]: image })));
+    expect(restored.imports.map((item) => item.pluginSource)).toEqual([first.pluginSource, second.pluginSource]);
+    expect(restored.layerGroups).toEqual([]);
+    expect(restored.imports[0]).toMatchObject(first);
+  });
+
+  it("retains legacy generator provenance and rejects unbounded new provenance fields", () => {
+    const pluginSource = { pluginId: "test.generator", pluginVersion: "1.0.0", parameters: { width: 25 } };
+    const item = createSvgImport({ pluginSource });
+    expect(parseCanvasLayout(serializeCanvasLayout(layout([item]))).imports[0].pluginSource).toEqual(pluginSource);
+    for (const patch of [{ seed: -1 }, { seed: 1.5 }, { seed: 0x100000000 }, { apiVersion: 2 }, { outputIndex: 16 }, { outputIndex: 0.5 }, { outputKey: "x".repeat(513) }, { outputKey: 1 }, { sourceRevision: "x".repeat(257) }, { outputGroupName: "x".repeat(121) }, { sourceId: "constructor" }, { execute: "code" }, { outputWidth: 0 }, { outputHeight: -1 }, { outputWidth: 1e6 + 1 }, { outputHeight: "10" }, { outputWidth: null }]) {
+      expect(() => parseCanvasLayout(JSON.stringify(layout([{ ...item, pluginSource: { ...pluginSource, ...patch } }])))).toThrow();
+    }
+  });
+
   it("migrates v1 zero-size vectors and prunes legacy dangling memberships without moving artwork", () => {
     const original = createSvgImport({ id: "line", svgWidth: 0, svgHeight: 20, x: -7, y: 42, scale: 2, scaleX: -3, scaleY: 4, rotation: 91, viewBoxX: -5, viewBoxY: 7 });
     original.paths[0].sourceColor = "url(#gradient)";

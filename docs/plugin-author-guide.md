@@ -1,6 +1,6 @@
-# Writing a TerraForge plugin (Stage 1)
+# Writing a TerraForge plugin
 
-The current JavaScript API adds generators that create ordinary, editable vector artwork. Stage 2 also adds PNG/JPEG canvas images and portable bitmap layouts; see [the bitmap guide](plugin-stage-2.md). Bitmap/vector processor inputs, raster plugin output, preview overlays and a font-loading service remain later stages. The category names are available, but a plugin requiring `bitmap` or `vector` input cannot run yet.
+The JavaScript API supports generators and tools that process one selected bitmap or vector item. Plugins return ordinary vector artwork and/or bitmap pixels. Stage 3 adds manual previews, separate generated results and colour-aware output using the user's pens. See [the Stage 3 guide](plugin-stage-3.md) for the workflow and [the bitmap guide](plugin-stage-2.md) for image imports. A font-loading service and detailed artistic filters remain later work.
 
 ## Install your first plugin
 
@@ -17,9 +17,9 @@ The installed app uses the `plugins` folder inside its application data director
 
 Use **Minimise plugin panel** to keep a compact header, then **Expand plugin panel** to show its controls again. The **Close plugin panel** X hides the panel without deleting artwork already on the canvas.
 
-To change an existing result, select the generated artwork and choose **Edit with [plugin name]** in Properties. TerraForge restores the settings saved with that item. Change the values, then choose **Update artwork**. This regenerates the same item rather than adding a second copy, keeps its placement/scale/rotation, and creates one undoable edit. Undo restores the preceding geometry and saved settings.
+To change an existing result, select the generated artwork and choose **Edit with [plugin name]** in Properties. TerraForge restores the settings saved with that item. For a generator, choose **Update artwork**. For a processor, choose **Preview**, inspect the result, then **Update artwork** to apply it. An update replaces the preceding generated result together in one undoable edit. Undo restores the preceding geometry and saved settings. Processor results keep the original source and its full placement frame.
 
-The same flow works after saving and reopening a `.tforge` layout. Keep the original plugin installed and enabled at the same version to reopen its controls. If it is missing, disabled or incompatible, Properties explains why editing with the plugin is unavailable; the saved vector artwork remains usable.
+The same flow works after saving and reopening a `.tforge` layout. Keep the original plugin installed and enabled at the same version to reopen its controls. A processor also needs its original canvas source. If either is missing, disabled or incompatible, Properties explains the editing limitation; the saved artwork remains usable. Opening a layout never executes plugin code automatically.
 
 Updating regenerates the vector paths from the saved settings. It does not preserve manual edits to individual generated paths. Opening a tool through the Plugins menu starts a new artwork operation; use the selected item's Edit with action when you intend to update that result.
 
@@ -77,8 +77,8 @@ TerraForge reads the JSON header during startup without running the code below i
 | `apiVersion` | Must be `1` for this release. |
 | `description` | Short explanation of the tool. |
 | `category` | `generator`, `bitmap-processor` or `font-tool`; controls menu placement. |
-| `input` | Use `none` for a runnable Stage 1 plugin. `bitmap` and `vector` are reserved for later selection-processing stages. |
-| `outputs` | Must be `["vector"]` in Stage 1. |
+| `input` | `none` for a generator, `bitmap` for one bitmap source or `vector` for one vector source. Category controls menu placement independently of input kind. |
+| `outputs` | A unique list containing `"vector"`, `"bitmap"`, or both. Every returned item must use a declared output kind. |
 | `controls` | Optional array of parameter controls. Omit it or use `[]` for a command with no settings. |
 
 Unknown fields are rejected to catch spelling mistakes. Two installed files with the same ID are both unavailable until their IDs are made unique. Do not add `author`, permission declarations or other planned fields until they are part of the implemented schema.
@@ -114,7 +114,62 @@ Return an object containing positive `width` and `height` in millimetres and at 
 
 TerraForge creates the SVG paths, IDs and machine-origin placement. Return geometry rather than SVG markup, G-code or document IDs. It preserves the declared full frame, including empty margins. Curves can be approximated with polylines for this first stage.
 
-Optional `warnings` is an array of text messages. A successful result adds one ordinary vector import. Its plugin ID, version and parameters are stored as provenance; reopening the saved layout does not run the plugin. You can edit the vector artwork normally. There is no live link that recalculates an existing result when settings change.
+Optional `warnings` is an array of text messages. This original single-vector return format remains supported for API-1 plugins. A successful generator can add its artwork directly or use the optional Preview action. Reopening the saved layout does not run the plugin. You can edit vector artwork normally; regeneration replaces manual changes to its generated paths.
+
+### Selected-input processors
+
+The supplied snapshot is detached from the document. A plugin can read its copy; changes to that copy never alter the canvas. `input.kind` matches the manifest's declared input.
+
+```text
+bitmap = {
+  kind: "bitmap", page, palette, sourceId, width, height, placement,
+  widthPx, heightPx, data: Uint8Array
+}
+vector = {
+  kind: "vector", page, palette, sourceId, width, height, placement,
+  paths: [{ points: [{x,y}, ...], closed?, color?, penId? }]
+}
+placement = { x, y, scale, scaleX?, scaleY?, rotation }
+palette = [{ id, name, color }, ...]
+```
+
+Bitmap bytes are row-major RGBA8 in sRGB, with straight alpha. Each pixel uses four bytes. Fully transparent pixels have zero RGB. Pixel edges span `[0,widthPx] × [0,heightPx]`, with a top-left origin, X right and Y down. Bitmap `width` and `height` are its full pixel frame. A plugin should explicitly choose how transparent pixels contribute to its algorithm; the scanline example composites them over white.
+
+Vector snapshots contain visible paths flattened to polylines in the source item's local frame. A nonzero source viewBox offset is removed from the points. `width` and `height` retain the complete source frame, including blank margins. The host supplies the effective source/pen colours. Path selection and multiple-item processing are not supported.
+
+Keep every processor output's `width` and `height` equal to the input frame. Do not crop output to its occupied bounds, apply the placement transform yourself or convert to machine-origin coordinates. TerraForge preserves the source's position, rotation and independent X/Y scaling. A bitmap output may change `widthPx`/`heightPx` while retaining the same physical source frame; the host adjusts its pixel scale.
+
+### Multiple results and bitmap output
+
+Return one or more structured items:
+
+```javascript
+return {
+  items: [
+    { kind: "vector", name: "Outlines", width: input.width, height: input.height,
+      paths: [{ points: [{ x: 0, y: 0 }, { x: input.width, y: input.height }] }] },
+    { kind: "bitmap", name: "Processed image", width: input.width, height: input.height,
+      widthPx: input.widthPx, heightPx: input.heightPx, data: new Uint8Array(input.data) }
+  ],
+  warnings: ["Optional explanation"]
+};
+```
+
+Raster output is a tightly sized `Uint8Array` or `Uint8ClampedArray` of `widthPx * heightPx * 4` bytes. Shared buffers, image URLs, encoded images and executable SVG are not accepted. TerraForge validates pixels and geometry, encodes bitmap output to portable PNG assets and assigns all document IDs. The original source stays untouched.
+
+All applied items share a named output-group identity in their saved plugin provenance. This processing group is separate from the document's pen groups: a result can contain several pen assignments without a single output-group colour replacing them. Apply and updates commit the entire result, its assets and pen assignments in one undo step.
+
+### The user's pen palette
+
+`input.palette` is the user's configured pen list, including stable `id`, `name` and six-digit `color`. It is available to generators and processors. A vector path may return `penId` from this supplied list. TerraForge assigns that geometry to the corresponding real pen and uses its colour in the preview and normal vector/G-code workflow. Unknown pen IDs are rejected. A path with only `color` keeps that source colour. Processor output is not overwritten by the currently active single pen.
+
+Use the palette in your algorithm to choose colour layers, match sampled image colours or change line density. The API does not prescribe one colour-matching or stylisation method. The [Bitmap Scanlines example](examples/bitmap-scanlines.tf-plugin.js) supplies a deliberately simple nearest-RGB demonstration, not a production artistic vectoriser.
+
+### Preview and stale results
+
+Processor tools use **Preview → Apply artwork**. A preview is temporary display content and cannot be saved, selected, exported or plotted. Cancel preview or close the panel to discard it. Minimising the panel keeps its current valid preview. Editing settings, the source, selection, document, page, machine or pen palette invalidates outdated work; run Preview again before applying.
+
+Saved provenance includes plugin/version/settings, the seed, source reference/revision and output-group identity. A processor update resolves that saved source rather than silently processing whichever item happens to be selected. Missing sources are explained. There is no automatic effects stack and opening a layout never runs saved plugin code.
 
 ## Progress, cancellation and limits
 
@@ -126,6 +181,7 @@ Current bounds:
 
 - One plugin file: 1 MiB; JSON header: 64 KiB; plugin files per folder: 256.
 - At most 10,000 output paths and 100,000 points in total.
+- At most 16 result items and 16 × 1,024 × 1,024 bitmap pixels in total per result; each pixel dimension is at most 8,192. Input bitmap snapshots have the same pixel limits.
 - Width and height: greater than zero and no more than 10,000 mm, then checked against the current page.
 - Runtime deadline: 30 seconds in an installed app.
 - At most 20 warnings, each no more than 512 characters.
@@ -142,8 +198,10 @@ A plugin is a self-contained JavaScript ES module. Pure JavaScript library code 
 | File changed since startup | Restart to load the edited file. |
 | Syntax/runtime error | Check JavaScript and the returned object; no partial artwork is applied. |
 | Artwork too large | Reduce the dimensions to fit the current page/bed. |
-| Bitmap/vector processing message | Stage 1 runs generators only; those input types need the later document/bitmap work. |
+| Select one bitmap/vector | Select exactly one compatible source item, then reopen the processor from Plugins. Group, multiple-item and path-only selections are not processor inputs. |
+| Missing source | Restore the original source item to update this result, or select another source and start a new operation from Plugins. Saved results remain usable. |
+| Preview disappeared | Settings or document context changed. Preview again before applying. |
 | Timeout | Reduce the work or point count. Use Cancel plugin to stop an active run. |
 | Sandbox unavailable | Run a supported desktop configuration with Electron sandboxing enabled. The plugin runtime does not run with global `--no-sandbox` flags. |
 
-The broader roadmap and bitmap contract are in [the design proposal](plugin-engine-design.md). Stage 1's delivered scope is recorded in [the Stage 1 notes](plugin-stage-1.md).
+The broader roadmap is in [the design proposal](plugin-engine-design.md). [Stage 1](plugin-stage-1.md), [Stage 2](plugin-stage-2.md) and [Stage 3](plugin-stage-3.md) record the milestone boundaries and verification. Example processor files are in [examples](examples/README.md).

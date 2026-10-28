@@ -48,6 +48,10 @@ export function createClipboardSlice(
         ...structuredClone(clipboard),
         id: newId,
         name: newName,
+        ...(clipboard.pluginSource?.outputGroupId ? { pluginSource: {
+          ...structuredClone(clipboard.pluginSource), outputGroupId: uuid(),
+          outputGroupName: `${clipboard.pluginSource.outputGroupName ?? clipboard.name} copy`.slice(0, 120), outputIndex: 0,
+        } } : {}),
         ...(isVectorImport(clipboard) ? { paths: clipboard.paths.map((path) => ({ ...path, id: uuid() })) } : {}),
         x: clipboard.x + 5,
         y: clipboard.y + 5,

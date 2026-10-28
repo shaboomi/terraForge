@@ -1,13 +1,14 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import { join } from "node:path";
-import type { PluginResult, PluginRunRequest } from "../../types";
-import { validatePluginParameters, validatePluginResult } from "../../types/pluginValidation";
+import type { PluginManifest, PluginResult, PluginRunRequest } from "../../types";
+import { validatePluginParameters, validatePluginResult, validatePluginRunRequest } from "../../types/pluginValidation";
 import type { TaskManager } from "../../tasks/taskManager";
 import type { PluginRegistry } from "./registry";
 import { configurePluginProtocol } from "./protocol";
 
 interface ActiveRun {
   done: boolean;
+  manifest?: PluginManifest;
   host?: BrowserWindow;
   finish: (error?: string, result?: PluginResult, cancelled?: boolean) => void;
 }
@@ -31,6 +32,8 @@ export class PluginRuntime {
   }
 
   run(request: PluginRunRequest): Promise<PluginResult> {
+    try { request = validatePluginRunRequest(request); }
+    catch (error) { return Promise.reject(error); }
     if (this.active.size > 0) return Promise.reject(new Error("Another plugin is already running."));
     if (this.tasks.get(request.runId)) return Promise.reject(new Error("This plugin run ID has already been used."));
     if (app.commandLine.hasSwitch("no-sandbox") || app.commandLine.hasSwitch("disable-web-security")) {
@@ -52,7 +55,10 @@ export class PluginRuntime {
         } else if (message.type === "error") {
           run.finish(typeof message.error === "string" ? message.error.slice(0, 2000) : "Plugin failed.");
         } else if (message.type === "result") {
-          try { run.finish(undefined, validatePluginResult(message.result)); }
+          try {
+            if (!run.manifest) throw new Error("Plugin runner is not ready.");
+            run.finish(undefined, validatePluginResult(message.result, request, run.manifest));
+          }
           catch (error) { run.finish(String(error)); }
         }
       };
@@ -94,7 +100,8 @@ export class PluginRuntime {
   private async prepare(request: PluginRunRequest, run: ActiveRun): Promise<void> {
     const { manifest, source } = await this.registry.getExecutable(request.pluginId);
     if (run.done) return;
-    if (manifest.input !== "none") throw new Error("This stage supports generators without a selected input. Bitmap and vector processing will follow.");
+    if (manifest.input !== request.input.kind) throw new Error(`This plugin requires ${manifest.input === "none" ? "no selected input" : `one selected ${manifest.input}`}.`);
+    run.manifest = manifest;
     const parameters = validatePluginParameters(manifest, request.parameters);
     const task = this.tasks.get(request.runId);
     if (task) task.label = manifest.name;
@@ -117,7 +124,7 @@ export class PluginRuntime {
     host.on("closed", () => run.finish("Plugin runner closed unexpectedly."));
     await host.loadURL(this.hostProtocol.createHostUrl());
     if (!run.done) host.webContents.send("plugins:host-start", {
-      source, request: { ...request, parameters },
+      source, request: { ...request, parameters }, manifest,
     });
   }
 }

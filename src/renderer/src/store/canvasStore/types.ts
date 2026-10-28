@@ -17,6 +17,13 @@ export interface ImportSlice {
   assets: BitmapAssetTable;
   addImport: (imp: CanvasItem, asset?: BitmapAsset) => void;
   replaceImport: (id: string, replacement: CanvasItem) => boolean;
+  /** Commit a complete plugin result, its assets and pen memberships in one undo step. */
+  commitPluginResult: (result: {
+    items: CanvasItem[];
+    assets?: BitmapAssetTable;
+    replaceIds?: string[];
+    penAssignments?: Record<string, string>;
+  }) => boolean;
   removeImport: (id: string) => void;
   updateImport: (id: string, patch: Partial<CanvasItem>) => void;
   editImport: (id: string, patch: Partial<CanvasItem>) => void;

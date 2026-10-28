@@ -2,7 +2,7 @@
 
 Date: 27 October 2026 (New Zealand)
 Review baseline: fork `shaboomi/terraForge`, main commit `5e554c6d5823f36214a5bed4982057ec5e5e71e8`.
-Status: the Stage 1 generator engine and Stage 2 bitmap foundation are implemented. Bitmap/vector processor inputs, raster plugin output and preview processing remain planned. See [the Stage 1 scope](plugin-stage-1.md), [the Stage 2 notes](plugin-stage-2.md) and [the author guide](plugin-author-guide.md) for supported features. This document retains the broader proposed processing contract and roadmap.
+Status: the Stage 1 generator engine and Stage 2 bitmap foundation are implemented. Stage 3 connects selected bitmap/vector snapshots, raster/vector output, manual Preview → Apply and atomic processing-result updates. See [the Stage 1 scope](plugin-stage-1.md), [the Stage 2 notes](plugin-stage-2.md), [the Stage 3 notes](plugin-stage-3.md) and [the author guide](plugin-author-guide.md) for supported features and verification boundaries. This document retains the broader design and future artistic/font roadmap.
 
 ## Decisions already agreed
 
@@ -51,7 +51,7 @@ Paths beginning with `components/`, `features/` or `store/` above are relative t
 
 ## Broader proposed plugin contract
 
-The implemented plugin API is documented in the [author guide](plugin-author-guide.md): generators receive no selected input and return vector polylines. Stage 2 adds portable bitmap documents; the selected-input, raster-output and preview capabilities below describe future extensions.
+The implemented plugin API is documented in the [author guide](plugin-author-guide.md). Stage 3 extends API version 1 while retaining the original generator inputs/results. Processors receive one detached source snapshot and return vectors and/or bitmap pixels. Source-local output frames, declared output kinds, palette IDs and resource budgets are validated before display or application.
 
 ### File and discovery
 
@@ -122,6 +122,7 @@ result: vector items and/or bitmap data, source frame, warnings
 - A plugin result is artwork, not G-code. Machine control, uploads, arbitrary file writes, network access and shell commands are outside v1.
 - Preview is an overlay excluded from save files, plot export and undo history.
 - Apply atomically creates new items and a named output group. The original input remains intact.
+- Stage 3 stores the named processing-group identity in output provenance, independently of existing layer groups that now represent pens. Regeneration updates all members together without replacing the original source or imposing one colour on a multi-pen result.
 - Source ID/revision, document/session ID, parameter generation and run ID are checked before use. Results from old previews, changed/deleted sources or closed documents cannot silently apply.
 - Cancel, failure, crash and timeout leave the document unchanged. A run reaches a terminal state once; late messages are ignored.
 - The supervisor must terminate a tight loop without needing the plugin to cooperate.
@@ -210,4 +211,6 @@ Application implementation remains TypeScript, React 19, Zustand and Tailwind, w
 
 ## Remaining decisions
 
-The agreed JavaScript/source-preservation decisions above are settled. Defaults proposed for the next implementation are manual Preview then Apply, PNG/JPEG first, structured controls and one selected input. The implemented Stage 1 and Stage 2 limits are documented in their guides; extensions for processing workloads need their own resource-budget validation. Detailed bitmap stylisation and font algorithms remain deliberately open for later requirements.
+The agreed JavaScript/source-preservation decisions above are settled. Stage 3 uses manual Preview then Apply, structured controls and one selected input. PNG/JPEG imports and the user-configured pen palette supply its inputs. Its full-frame outputs may change bitmap resolution but may not crop or change the physical frame. The current stage guides and author guide document the enforced budgets.
+
+DrawingBotV3 is a reference for the later user experience: additional filters and path-generation styles can affect how vectors are made, and algorithms can choose from the user's actual pens. Stage 3 supplies that palette and preserves explicit pen assignments. Detailed artistic algorithms, their filter ordering, colour-separation strategies and font requirements will be specified separately; no DrawingBotV3 source is incorporated by this stage.

@@ -4,6 +4,7 @@ import { Button } from "../../components/ui";
 import { usePluginStore } from "./pluginStore";
 import { PluginControlField } from "./PluginControlField";
 import { useCanvasStore } from "../../store/canvasStore";
+import { selectedPluginSource } from "./pluginProcessing";
 
 export function PluginPanel() {
   const bodyId = useId();
@@ -11,7 +12,8 @@ export function PluginPanel() {
   const activeFilename = usePluginStore((state) => state.activeFilename);
   const editingImportId = usePluginStore((state) => state.editingImportId);
   const collapsed = usePluginStore((state) => state.collapsed);
-  const editingArtwork = useCanvasStore((state) => state.imports.find((item) => item.id === editingImportId));
+  const canvas = useCanvasStore();
+  const editingArtwork = canvas.imports.find((item) => item.id === editingImportId);
   const parameters = usePluginStore((state) => state.parameters);
   const running = usePluginStore((state) => state.running);
   const error = usePluginStore((state) => state.runError);
@@ -21,12 +23,19 @@ export function PluginPanel() {
   const resetParameters = usePluginStore((state) => state.resetParameters);
   const run = usePluginStore((state) => state.run);
   const cancel = usePluginStore((state) => state.cancel);
+  const preview = usePluginStore((state) => state.preview);
+  const previewRun = usePluginStore((state) => state.previewRun);
+  const applyPreview = usePluginStore((state) => state.applyPreview);
+  const discardPreview = usePluginStore((state) => state.discardPreview);
   const entry = entries.find((item) => item.filename === activeFilename);
   const manifest = entry?.manifest;
   if (!manifest) return null;
   const pluginUnavailable = !entry.enabled || !!entry.error;
   const unavailable = pluginUnavailable || (!!editingImportId && !editingArtwork);
-  const supported = manifest.input === "none";
+  const processor = manifest.input !== "none";
+  let selectionError: string | undefined;
+  try { selectedPluginSource(manifest, canvas, editingImportId ?? undefined); }
+  catch (reason) { selectionError = reason instanceof Error ? reason.message : String(reason); }
   const busy = !!running;
   const toggleLabel = collapsed ? "Expand plugin panel" : "Minimise plugin panel";
   return (
@@ -49,12 +58,21 @@ export function PluginPanel() {
           <p className="mt-1 text-xs text-content-muted">{manifest.description}</p>
         </div>
         {pluginUnavailable && <p className="text-xs text-content-muted">This plugin is disabled or unavailable. Enable it from Plugins to use it.</p>}
-        {!supported && <p className="text-xs text-content-muted">{manifest.input === "bitmap" ? "Bitmap" : "Vector"} processing will be available in a later stage. This version supports generators.</p>}
-        <form noValidate onSubmit={(event) => { event.preventDefault(); void run(); }} className="space-y-3">
-          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable || !supported} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+        {selectionError && <p className="text-xs text-content-muted">{selectionError}</p>}
+        {processor && <p className="text-xs text-content-muted">Preview keeps the source artwork unchanged. Apply adds a separate result.</p>}
+        {preview && <p role="status" className="text-xs text-content">Preview · {preview.items.length} {preview.items.length === 1 ? "item" : "items"}. Apply to keep this artwork.</p>}
+        <form noValidate onSubmit={(event) => { event.preventDefault(); void (processor ? previewRun() : run()); }} className="space-y-3">
+          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
           {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
           <div className="flex flex-wrap gap-2">
-            {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <Button size="sm" variant="primary" type="submit" disabled={unavailable || !supported}>{editingImportId ? "Update artwork" : "Add artwork"}</Button>}
+            {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <>
+              <Button size="sm" variant="primary" type="submit" disabled={unavailable || !!selectionError}>{processor ? "Preview" : editingImportId ? "Update artwork" : "Add artwork"}</Button>
+              {!processor && <Button size="sm" type="button" disabled={unavailable || !!selectionError} onClick={() => void previewRun()}>Preview</Button>}
+            </>}
+            {preview && !busy && <>
+              <Button size="sm" variant="primary" type="button" disabled={unavailable || !!selectionError} onClick={applyPreview}>{editingImportId ? "Update artwork" : "Apply artwork"}</Button>
+              <Button size="sm" type="button" onClick={discardPreview}>Cancel preview</Button>
+            </>}
             <Button size="sm" type="button" disabled={busy || unavailable} onClick={() => resetParameters(manifest.id)}>Reset</Button>
           </div>
         </form>

@@ -18,6 +18,7 @@ import type { Vp } from "../types";
 import type { CanvasItem, BitmapAssetTable, LayerGroup, PageTemplate, PageSize } from "../../../../../types";
 import type { GcodeToolpath } from "../../../utils/gcodeParser";
 import type { Theme } from "../../../store/themeStore";
+import { usePluginStore } from "../../plugins/pluginStore";
 import {
   drawImportsLayer,
   drawToolpathLayer,
@@ -91,11 +92,17 @@ export function ToolpathOverlay({
   respectSvgColorsOnCanvas,
   theme,
 }: ToolpathOverlayProps) {
+  const preview = usePluginStore((state) => state.preview);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imageRevision, setImageRevision] = useState(0);
   const bitmapCacheRef = useRef<BitmapImageCache | null>(null);
   if (!bitmapCacheRef.current) bitmapCacheRef.current = new BitmapImageCache(() => setImageRevision((value) => value + 1));
-  useEffect(() => () => bitmapCacheRef.current?.clear(), []);
+  const previewBitmapCacheRef = useRef<BitmapImageCache | null>(null);
+  if (!previewBitmapCacheRef.current) previewBitmapCacheRef.current = new BitmapImageCache(() => setImageRevision((value) => value + 1));
+  useEffect(() => () => {
+    bitmapCacheRef.current?.clear();
+    previewBitmapCacheRef.current?.clear();
+  }, []);
 
   // Cache of combined Path2D geometry per import, keyed by import ID.
   // Invalidated when imp.paths reference changes (immer creates a new array on
@@ -103,6 +110,7 @@ export function ToolpathOverlay({
   const importPath2DCacheRef = useRef(
     new Map<string, ImportPath2DCacheEntry>(),
   );
+  const previewPath2DCacheRef = useRef(new Map<string, ImportPath2DCacheEntry>());
 
   // Lazy Path2D cache for the two live plot-progress overlay strings.
   // Using a ref-held object avoids stale-closure issues while still preventing
@@ -118,6 +126,8 @@ export function ToolpathOverlay({
 
   useEffect(() => {
     bitmapCacheRef.current!.sync(assets, imports);
+    previewBitmapCacheRef.current!.sync(preview?.assets ?? EMPTY_ASSETS, preview?.items ?? []);
+    if (!preview) previewPath2DCacheRef.current.clear();
     let rafId: number | null = null;
 
     const draw = () => {
@@ -191,7 +201,7 @@ export function ToolpathOverlay({
         ctx,
         dpr,
         vp,
-        imports,
+        imports: preview?.replaceIds?.length ? imports.filter((item) => !preview.replaceIds!.includes(item.id)) : imports,
         layerGroups,
         selectedImportId,
         allImportsSelected,
@@ -203,10 +213,7 @@ export function ToolpathOverlay({
         bitmapCache: bitmapCacheRef.current!,
       });
 
-      if (!gcodeToolpath) return;
-      if (!toolpathVisible) return;
-
-      drawToolpathLayer({
+      if (gcodeToolpath && toolpathVisible) drawToolpathLayer({
         ctx,
         gcodeToolpath,
         toolpathSelected,
@@ -224,6 +231,24 @@ export function ToolpathOverlay({
         bedXMax,
         bedYMin,
         bedYMax,
+      });
+
+      if (preview) drawImportsLayer({
+        ctx, dpr, vp,
+        imports: preview.items,
+        layerGroups: layerGroups.map((group) => ({
+          ...group,
+          importIds: Object.entries(preview.penAssignments)
+            .filter(([, penId]) => penId === group.id).map(([itemId]) => itemId),
+        })),
+        selectedImportId: null,
+        allImportsSelected: false,
+        selectedGroupId: null,
+        isBottom,
+        canvasH,
+        respectSvgColorsOnCanvas,
+        cache: previewPath2DCacheRef.current,
+        bitmapCache: previewBitmapCacheRef.current!,
       });
     };
 
@@ -262,12 +287,15 @@ export function ToolpathOverlay({
     pageTemplate,
     pageSizes,
     imageRevision,
+    preview,
   ]);
 
   return (
-    <canvas
+    <><canvas
       ref={canvasRef}
       data-testid="toolpath-canvas"
+      data-plugin-preview={preview ? "true" : undefined}
+      aria-label={preview ? "Artwork canvas with plugin preview" : "Artwork canvas"}
       style={{
         position: "absolute",
         top: 0,
@@ -278,5 +306,7 @@ export function ToolpathOverlay({
         pointerEvents: "none",
       }}
     />
+    {preview && <div className="pointer-events-none absolute left-3 top-3 rounded border border-border-ui bg-panel px-2 py-1 text-xs text-content" role="status">Plugin preview · Apply or cancel in Properties</div>}
+    </>
   );
 }
