@@ -747,7 +747,11 @@ declare global {
 export type PluginCategory = "bitmap-processor" | "generator" | "font-tool";
 export type PluginParameters = Record<string, string | number | boolean>;
 
+export type PluginDetailBudget = "standard" | "extended";
+export interface PluginExecutionLimits { paths: number; points: number; executionMs: number }
+
 export interface PluginProvenance {
+  detailBudget?: PluginDetailBudget;
   /** Optional execution pass, independent of the global pen list. */
   plotOrder?: number;
   pluginId: string;
@@ -836,6 +840,7 @@ export type PluginInput =
   | (PluginSelectionInput & { kind: "vector"; paths: PluginPolyline[] });
 
 export interface PluginRunRequest {
+  detailBudget?: PluginDetailBudget;
   runId: string;
   pluginId: string;
   input: PluginInput;
@@ -866,6 +871,8 @@ export type PluginOutputItem =
 export type PluginResult = PluginVectorResult | { items: PluginOutputItem[]; warnings?: string[] };
 
 export interface PluginContext {
+  /** Host-authorized capacity; absent for older hosts. */
+  limits?: Readonly<PluginExecutionLimits>;
   runId: string;
   signal: AbortSignal;
   progress: (percent: number | null) => void;

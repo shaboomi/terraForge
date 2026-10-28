@@ -11,6 +11,8 @@ export class OperationCancelledError extends Error {
 
 interface NearestNeighbourSortOptions {
   allowReverse?: boolean;
+  /** Index both endpoints and stop once unsearched cells cannot be closer. */
+  pruneSpatialSearch?: boolean;
 }
 
 interface CooperativeSortOptions extends NearestNeighbourSortOptions {
@@ -44,6 +46,7 @@ export function nearestNeighbourSort(
   const n = subpaths.length;
   if (n === 1) return [subpaths[0]];
   const allowReverse = options?.allowReverse ?? true;
+  const prune = options?.pruneSpatialSearch ?? false;
 
   let xMin = Infinity,
     yMin = Infinity,
@@ -55,6 +58,11 @@ export function nearestNeighbourSort(
     if (y < yMin) yMin = y;
     if (x > xMax) xMax = x;
     if (y > yMax) yMax = y;
+    if (prune && allowReverse) {
+      const end = sp[sp.length - 1];
+      if (end.x < xMin) xMin = end.x; if (end.x > xMax) xMax = end.x;
+      if (end.y < yMin) yMin = end.y; if (end.y > yMax) yMax = end.y;
+    }
   }
   xMax += 1e-9;
   yMax += 1e-9;
@@ -70,6 +78,12 @@ export function nearestNeighbourSort(
     const c = Math.min(cols - 1, Math.floor((x - xMin) / cw));
     const r = Math.min(rows - 1, Math.floor((y - yMin) / ch));
     cells[r * cols + c].push(i);
+    if (prune && allowReverse) {
+      const end = subpaths[i][subpaths[i].length - 1];
+      const ec = Math.min(cols - 1, Math.max(0, Math.floor((end.x - xMin) / cw)));
+      const er = Math.min(rows - 1, Math.max(0, Math.floor((end.y - yMin) / ch)));
+      if (er !== r || ec !== c) cells[er * cols + ec].push(i);
+    }
   }
 
   const visited = new Uint8Array(n);
@@ -122,6 +136,14 @@ export function nearestNeighbourSort(
           }
         }
       }
+      if (prune && bestIdx !== -1) {
+        let clearance = Infinity;
+        if (cLo > 0) clearance = Math.min(clearance, Math.max(0, curX - (xMin + cLo * cw)));
+        if (cHi < cols - 1) clearance = Math.min(clearance, Math.max(0, xMin + (cHi + 1) * cw - curX));
+        if (rLo > 0) clearance = Math.min(clearance, Math.max(0, curY - (yMin + rLo * ch)));
+        if (rHi < rows - 1) clearance = Math.min(clearance, Math.max(0, yMin + (rHi + 1) * ch - curY));
+        if (bestDist < clearance * clearance) break;
+      }
     }
 
     if (bestIdx === -1) {
@@ -153,6 +175,7 @@ export async function nearestNeighbourSortCooperative(
   if (n === 1) return [subpaths[0]];
 
   const allowReverse = options?.allowReverse ?? true;
+  const prune = options?.pruneSpatialSearch ?? false;
   const yieldIntervalMs = Math.max(4, options?.yieldIntervalMs ?? 16);
 
   let xMin = Infinity,
@@ -165,6 +188,11 @@ export async function nearestNeighbourSortCooperative(
     if (y < yMin) yMin = y;
     if (x > xMax) xMax = x;
     if (y > yMax) yMax = y;
+    if (prune && allowReverse) {
+      const end = sp[sp.length - 1];
+      if (end.x < xMin) xMin = end.x; if (end.x > xMax) xMax = end.x;
+      if (end.y < yMin) yMin = end.y; if (end.y > yMax) yMax = end.y;
+    }
   }
   xMax += 1e-9;
   yMax += 1e-9;
@@ -181,6 +209,12 @@ export async function nearestNeighbourSortCooperative(
     const c = Math.min(cols - 1, Math.floor((x - xMin) / cw));
     const r = Math.min(rows - 1, Math.floor((y - yMin) / ch));
     cells[r * cols + c].push(i);
+    if (prune && allowReverse) {
+      const end = subpaths[i][subpaths[i].length - 1];
+      const ec = Math.min(cols - 1, Math.max(0, Math.floor((end.x - xMin) / cw)));
+      const er = Math.min(rows - 1, Math.max(0, Math.floor((end.y - yMin) / ch)));
+      if (er !== r || ec !== c) cells[er * cols + ec].push(i);
+    }
   }
 
   const visited = new Uint8Array(n);
@@ -244,6 +278,14 @@ export async function nearestNeighbourSortCooperative(
             await yieldToEventLoop();
           }
         }
+      }
+      if (prune && bestIdx !== -1) {
+        let clearance = Infinity;
+        if (cLo > 0) clearance = Math.min(clearance, Math.max(0, curX - (xMin + cLo * cw)));
+        if (cHi < cols - 1) clearance = Math.min(clearance, Math.max(0, xMin + (cHi + 1) * cw - curX));
+        if (rLo > 0) clearance = Math.min(clearance, Math.max(0, curY - (yMin + rLo * ch)));
+        if (rHi < rows - 1) clearance = Math.min(clearance, Math.max(0, yMin + (rHi + 1) * ch - curY));
+        if (bestDist < clearance * clearance) break;
       }
     }
 

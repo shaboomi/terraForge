@@ -2,7 +2,7 @@ import { suggestedPluginPen } from "./pluginPens";
 import { create } from "zustand";
 import { pluginEditor, resolvePluginTarget } from "./pluginEditing";
 import { v4 as uuid } from "uuid";
-import { isVectorImport, type CanvasItem, type PluginEntry, type PluginInput, type PluginParameters, type PluginRunRequest, type SvgImport } from "../../../../types";
+import { isVectorImport, type CanvasItem, type PluginEntry, type PluginInput, type PluginParameters, type PluginRunRequest, type PluginDetailBudget, type SvgImport } from "../../../../types";
 import { validatePluginResult } from "../../../../types/pluginValidation";
 import { normalizeSvgColor } from "../imports/services/svgImportHelpers";
 import { buildPluginInput, preparePluginArtwork, selectedPluginSource } from "./pluginProcessing";
@@ -25,6 +25,8 @@ interface PluginState {
   setCollapsed: (collapsed: boolean) => void;
   closePanel: () => void;
   parameters: Record<string, PluginParameters>;
+  detailBudgets: Record<string, PluginDetailBudget>;
+  setDetailBudget: (pluginId: string, value: PluginDetailBudget) => void;
   loading: boolean;
   saving: string[];
   error: string | null;
@@ -76,6 +78,12 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   collapsed: false,
   editingImportId: null,
   parameters: {},
+  detailBudgets: {},
+  setDetailBudget: (pluginId, value) => {
+    if (value !== "standard" && value !== "extended") return;
+    get().cancel(); clearPreview(); panelGeneration++;
+    set(state => ({ detailBudgets: { ...state.detailBudgets, [pluginId]: value }, runError: null }));
+  },
   loading: false,
   saving: [],
   error: null,
@@ -136,6 +144,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       collapsed: false,
       runError: null,
       parameters: { ...state.parameters, [manifest.id]: editor.parameters },
+      detailBudgets: { ...state.detailBudgets, [manifest.id]: artwork?.pluginSource?.detailBudget ?? "standard" },
     }));
   },
   setCollapsed: (collapsed) => set({ collapsed }),
@@ -167,6 +176,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       panelGeneration++;
       set((state) => ({
         parameters: { ...state.parameters, [pluginId]: defaultParameters(manifest) },
+        detailBudgets: { ...state.detailBudgets, [pluginId]: "standard" },
         runError: null,
       }));
     }
@@ -265,6 +275,7 @@ async function runActivePlugin(previewOnly: boolean) {
       return;
     }
     const parameters = { ...defaultParameters(manifest), ...state.parameters[manifest.id] };
+    const detailBudget = state.detailBudgets[manifest.id] ?? "standard";
     const error = (manifest.controls ?? [])
       .map((control) => parameterError(control, parameters[control.key]))
       .find(Boolean);
@@ -310,7 +321,8 @@ async function runActivePlugin(previewOnly: boolean) {
     const unsubscribePlugins = usePluginStore.subscribe((next) => {
       const current = next.entries.find((item) => item.filename === entry.filename);
       if (!current?.enabled || current.error || current.manifest?.version !== manifest.version ||
-          next.activeFilename !== entry.filename || next.parameters[manifest.id] !== state.parameters[manifest.id]) invalidate();
+          next.activeFilename !== entry.filename || next.parameters[manifest.id] !== state.parameters[manifest.id] ||
+          next.detailBudgets[manifest.id] !== state.detailBudgets[manifest.id]) invalidate();
     });
     let retainedPreview = false;
     const release = () => { unsubscribe(); unsubscribeMachine(); unsubscribePlugins(); };
@@ -337,10 +349,10 @@ async function runActivePlugin(previewOnly: boolean) {
       }
       const input: PluginInput = manifest.input === "none"
         ? { kind: "none", page, ...(palette.length ? { palette } : {}) }
-        : await buildPluginInput(manifest, canvas, page, source, abort.signal);
+        : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget);
       assertCurrent();
       const seed = target?.pluginSource?.seed ?? 1;
-      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed };
+      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
       const returned = await api().run(request);
       if (get().running?.runId !== runId) return;
       assertCurrent();
@@ -350,13 +362,14 @@ async function runActivePlugin(previewOnly: boolean) {
       let commit: () => void;
       if (legacy && !previewOnly) {
         const artwork = importPluginResult(result, manifest, parameters, page, machine);
-        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed };
+        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
         commit = () => commitPluginArtwork(artwork, target && isVectorImport(target) ? target : undefined);
       } else {
         const prepared = await preparePluginArtwork(result, manifest, parameters, page, machine, source, seed, {
           groupId: target?.pluginSource?.outputGroupId,
           groupName: target?.pluginSource?.outputGroupName,
           palette: input.palette,
+          detailBudget,
         });
         assertCurrent();
         if (get().running?.runId !== runId) return;

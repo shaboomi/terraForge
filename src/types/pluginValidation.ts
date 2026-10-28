@@ -9,6 +9,7 @@ import type {
   PluginPen,
   PluginPlacement,
   PluginPolyline,
+  PluginDetailBudget,
 } from "./index";
 
 export const PLUGIN_LIMITS = Object.freeze({
@@ -27,6 +28,13 @@ export const PLUGIN_LIMITS = Object.freeze({
   sourceDimension: 1e6,
   palette: 256,
 });
+
+/** Capacity is selected by the host UI, never by returned plugin geometry. */
+export function pluginExecutionLimits(detailBudget?: PluginDetailBudget) {
+  if (detailBudget !== undefined && detailBudget !== "standard" && detailBudget !== "extended") throw new Error("Unsupported artwork capacity.");
+  const multiplier = detailBudget === "extended" ? 6 : 1;
+  return Object.freeze({ paths: PLUGIN_LIMITS.paths * multiplier, points: PLUGIN_LIMITS.points * multiplier, executionMs: PLUGIN_LIMITS.executionMs * multiplier });
+}
 
 const ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const KEY = /^[a-zA-Z][a-zA-Z0-9_]*$/;
@@ -232,9 +240,11 @@ export function validatePluginParameters(manifest: PluginManifest, value: unknow
 
 export function validatePluginRunRequest(value: unknown): PluginRunRequest {
   const item = object(value, "Plugin request");
-  fields(item, ["runId", "pluginId", "input", "parameters", "seed"], "Plugin request");
+  fields(item, ["runId", "pluginId", "input", "parameters", "seed", "detailBudget"], "Plugin request");
   const runId = nonempty(item.runId, "Run ID", 128);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(runId)) throw new Error("Invalid run ID.");
+  const detailBudget = item.detailBudget as PluginDetailBudget | undefined;
+  const limits = pluginExecutionLimits(detailBudget);
   const supplied = object(item.input, "Plugin input");
   const page = object(supplied.page, "Page");
   fields(page, ["widthMM", "heightMM"], "Page");
@@ -257,12 +267,12 @@ export function validatePluginRunRequest(value: unknown): PluginRunRequest {
       input = { ...selection, kind: "bitmap", ...pixels };
     } else if (supplied.kind === "vector") {
       fields(supplied, [...allowed, "paths"], "Vector input");
-      input = { ...selection, kind: "vector", paths: polylines(supplied.paths, frame.width, frame.height, { paths: 0, points: 0 }) };
+      input = { ...selection, kind: "vector", paths: polylines(supplied.paths, frame.width, frame.height, { paths: 0, points: 0 }, false, limits) };
     } else throw new Error("Unsupported plugin input kind.");
     validatePenReferences(input.kind === "vector" ? input.paths : [], common.palette ?? []);
   }
   const seed = item.seed === undefined ? undefined : uint32(item.seed, "Seed");
-  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }) };
+  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }), ...(detailBudget === undefined ? {} : { detailBudget }) };
 }
 
 function reference(value: unknown, label: string): string {
@@ -333,14 +343,14 @@ function rgba(item: UnknownRecord, budget: { pixels: number }): { widthPx: numbe
   return { widthPx, heightPx, data: new Uint8Array(data) };
 }
 
-function polylines(value: unknown, width: number, height: number, budget: { paths: number; points: number }, allowEmpty = false): PluginPolyline[] {
-  if (!Array.isArray(value) || (value.length < 1 && !allowEmpty) || (budget.paths += value.length) > PLUGIN_LIMITS.paths) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.paths} paths in total.`);
+function polylines(value: unknown, width: number, height: number, budget: { paths: number; points: number }, allowEmpty = false, limits = pluginExecutionLimits()): PluginPolyline[] {
+  if (!Array.isArray(value) || (value.length < 1 && !allowEmpty) || (budget.paths += value.length) > limits.paths) throw new Error(`Output must contain between 1 and ${limits.paths} paths in total.`);
   return Array.from(value, (entry: unknown) => {
     const path = object(entry, "Path");
     fields(path, ["points", "closed", "color", "penId"], "Path");
     if (!Array.isArray(path.points) || path.points.length < 2) throw new Error("A path must contain at least two points.");
     budget.points += path.points.length;
-    if (budget.points > PLUGIN_LIMITS.points) throw new Error(`Output exceeds ${PLUGIN_LIMITS.points} points.`);
+    if (budget.points > limits.points) throw new Error(`Output exceeds ${limits.points} points.`);
     const points = Array.from(path.points, (entry: unknown) => {
       const point = object(entry, "Point");
       fields(point, ["x", "y"], "Point");
@@ -363,6 +373,7 @@ export function pluginResultItems(result: PluginResult): PluginOutputItem[] {
 export function validatePluginResult(value: unknown, request?: PluginRunRequest, manifest?: PluginManifest): PluginResult {
   const item = object(value, "Plugin result");
   const budget = { paths: 0, points: 0, pixels: 0 };
+  const limits = pluginExecutionLimits(request?.detailBudget);
   const frame = (output: UnknownRecord) => {
     const size = request && request.input.kind !== "none" ? sourceDimension : dimension;
     const width = size(output.width, "Output width"), height = size(output.height, "Output height");
@@ -379,7 +390,7 @@ export function validatePluginResult(value: unknown, request?: PluginRunRequest,
   if (item.items === undefined) {
     fields(item, ["width", "height", "paths", "warnings"], "Plugin result");
     const dimensions = frame(item);
-    result = { ...dimensions, paths: polylines(item.paths, dimensions.width, dimensions.height, budget), ...diagnostics };
+    result = { ...dimensions, paths: polylines(item.paths, dimensions.width, dimensions.height, budget, false, limits), ...diagnostics };
   } else {
     fields(item, ["items", "warnings"], "Plugin result");
     if (!Array.isArray(item.items) || item.items.length < 1 || item.items.length > PLUGIN_LIMITS.outputItems) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.outputItems} items.`);
@@ -394,7 +405,7 @@ export function validatePluginResult(value: unknown, request?: PluginRunRequest,
         if (plotOrder !== undefined && plotOrder > 15) throw new Error("Plot order must be between 0 and 15.");
         return { ...dimensions, ...name, kind: "vector",
           ...(penId === undefined ? {} : { penId }), ...(plotOrder === undefined ? {} : { plotOrder }),
-          paths: polylines(output.paths, dimensions.width, dimensions.height, budget, penId !== undefined) };
+          paths: polylines(output.paths, dimensions.width, dimensions.height, budget, penId !== undefined, limits) };
       }
       if (output.kind === "bitmap") {
         fields(output, ["kind", "width", "height", "widthPx", "heightPx", "data", "name"], "Bitmap output");

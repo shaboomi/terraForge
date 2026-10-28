@@ -50,6 +50,11 @@
 // Residual inks are c-k,m-k,y-k. This is an unprofiled artistic separation.
 export default function run(input, parameters, context) {
   const started = Date.now();
+  const capacity = context.limits?.points === 600000 && context.limits?.paths === 60000 ? 6 : 1;
+  const pathLimit = 10000 * capacity, pointLimit = 100000 * capacity;
+  const workLimit = 3000000 * capacity, vertexLimit = 400000 * capacity, gridLimit = 150000 * capacity;
+  const executionMs = capacity === 6 ? 175000 : 25000;
+  const countLabel = value => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   let lastReported = -1;
   function report(percent) {
     // Retries never announce a complete preview, or move progress backwards.
@@ -102,7 +107,7 @@ export default function run(input, parameters, context) {
       width: input.width, height: input.height, paths: [], penId: pen.id, plotOrder: i }));
     function exceeded(kind, guidance) {
       const error = new Error("CMYK Circles reached the " + kind + " detail budget" + (active ? " in " + active.name : "") +
-        " (source " + w + " x " + h + " px). Turn on Fit complete image to detail limits, or " + guidance +
+        " (source " + w + " x " + h + " px). " + (capacity === 1 && context.limits ? "Choose Extended 6x in Artwork capacity, or turn on " : "Turn on ") + "Fit complete image to detail limits, or " + guidance +
         ". No partial layers were returned.");
       error.cmykBudget = true;
       error.hadInk = pathCount > 0;
@@ -111,10 +116,10 @@ export default function run(input, parameters, context) {
     let work = 0, vertices = 0, pointCount = 0, pathCount = 0, current = null, active = null, lastProgress = -1;
     function check(progress) {
       if (context.signal.aborted) throw new Error("CMYK Circles cancelled; no artwork was added.");
-      if (Date.now() - started > 25000) throw new Error("CMYK Circles reached its time budget. Increase spacing or use Outline. No partial layers were returned.");
+      if (Date.now() - started > executionMs) throw new Error("CMYK Circles reached its time budget. Increase spacing or use Outline. No partial layers were returned.");
       if (progress > lastProgress) { report(progress); lastProgress = progress; }
     }
-    function tick() { if (++work > 3000000) exceeded("3,000,000 sampling/clipping checks", "increase Circle spacing or reduce Sampling detail"); if (work % 512 === 0) check(lastProgress); }
+    function tick() { if (++work > workLimit) exceeded(countLabel(workLimit) + " sampling/clipping checks", "increase Circle spacing or reduce Sampling detail"); if (work % 512 === 0) check(lastProgress); }
     check(0);
     const pitch = p.diameter + p.gap, rowPitch = pitch * Math.sqrt(3) / 2;
     const radiusMax = p.diameter / 2;
@@ -135,21 +140,21 @@ export default function run(input, parameters, context) {
     function emit(a, b) {
       if (same(a, b)) return;
       if (!current || !same(current.points[current.points.length - 1], a)) {
-        if (++pathCount > 10000) exceeded("10,000 paths", "increase Fill spacing or use Outline");
-        if (pointCount + 2 > 100000) exceeded("100,000 points", "increase Circle size and Fill spacing, or use Outline; reducing Sampling detail does not lower the point limit");
+        if (++pathCount > pathLimit) exceeded(countLabel(pathLimit) + " paths", "increase Fill spacing or use Outline");
+        if (pointCount + 2 > pointLimit) exceeded(countLabel(pointLimit) + " points", "increase Circle size and Fill spacing, or use Outline; reducing Sampling detail does not lower the point limit");
         current = { points: [a, b] }; active.paths.push(current); pointCount += 2;
       } else {
         const pts = current.points, last = pts[pts.length - 1], prev = pts[pts.length - 2];
         const cross = (last.x - prev.x) * (b.y - last.y) - (last.y - prev.y) * (b.x - last.x);
         const dot = (last.x - prev.x) * (b.x - last.x) + (last.y - prev.y) * (b.y - last.y);
         if (Math.abs(cross) < 1e-10 && dot >= 0) pts[pts.length - 1] = b;
-        else { if (++pointCount > 100000) exceeded("100,000 points", "increase Circle size and Fill spacing, or use Outline; reducing Sampling detail does not lower the point limit"); pts.push(b); }
+        else { if (++pointCount > pointLimit) exceeded(countLabel(pointLimit) + " points", "increase Circle size and Fill spacing, or use Outline; reducing Sampling detail does not lower the point limit"); pts.push(b); }
       }
     }
     // Liang-Barsky intersection clipping, followed by exact pixel-cell traversal.
     // Every excluded interval breaks the path, including a one-pixel alpha slit.
     function segment(a, b, channel, border = false) {
-      if (++vertices > 400000) exceeded("400,000 curve segments", "increase Fill spacing or Circle curve detail (maximum chord error)");
+      if (++vertices > vertexLimit) exceeded(countLabel(vertexLimit) + " curve segments", "increase Fill spacing or Circle curve detail (maximum chord error)");
       let lo = 0, hi = 1;
       const dx = b.x - a.x, dy = b.y - a.y;
       for (const [v, q] of [[-dx, a.x], [dx, w - a.x], [-dy, a.y], [dy, h - a.y]]) {
@@ -206,7 +211,7 @@ export default function run(input, parameters, context) {
       const maxCol = Math.ceil((Math.max(...corners.map(c => c.x)) + radiusMax) / pitch) + 1;
       const minRow = Math.floor((Math.min(...corners.map(c => c.y)) - radiusMax) / rowPitch);
       const maxRow = Math.ceil((Math.max(...corners.map(c => c.y)) + radiusMax) / rowPitch);
-      if ((maxRow - minRow + 1) * (maxCol - minCol + 1) > 150000) exceeded("150,000 grid positions per layer", "increase Circle size or Circle spacing");
+      if ((maxRow - minRow + 1) * (maxCol - minCol + 1) > gridLimit) exceeded(countLabel(gridLimit) + " grid positions per layer", "increase Circle size or Circle spacing");
       for (let row = minRow; row <= maxRow; row++) {
         check(Math.floor((channel + (row - minRow) / (maxRow - minRow + 1)) * 24));
         for (let column = minCol; column <= maxCol; column++) {

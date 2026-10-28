@@ -102,4 +102,15 @@ describe("plugin processor runtime boundary", () => {
     late({ sender: host.webContents, senderFrame: host.webContents.mainFrame }, { type: "result", result: { items: [vector] } });
     expect(tasks.complete).not.toHaveBeenCalled();
   });
+  it.each(["standard","extended"] as const)("enforces the %s deadline",async detailBudget=>{
+    vi.useFakeTimers();
+    try{
+      const outcome=runtime.run({...request(),detailBudget}).then(()=>"completed",error=>String(error));
+      const deadline=detailBudget==="extended"?180000:30000;
+      await vi.advanceTimersByTimeAsync(deadline-1);expect(tasks.fail).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);expect(await outcome).toMatch(/time limit/);
+      expect(tasks.fail).toHaveBeenCalledOnce();
+    }finally{vi.useRealTimers();}
+  });
+
 });

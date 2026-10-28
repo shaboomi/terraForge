@@ -46,7 +46,7 @@ describe("pen export order", () => {
       exportPerGroup: true, uploadToSd: false, saveLocally: true, optimise: false }));
     expect(generated.map((objects) => objects[0].sourceColor)).toEqual(["#ffffff", "#808080", "#000000"]);
     expect(vi.mocked(window.terraForge.fs.writeFile).mock.calls.map(([path]) => path))
-      .toEqual(["/exports/Z light.gcode", "/exports/M medium.gcode", "/exports/A dark.gcode"]);
+      .toEqual(["/exports/Z_light.gcode", "/exports/M_medium.gcode", "/exports/A_dark.gcode"]);
     expect(generated.every((objects) => objects.every((object) => object.sourceColor === objects[0].sourceColor))).toBe(true);
   });
 

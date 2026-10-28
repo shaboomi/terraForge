@@ -31,7 +31,7 @@ function bitmap(width = 80, height = 56, pixel: (x: number, y: number) => Pixel 
 function generate(input = bitmap(), changes: PluginParameters = {}, ctx?: PluginContext) {
   const parameters = validatePluginParameters(manifest, { ...defaults, ...changes });
   const context = ctx ?? { runId: "cmyk-test", signal: new AbortController().signal, progress: vi.fn(), seed: 99 };
-  const request = validatePluginRunRequest({ runId: context.runId, pluginId: manifest.id, input, parameters });
+  const request = validatePluginRunRequest({ runId: context.runId, pluginId: manifest.id, input, parameters, ...(context.limits?.points===600000?{detailBudget:"extended"}:{}) });
   const result = validatePluginResult(run(request.input, parameters, context), request, manifest);
   if (!("items" in result)) throw Error("Expected four structured layers");
   return { result, items: result.items as Vector[], parameters, context };
@@ -212,6 +212,21 @@ describe("CMYK Circles distributable", () => {
     expect(()=>generate(input,{fitToBudget:true,cyanPen:"real-k"})).toThrow(/four distinct pen IDs/i);
     const controller=new AbortController();controller.abort();
     expect(()=>generate(input,{fitToBudget:true},{runId:"fit-abort",signal:controller.signal,progress:vi.fn(),seed:1})).toThrow(/cancelled/i);
+  });
+
+  it("uses the explicitly authorized sixfold budget without enlarging requested circles",()=>{
+    const input=bitmap(620,800,(x,y)=>[Math.round(x*255/619),Math.round(y*255/799),180,255]);
+    const changes={diameter:10,gap:1.25,fillSpacing:1.25,tolerance:.25};
+    expect(()=>generate(input,changes)).toThrow(/100,000 points/);
+    const ctx:PluginContext={runId:"extended",signal:new AbortController().signal,progress:vi.fn(),seed:1,limits:{points:600000,paths:60000,executionMs:180000}};
+    const result=generate(input,changes,ctx);
+    expect(result.items.reduce((n,item)=>n+count(item),0)).toBeGreaterThan(100000);
+    expect(result.items.reduce((n,item)=>n+count(item),0)).toBeLessThanOrEqual(600000);
+    expect(result.items.reduce((n,item)=>n+item.paths.length,0)).toBeGreaterThan(10000);
+    expect(result.items.reduce((n,item)=>n+item.paths.length,0)).toBeLessThanOrEqual(60000);
+    expect(result.items.map(item=>item.plotOrder)).toEqual([0,1,2,3]);
+    expect(result.result.warnings!.some(warning=>warning.startsWith("Fit to limits"))).toBe(false);
+    expect(result.parameters).toMatchObject(changes);
   });
 
 });

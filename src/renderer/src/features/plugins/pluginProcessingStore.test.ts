@@ -34,7 +34,7 @@ beforeEach(() => {
     cancel: vi.fn().mockResolvedValue(undefined), openFolder: vi.fn(), installExample: vi.fn(), setEnabled: vi.fn() };
   window.terraForge.plugins = plugins;
   usePluginStore.setState({ entries: [entry], activeFilename: entry.filename, parameters: { [manifest.id]: { amount: 1 } },
-    loading: false, saving: [], collapsed: false, editingImportId: null, preview: null, running: null, runError: null });
+    detailBudgets: {}, loading: false, saving: [], collapsed: false, editingImportId: null, preview: null, running: null, runError: null });
 });
 afterEach(() => { usePluginStore.getState().cancel(); usePluginStore.getState().discardPreview(); vi.unstubAllGlobals(); });
 
@@ -136,4 +136,16 @@ describe("processing preview transactions", () => {
     expect(useCanvasStore.getState().imports.find(item => item.id === generated.id)).toMatchObject({ svgWidth: 40, svgHeight: 15,
       scale: 2, scaleX: 3, scaleY: 4, x: 18, rotation: 15 });
   });
+  it("persists extended capacity and invalidates previews if capacity changes",async()=>{
+    usePluginStore.getState().setDetailBudget(manifest.id,"extended");
+    await usePluginStore.getState().previewRun();
+    expect(plugins.run).toHaveBeenCalledWith(expect.objectContaining({detailBudget:"extended"}));
+    expect(usePluginStore.getState().preview!.items.every(item=>item.pluginSource!.detailBudget==="extended")).toBe(true);
+    usePluginStore.getState().setDetailBudget(manifest.id,"standard");expect(usePluginStore.getState().preview).toBeNull();
+    usePluginStore.getState().setDetailBudget(manifest.id,"extended");await usePluginStore.getState().previewRun();usePluginStore.getState().applyPreview();
+    const generated=useCanvasStore.getState().imports.find(item=>item.pluginSource)!;
+    usePluginStore.getState().setDetailBudget(manifest.id,"standard");usePluginStore.getState().editImport(generated.id);
+    expect(usePluginStore.getState().detailBudgets[manifest.id]).toBe("extended");
+  });
+
 });

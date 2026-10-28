@@ -6,6 +6,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { mockOpenDialog, mockSaveDialog, mockIpcInvoke } from "./helpers";
+import { createMachineConfig } from "../helpers/factories";
 import type { CanvasLayout, SvgImport } from "../../src/types";
 
 const ROOT = path.resolve(__dirname, "../..");
@@ -231,4 +232,62 @@ test("620x800 bitmap can explicitly fit the budget and restore its saved fitting
   await expect(control("fitToBudget")).toBeChecked();await expect(control("diameter")).toHaveValue("8");
   await preview("Update artwork");await panel().getByRole("button",{name:"Update artwork",exact:true}).click();
   expect(geometry(await save("large-updated.tforge",5))).toEqual(geometry(applied));
+});
+
+
+test("A2 extended capacity preserves exact circles through save/reopen and complete optimized export",async()=>{
+  test.setTimeout(300_000);
+  const layout=sourceLayout();
+  const bytes=new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="620" height="800"><defs><linearGradient id="colour"><stop offset="0" stop-color="#204080"/><stop offset=".5" stop-color="#e04020"/><stop offset="1" stop-color="#40e020"/></linearGradient></defs><rect width="620" height="800" fill="url(#colour)"/></svg>').render().asPng();
+  const id=createHash("sha256").update(bytes).digest("hex");
+  layout.assets={[id]:{id,mimeType:"image/png",widthPx:620,heightPx:800,data:Buffer.from(bytes).toString("base64")}};
+  layout.imports=[{...layout.imports[0],kind:"bitmap",assetId:id,opacity:1,svgWidth:620,svgHeight:800,x:10,y:20,rotation:0,scale:400/620,scaleX:400/620,scaleY:400/620}];
+  layout.pageTemplate={sizeId:"a2",landscape:false,marginMM:5,color:"#ffffff"};
+  const filename=path.join(temporaryRoot,"a2-source.tforge");writeFileSync(filename,JSON.stringify(layout));
+  await launch();
+  await mockIpcInvoke(application!,"config:getMachineConfigs",[createMachineConfig({id:"a2-capacity",name:"A2 test (offline)",bedWidth:650,bedHeight:650,origin:"bottom-left"})]);
+  await page.reload();await page.getByRole("combobox",{name:"Machine selector"}).selectOption("a2-capacity");
+  await open(filename);await rows().filter({hasText:/^CMYK source image$/}).click();await choosePlugin();
+  await control("diameter").fill("10");await control("gap").fill("1.25");await control("fillSpacing").fill("1.25");await control("tolerance").fill("0.25");
+  await panel().getByRole("button",{name:"Preview",exact:true}).click();await expect(panel().getByRole("alert")).toContainText("100,000 points");
+  await panel().getByLabel("Artwork capacity").selectOption("extended");
+  const start=Date.now();await preview();
+  await expect(control("fitToBudget")).not.toBeChecked();await expect(control("diameter")).toHaveValue("10");
+  await panel().getByRole("button",{name:"Apply artwork",exact:true}).click();
+  const applied=await save("a2-extended.tforge",5);const preparedMs=Date.now()-start;
+  expect(applied.imports[0]).toEqual(layout.imports[0]);expect(applied.pageTemplate!.sizeId).toBe("a2");
+  const output=vectors(applied);const paths=output.reduce((sum,item)=>sum+item.paths.length,0);
+  const points=output.reduce((sum,item)=>sum+item.paths.reduce((sum,p)=>sum+(p.d.match(/[ML]/g)||[]).length,0),0);
+  expect(paths).toBeGreaterThan(10000);expect(paths).toBeLessThanOrEqual(60000);
+  expect(points).toBeGreaterThan(100000);expect(points).toBeLessThanOrEqual(600000);
+  expect(output.every(item=>item.pluginSource!.detailBudget==="extended"&&item.pluginSource!.parameters.diameter===10)).toBe(true);
+  await undo();await expect(rows()).toHaveCount(1);await page.keyboard.press("Control+y");await expect(rows()).toHaveCount(5);
+  await close();await launch();
+  await mockIpcInvoke(application!,"config:getMachineConfigs",[createMachineConfig({id:"a2-capacity",name:"A2 test (offline)",bedWidth:650,bedHeight:650,origin:"bottom-left"})]);
+  await page.reload();await page.getByRole("combobox",{name:"Machine selector"}).selectOption("a2-capacity");
+  await open(path.join(temporaryRoot,"a2-extended.tforge"));await editResult(output[0].name);
+  await expect(panel().getByLabel("Artwork capacity")).toHaveValue("extended");await expect(control("diameter")).toHaveValue("10");
+  await panel().getByRole("button",{name:"Close plugin panel"}).click();
+  const gcodePath=path.join(temporaryRoot,"a2-extended.gcode");
+  await page.getByRole("button",{name:"Generate G-code",exact:true}).click();
+  await page.getByRole("tab",{name:/^paths$/i}).click();await page.getByLabel("Optimise paths",{exact:false}).check();
+  await page.getByRole("tab",{name:/^output$/i}).click();await page.getByLabel("Save to computer",{exact:false}).check();
+  await mockSaveDialog(application!,gcodePath);const exportStart=Date.now();await page.getByRole("button",{name:"Generate",exact:true}).click();
+  await expect.poll(()=>{try{return readFileSync(gcodePath,"utf8").includes("; -- End of job")}catch{return false}},{timeout:120_000}).toBe(true);
+  const gcode=readFileSync(gcodePath,"utf8");const exportMs=Date.now()-exportStart;
+  expect([...gcode.matchAll(/^;@tf .*pen=([^\s]+)/gm)].map(m=>m[1])).toEqual(["c","m","y","k"]);
+  expect((gcode.match(/; Pen down/g)||[]).length).toBe(paths);
+  const splitDir=path.join(temporaryRoot,"a2-per-pen");mkdirSync(splitDir,{recursive:true});await mockIpcInvoke(application!,"fs:chooseDirectory",splitDir);
+  await page.getByRole("button",{name:"Generate G-code",exact:true}).click();await page.getByRole("tab",{name:/^output$/i}).click();
+  await page.getByLabel("Split output into separate files",{exact:true}).check();await page.getByLabel("Export one file per group",{exact:true}).check();
+  await page.getByRole("button",{name:"Generate",exact:true}).click();
+  for(const [index,name]of ["Cyan","Magenta","Yellow","Black"].entries()){
+    const file=path.join(splitDir,(index+1)+"-"+name+"_opt.gcode");
+    await expect.poll(()=>{try{return readFileSync(file,"utf8").includes("; -- End of job")}catch{return false}},{timeout:120_000}).toBe(true);
+    const text=readFileSync(file,"utf8");expect((text.match(/; Pen down/g)||[]).length).toBe(output[index].paths.length);
+    expect([...text.matchAll(/^;@tf .*pen=([^\s]+)/gm)].map(m=>m[1])).toEqual([["c","m","y","k"][index]]);
+  }
+  await page.screenshot({path:test.info().outputPath("a2-extended.png")});
+  copyFileSync(path.join(temporaryRoot,"a2-extended.tforge"),test.info().outputPath("a2-extended.tforge"));
+  writeFileSync(test.info().outputPath("a2-statistics.json"),JSON.stringify({paths,points,preparedMs,exportMs,layoutBytes:Buffer.byteLength(JSON.stringify(applied)),gcodeBytes:Buffer.byteLength(gcode)},null,2));
 });

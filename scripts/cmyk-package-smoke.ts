@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const executable = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, "release/cmyk-circles-filename-fix/win-unpacked/terraForge.exe");
+const executable = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, "release/cmyk-circles-6x/win-unpacked/terraForge.exe");
 if (process.platform !== "win32") throw new Error("The cmyk package check currently supports Windows only.");
 if (!existsSync(executable)) throw new Error(`Packaged application not found: ${executable}`);
 const result = spawnSync(process.execPath, [path.join(root, "node_modules/@playwright/test/cli.js"),

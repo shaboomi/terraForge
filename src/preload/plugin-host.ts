@@ -1,5 +1,5 @@
 import { ipcRenderer } from "electron";
-import { validatePluginResult } from "../types/pluginValidation";
+import { pluginExecutionLimits, validatePluginResult } from "../types/pluginValidation";
 import type { PluginManifest, PluginRunRequest } from "../types";
 
 declare const __TERRAFORGE_PLUGIN_WORKER__: string;
@@ -54,7 +54,7 @@ function startPluginWorker(payload: unknown): void {
     });
     worker.terminate();
   };
-  worker.postMessage(payload);
+  worker.postMessage({ ...payload, limits: pluginExecutionLimits(request.detailBudget) });
 }
 
 ipcRenderer.once("plugins:host-start", (_event, payload: unknown) => {

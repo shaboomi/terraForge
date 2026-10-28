@@ -470,8 +470,16 @@ function remapLayerMetadata(
   if (previous.length === 0) {
     return nextPoints.map((points) => ({ points }));
   }
+  const endpoints = new Map<Subpath[number], TravelSubpath>();
+  for (const path of previous) {
+    if (!endpoints.has(path.points[0])) endpoints.set(path.points[0], path);
+    const last = path.points[path.points.length - 1];
+    if (!endpoints.has(last)) endpoints.set(last, path);
+  }
   return nextPoints.map((points) => {
     const first = points[0];
+    const exact = endpoints.get(first);
+    if (exact) return { ...exact, points };
     let best = previous[0];
     let bestScore = Number.POSITIVE_INFINITY;
     for (const candidate of previous) {
@@ -947,6 +955,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
           batch.map((sp) => sp.points),
           {
             allowReverse: allowPathReversal,
+            pruneSpatialSearch: batch.some(path => path.plotOrder !== undefined),
             shouldCancel: () => cancelled.has(taskId),
             onProgress: (completed, total) => {
               if (total <= 0) return;

@@ -11,3 +11,5 @@ Rebuild with `node scripts/cmyk-circles-previews.mjs` from the repository root. 
 `photograph-source.png` is a 384×384 full-frame resize of the repository's existing 512×512 NASA photograph of astronaut Eileen Collins. The existing [source and attribution](../spiral-sawtooth/README.md#portrait-attribution) are unchanged. Procedural diagnostic images are original to TerraForge.
 
 `desktop-preview.png` and `desktop-reopened.png`, when present, are screenshots of the packaged Windows test workflow. They display the actual application, including its original bitmap reference and temporary/applied path display. No plotter was operated.
+
+The A2 Extended 6× stress-test screenshot and `a2-extended-statistics.json` come from the packaged desktop workflow. It retains exact circle settings at 46,168 paths / 591,436 points, saves/reopens the layout, and verifies complete optimized combined and numbered per-pen export. This is an offline test, not a physical plot.

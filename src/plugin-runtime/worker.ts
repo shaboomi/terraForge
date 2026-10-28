@@ -1,7 +1,7 @@
-import type { PluginInput, PluginParameters, PluginRunRequest } from "../types";
+import type { PluginExecutionLimits, PluginInput, PluginParameters, PluginRunRequest } from "../types";
 
 // This module is transpiled into the dedicated preload; it never runs in Node.
-type WorkerMessage = { source: string; request: PluginRunRequest };
+type WorkerMessage = { source: string; request: PluginRunRequest; limits: PluginExecutionLimits };
 const scope = globalThis as unknown as {
   onmessage: ((event: MessageEvent<WorkerMessage>) => void) | null;
   postMessage: (message: unknown) => void;
@@ -18,6 +18,7 @@ scope.onmessage = async ({ data }) => {
     const controller = new AbortController();
     const context = Object.freeze({
       runId: data.request.runId,
+      limits: Object.freeze(data.limits),
       signal: controller.signal,
       seed: data.request.seed ?? 1,
       progress: (percent: number | null) => send({ type: "progress", progress: percent }),

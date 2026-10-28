@@ -1041,7 +1041,7 @@ describe("Toolbar", () => {
 
       await waitFor(() => {
         expect(window.terraForge.fs.saveGcodeDialog).toHaveBeenCalledWith(
-          "Layer_ 1_Top__opt.gcode",
+          "Layer_1_Top_opt.gcode",
         );
       });
     });

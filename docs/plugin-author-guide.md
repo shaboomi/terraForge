@@ -181,10 +181,10 @@ Call `context.progress(0..100)` for measurable progress, or `context.progress(nu
 Current bounds:
 
 - One plugin file: 1 MiB; JSON header: 64 KiB; plugin files per folder: 256.
-- At most 10,000 output paths and 100,000 points in total.
+- Standard capacity: at most 10,000 output paths and 100,000 points in total. Extended 6×: at most 60,000 paths and 600,000 points, selected explicitly in Properties.
 - At most 16 result items and 16 × 1,024 × 1,024 bitmap pixels in total per result; each pixel dimension is at most 8,192. Input bitmap snapshots have the same pixel limits.
 - Width and height: greater than zero and no more than 10,000 mm, then checked against the current page.
-- Runtime deadline: 30 seconds in an installed app.
+- Runtime deadline: 30 seconds for Standard, 180 seconds for Extended 6× in an installed app.
 - At most 20 warnings, each no more than 512 characters.
 
 A plugin is a self-contained JavaScript ES module. Pure JavaScript library code can be bundled into that file beforehand. Runtime npm packages, Node imports, Python, arbitrary files, network requests, shell commands, the application bridge and direct DOM/store access are unavailable. Plugins cannot control or upload to the plotter. This is a restricted computation host, not a claim that arbitrary downloaded code is harmless.
@@ -212,3 +212,9 @@ The broader roadmap is in [the design proposal](plugin-engine-design.md). [Stage
 Structured vector items may additionally declare `penId` from the supplied palette and `plotOrder` (integer 0–15). Item-level `penId` supplies the real pen for every path; conflicting per-path IDs are rejected. A vector item with a real item-level pen may have `paths: []`, preserving an empty channel without dummy marks. Legacy single-vector results still require nonempty paths.
 
 `plotOrder` persists in saved plugin provenance and takes precedence over colour batching in combined and per-pen export. Unordered geometry precedes ordered passes; optimization remains inside ordered pen batches, and path joining is disabled for ordered jobs to preserve exclusions. Per-pen filenames include their pass number. Colour/SVG-layer split export and vinyl mode are rejected for ordered artwork with guidance to use combined or per-group pen output. Pen ID markers identify the ink; they do not operate a pen changer. These optional API-1 extensions do not change legacy plugin output. See [CMYK Circles](cmyk-circles.md).
+
+### Host-selected artwork capacity
+
+Properties offers Standard (10,000 paths / 100,000 points / 30 seconds) and Extended 6× (60,000 paths / 600,000 points / 180 seconds). Standard remains the default for old requests and saved results. The optional request/provenance field `detailBudget` is `standard` or `extended`; unknown values are rejected. Every result-validation boundary uses the host-approved request allowance. Plugins cannot raise it in returned output.
+
+The frozen `context.limits` supplies `{ paths, points, executionMs }`. Algorithms that honor it can use the larger allowance; existing plugins with their own lower internal caps remain compatible but do not automatically become more detailed. CMYK Circles honors these limits while retaining Standard behavior on older hosts. Source-pixel/image limits and the 96 MiB saved-layout limit are unchanged. Capacity changes invalidate previews, and the chosen allowance is saved/restored with the output.
