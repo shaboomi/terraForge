@@ -191,4 +191,27 @@ describe("CMYK Circles distributable", () => {
     try {expect(()=>generate()).toThrow(/time budget/i);} finally {now.mockRestore();}
   });
 
+  it("fits a 620x800 image as complete layers and reports the actual circle settings",()=>{
+    const input=bitmap(620,800,(x,y)=>[Math.round(x*255/619),Math.round(y*255/799),180,255]);
+    input.placement.scaleX=92.579/620;input.placement.scaleY=119.457/800;
+    expect(()=>generate(input)).toThrow(/100,000 points detail budget.*620 x 800 px.*Fit complete image/i);
+    const fitted=generate(input,{fitToBudget:true,border:true,cyanX:2,magentaY:-1});
+    expect(fitted.items.map(item=>item.plotOrder)).toEqual([0,1,2,3]);
+    expect(fitted.items.every(item=>item.width===620&&item.height===800&&item.paths.length>0)).toBe(true);
+    expect(fitted.items.reduce((n,item)=>n+count(item),0)).toBeLessThanOrEqual(100000);
+    expect(fitted.items.reduce((n,item)=>n+item.paths.length,0)).toBeLessThanOrEqual(10000);
+    expect(fitted.result.warnings![0]).toMatch(/4x circle settings: diameter 32, gap 4, fill spacing 4, chord error 0.8/);
+    expect(fitted.items).toEqual(generate(input,{diameter:32,gap:4,fillSpacing:4,tolerance:0.8,border:true,cyanX:2,magentaY:-1}).items);
+    expect(generate(input,{fitToBudget:true,border:true,cyanX:2,magentaY:-1}).items).toEqual(fitted.items);
+    const progress=(fitted.context.progress as ReturnType<typeof vi.fn>).mock.calls.map(call=>call[0] as number);
+    expect(progress[0]).toBe(0);expect(progress.at(-1)).toBe(100);expect(progress).toEqual([...progress].sort((a,b)=>a-b));
+  });
+  it("keeps requested geometry when it fits and never fits invalid pens or cancellation",()=>{
+    const input=bitmap();const exact=generate(input),fitted=generate(input,{fitToBudget:true});
+    expect(fitted.items).toEqual(exact.items);expect(fitted.result.warnings).toEqual(exact.result.warnings);
+    expect(()=>generate(input,{fitToBudget:true,cyanPen:"real-k"})).toThrow(/four distinct pen IDs/i);
+    const controller=new AbortController();controller.abort();
+    expect(()=>generate(input,{fitToBudget:true},{runId:"fit-abort",signal:controller.signal,progress:vi.fn(),seed:1})).toThrow(/cancelled/i);
+  });
+
 });

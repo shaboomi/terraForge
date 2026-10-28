@@ -16,6 +16,16 @@ This plugin requires the engine additions on the `codex/cmyk-circles` branch of 
 
 You do not need to use GitHub to try the supplied Windows build. To incorporate the engine changes into your fork, open the supplied pull request, review its changes/checks, then use GitHub's **Merge pull request** button when satisfied. The pull request's base and head are both in `shaboomi/terraForge`. There are no upstream changes.
 
+## If you see a detail-budget error
+
+An image's pixel resolution determines the number of generated paths. Shrinking its width/height on the canvas changes physical mark sizes but does not reduce the path count. Filled 8 px circles with 1 px fill spacing can exceed the fixed 10,000-path / 100,000-point limits even on ordinary images.
+
+Enable **Fit complete image to detail limits (enlarges circle settings)** in Properties and Preview again. The option is off by default so requested physical settings and existing saved results retain their exact meaning. Fitting first tries the exact request; only if a detail limit is reached does it restart the entire four-layer calculation with circle diameter, gap, fill spacing and chord error multiplied together by 2, 4, 8, etc. It reports the effective settings in the preview message. Offsets, angles, source frame, transforms and border width stay unchanged. The fields retain the requested values, and the fitting choice is saved with the result. Repeating an update is deterministic.
+
+Fitting reduces geometric detail; it does not raise the engine limits or return unfinished layers. Invalid pens and cancellation still fail immediately. All attempts share the same runtime deadline. If fitting cannot produce a complete result, it fails with guidance rather than applying partial work. With Fit off, errors identify the particular point/path/grid/sampling limit and source dimensions; reducing Sampling detail helps sampling work, but does not directly reduce the output point budget.
+
+A 620×800 colour photograph was verified at 92.579×119.457 mm: fitting used 4× circle settings (32 px diameter, 4 px gap/fill spacing, 0.8 px chord error) and returned all four layers at 3,895 paths / 46,128 points. At that placement, the effective maximum diameter is approximately 4.78 mm. The factor depends on the actual image and settings, including transparency boundaries.
+
 ## Controls and defaults
 
 All length controls use **source pixels**, not screen pixels or machine speed. If the image's local-to-page X scale is 0.25 mm/px, an 8 px circle is 2 mm wide, a 1 px gap is 0.25 mm, a 2 px X offset is 0.5 mm, and a 3 px border band spans 0.75 mm in X. Y uses its own scale. Increasing the bitmap's displayed size increases all these physical dimensions together. Independent X/Y resizing creates elliptical marks and scales the border differently on horizontal and vertical sides. Rotation rotates the complete result with the source. Changing the image's pixel resolution while keeping its displayed dimensions changes the physical meaning of these settings; preview again.
@@ -23,6 +33,7 @@ All length controls use **source pixels**, not screen pixels or machine speed. I
 | Control | Default | Meaning |
 | --- | --- | --- |
 | Cyan / Magenta / Yellow / Black pen | Exact-colour suggestion, otherwise choose | Stable IDs from your configured Pens. Four distinct IDs; Black also draws the border. Missing saved pens are not replaced. The plugin does not reorder the global pen list. |
+| Fit complete image to detail limits | Off | If needed, enlarges the circle settings together until complete output fits; the preview reports actual sizes. Off requires exact settings. |
 | Circle size | 8 source px | Maximum diameter. |
 | Tone controls circle coverage | Reduce individual circle area | Radius = maximum radius × square root of sampled ink coverage, so geometric circle area follows tone. White produces no circle. |
 | Same size circles | Optional tone mode | Keeps the maximum diameter and uses deterministic 8×8 ordered screening to vary circle population. Low coverage can quantize to zero; very small features may be missed. |
@@ -84,7 +95,7 @@ Maximum circles with a positive gap do not cover the whole page even at 100% ink
 
 The detailed NASA colour photograph is processed at 384×384 pixels with diameter 12, fill spacing 2.5 and chord error 0.3: **6,279 paths / 76,091 points**, all four channels complete. Fine filled screens on large photographs can exceed the limits. See the [statistics and exact settings](images/cmyk-circles/statistics.json), [photograph source](images/cmyk-circles/photograph-source.png) and [editable generated SVG](images/cmyk-circles/photograph.svg). The source photograph is the existing public-domain NASA Eileen Collins fixture; [original fixture attribution](images/spiral-sawtooth/README.md#portrait-attribution) is preserved.
 
-Limits remain 10,000 paths and 100,000 points across the complete output, with a bounded cell/segment workload, a 25-second cooperative deadline and the host's 30-second termination deadline. Progress and cancellation are supported. Excessive requests fail the whole run with guidance; no partial layer set is applied. Increase diameter/gap/fill spacing/chord error, lower sampling detail, or use Outline. A lower-resolution source copy may help; the plugin never resamples or overwrites your source itself.
+Limits remain 10,000 paths and 100,000 points across the complete output, with a bounded cell/segment workload, a 25-second cooperative deadline and the host's 30-second termination deadline. Progress and cancellation are supported. Excessive requests fail the whole run with guidance; no partial layer set is applied. Enable Fit complete image to detail limits, increase diameter/gap/fill spacing/chord error, lower sampling detail for sampling-work limits, or use Outline. A lower-resolution source copy may help; the plugin never resamples or overwrites your source itself.
 
 ## Verification — 28 October 2026 (New Zealand)
 

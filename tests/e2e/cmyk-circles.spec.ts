@@ -197,3 +197,30 @@ test("duplicate assignments fail without applying partial layers",async()=>{
   expect((await save("invalid.tforge",1)).imports).toEqual(sourceLayout().imports);
   await expect(panel().getByRole("button",{name:"Apply artwork",exact:true})).toHaveCount(0);
 });
+
+
+test("620x800 bitmap can explicitly fit the budget and restore its saved fitting option",async()=>{
+  test.setTimeout(120_000);
+  const layout=sourceLayout();
+  const bytes=new Resvg('<svg xmlns="http://www.w3.org/2000/svg" width="620" height="800"><defs><linearGradient id="colour"><stop offset="0" stop-color="#204080"/><stop offset=".5" stop-color="#e04020"/><stop offset="1" stop-color="#40e020"/></linearGradient></defs><rect width="620" height="800" fill="url(#colour)"/></svg>').render().asPng();
+  const id=createHash("sha256").update(bytes).digest("hex");
+  layout.assets={[id]:{id,mimeType:"image/png",widthPx:620,heightPx:800,data:Buffer.from(bytes).toString("base64")}};
+  layout.imports=[{...layout.imports[0],kind:"bitmap",assetId:id,opacity:1,svgWidth:620,svgHeight:800,scale:92.579/620,scaleX:92.579/620,scaleY:119.457/800}];
+  const filename=path.join(temporaryRoot,"large-source.tforge");writeFileSync(filename,JSON.stringify(layout));
+  await launch();await open(filename);await rows().filter({hasText:/^CMYK source image$/}).click();await choosePlugin();
+  await expect(control("fitToBudget")).not.toBeChecked();
+  await panel().getByRole("button",{name:"Preview",exact:true}).click();
+  await expect(panel().getByRole("alert")).toContainText("Fit complete image to detail limits");
+  expect((await save("large-failed.tforge",1)).imports).toEqual(layout.imports);
+  await control("fitToBudget").check();await preview();
+  await expect(page.getByText(/Fit to limits used/).first()).toBeVisible();
+  await panel().getByRole("button",{name:"Apply artwork",exact:true}).click();
+  const applied=await save("large-applied.tforge",5);
+  expect(applied.imports[0]).toEqual(layout.imports[0]);
+  expect(vectors(applied).map(item=>item.pluginSource!.plotOrder)).toEqual([0,1,2,3]);
+  expect(vectors(applied).every(item=>item.pluginSource!.parameters.fitToBudget===true)).toBe(true);
+  await close();await launch();await open(path.join(temporaryRoot,"large-applied.tforge"));await editResult(vectors(applied)[0].name);
+  await expect(control("fitToBudget")).toBeChecked();await expect(control("diameter")).toHaveValue("8");
+  await preview("Update artwork");await panel().getByRole("button",{name:"Update artwork",exact:true}).click();
+  expect(geometry(await save("large-updated.tforge",5))).toEqual(geometry(applied));
+});
