@@ -6,6 +6,7 @@ import {
   computeOBB,
   handleBoundsForBox,
   scaleHexColor,
+  resizeCursor,
 } from "@renderer/features/canvas/utils/geometry";
 import {
   MM_TO_PX,
@@ -319,5 +320,24 @@ describe("geometry", () => {
       const result = scaleHexColor("#FF0000", 1);
       expect(result).toBe(result.toLowerCase());
     });
+  });
+});
+
+
+describe("rotated resize cursor directions", () => {
+  it.each([
+    [0, "nesw-resize", "ew-resize", "ns-resize"],
+    [37, "ew-resize", "nwse-resize", "nesw-resize"],
+    [90, "nwse-resize", "ns-resize", "ew-resize"],
+    [180, "nesw-resize", "ew-resize", "ns-resize"],
+    [270, "nwse-resize", "ns-resize", "ew-resize"],
+    [-90, "nwse-resize", "ns-resize", "ew-resize"],
+  ])("orients corner and edge cursors at %s degrees", (angle, corner, horizontal, vertical) => {
+    expect(resizeCursor("tr", angle as number)).toBe(corner);
+    expect(resizeCursor("bl", angle as number)).toBe(corner);
+    expect(resizeCursor("r", angle as number)).toBe(horizontal);
+    expect(resizeCursor("l", angle as number)).toBe(horizontal);
+    expect(resizeCursor("t", angle as number)).toBe(vertical);
+    expect(resizeCursor("b", angle as number)).toBe(vertical);
   });
 });

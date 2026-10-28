@@ -13,6 +13,7 @@
  */
 import { useState, useCallback, type RefObject } from "react";
 import { MM_TO_PX } from "../constants";
+import { rotatePoint } from "../utils/geometry";
 import type { HandlePos, ScalingState, RotatingState, Vp } from "../types";
 import type { CanvasItem } from "../../../../../types";
 import { useCanvasStore } from "../../../store/canvasStore";
@@ -21,6 +22,7 @@ export function useObjectScaleRotate(
   containerRef: RefObject<HTMLDivElement | null>,
   vpRef: RefObject<Vp>,
   updateImport: (id: string, patch: Partial<CanvasItem>) => void,
+  getBedY: (mm: number) => number = (mm) => -mm * MM_TO_PX,
 ) {
   const [scaling, setScaling] = useState<ScalingState | null>(null);
   const [rotating, setRotating] = useState<RotatingState | null>(null);
@@ -32,9 +34,9 @@ export function useObjectScaleRotate(
     (e: React.MouseEvent<SVGCircleElement>, id: string, handle: HandlePos) => {
       if (isNonPrimaryButton(e.button)) return;
       e.stopPropagation();
-      useCanvasStore.getState().snapshotForGesture();
       const imp = useCanvasStore.getState().imports.find((i) => i.id === id);
       if (!imp) return;
+      useCanvasStore.getState().snapshotForGesture();
       const sX = imp.scaleX ?? imp.scale;
       const sY = imp.scaleY ?? imp.scale;
       setScaling({
@@ -45,14 +47,17 @@ export function useObjectScaleRotate(
         startScale: imp.scale,
         startScaleX: sX,
         startScaleY: sY,
-        ratioLocked: imp.scaleX === undefined,
+        hasAxisScales: imp.scaleX !== undefined || imp.scaleY !== undefined,
+        startRotation: imp.rotation ?? 0,
+        startZoom: vpRef.current.zoom,
+        yDirection: Math.sign(getBedY(1) - getBedY(0)),
         startObjX: imp.x,
         startObjY: imp.y,
         startW: imp.svgWidth * sX * MM_TO_PX,
         startH: imp.svgHeight * sY * MM_TO_PX,
       });
     },
-    [],
+    [vpRef, getBedY],
   );
 
   const onRotateHandleMouseDown = useCallback(
@@ -87,61 +92,61 @@ export function useObjectScaleRotate(
   const updateScaleMove = useCallback(
     (e: MouseEvent) => {
       if (!scaling) return;
-      const zoom = vpRef.current.zoom;
-      const dx = (e.clientX - scaling.startMouseX) / zoom;
-      const dy = (e.clientY - scaling.startMouseY) / zoom;
+      // The handles are drawn in the artwork's rotated frame. Undo viewport
+      // scaling and rotation before measuring the change in its local extents.
+      const [dx, dy] = rotatePoint(
+        (e.clientX - scaling.startMouseX) / scaling.startZoom,
+        (e.clientY - scaling.startMouseY) / scaling.startZoom,
+        -scaling.startRotation,
+      );
       const h = scaling.handle;
-
-      if (scaling.ratioLocked) {
-        // Locked: uniform scale
-        let delta = 0;
-        if (h === "tl" || h === "bl") delta = -dx;
-        else if (h === "tr" || h === "br") delta = dx;
-        else if (h === "t") delta = -dy;
-        else if (h === "b") delta = dy;
-        else if (h === "r") delta = dx;
-        else if (h === "l") delta = -dx;
-        const dimPx = h === "t" || h === "b" ? scaling.startH : scaling.startW;
-        const rawScale = Math.max(
-          0.001,
-          scaling.startScale * (1 + delta / dimPx),
+      const hx = h.includes("l") ? -1 : h.includes("r") ? 1 : 0;
+      const hy = h.includes("t") ? -1 : h.includes("b") ? 1 : 0;
+      const w = scaling.startW;
+      const height = scaling.startH;
+      if (w <= 0 || height <= 0) return;
+      let kX = hx ? 1 + (hx * dx) / w : 1;
+      let kY = hy ? 1 + (hy * dy) / height : 1;
+      if (!e.ctrlKey) {
+        // Project onto the original handle-to-anchor vector so both mouse axes
+        // contribute to a corner drag while keeping the gesture-start ratio.
+        const vx = hx * w;
+        const vy = hy * height;
+        const k = Math.max(
+          0.001 / Math.min(scaling.startScaleX, scaling.startScaleY),
+          1 + (dx * vx + dy * vy) / (vx * vx + vy * vy),
         );
-        updateImport(scaling.id, {
-          scale: rawScale,
-          scaleX: undefined,
-          scaleY: undefined,
-        });
+        kX = kY = k;
       } else {
-        // Unlocked: drive each axis independently
-        const affectsX =
-          h === "l" ||
-          h === "r" ||
-          h === "tl" ||
-          h === "tr" ||
-          h === "br" ||
-          h === "bl";
-        const affectsY =
-          h === "t" ||
-          h === "b" ||
-          h === "tl" ||
-          h === "tr" ||
-          h === "br" ||
-          h === "bl";
-        const deltaX = h === "r" || h === "tr" || h === "br" ? dx : -dx;
-        const deltaY = h === "b" || h === "br" || h === "bl" ? dy : -dy;
-        const patch: { scaleX?: number; scaleY?: number } = {};
-        if (affectsX)
-          patch.scaleX = Math.max(
-            0.001,
-            scaling.startScaleX * (1 + deltaX / scaling.startW),
-          );
-        if (affectsY)
-          patch.scaleY = Math.max(
-            0.001,
-            scaling.startScaleY * (1 + deltaY / scaling.startH),
-          );
-        updateImport(scaling.id, patch);
+        kX = Math.max(0.001 / scaling.startScaleX, kX);
+        kY = Math.max(0.001 / scaling.startScaleY, kY);
       }
+      const deltaW = w * (kX - 1);
+      const deltaH = height * (kY - 1);
+      // Move the center by half the handle displacement. The opposite corner
+      // (or opposite edge midpoint) consequently stays fixed in world space.
+      const [centerDx, centerDy] = rotatePoint(
+        (hx * deltaW) / 2,
+        (hy * deltaH) / 2,
+        scaling.startRotation,
+      );
+      const patch: Partial<CanvasItem> = {
+        x: scaling.startObjX + (centerDx - deltaW / 2) / MM_TO_PX,
+        // Match the existing renderer's getBedY(y + height) placement for
+        // either canvas Y direction, including its height-dependent center.
+        y: scaling.startObjY +
+          (centerDy - (scaling.yDirection + 0.5) * deltaH) /
+          (scaling.yDirection * MM_TO_PX),
+      };
+      if (!e.ctrlKey && !scaling.hasAxisScales) {
+        patch.scale = scaling.startScale * kX;
+        patch.scaleX = undefined;
+        patch.scaleY = undefined;
+      } else {
+        patch.scaleX = scaling.startScaleX * kX;
+        patch.scaleY = scaling.startScaleY * kY;
+      }
+      updateImport(scaling.id, patch);
     },
     [scaling, vpRef, updateImport],
   );

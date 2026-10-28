@@ -17,6 +17,7 @@ interface DisconnectHandlers {
 }
 
 interface OpenHandlers {
+  onDisconnected?: () => void;
   parseStatus: (raw: string) => MachineStatus;
   emitConsole: (message: string) => void;
   emitStatus: (status: MachineStatus) => void;
@@ -185,6 +186,7 @@ export function openFluidNCWebSocket(
   ws.on("close", (_code, reason) => {
     if (generation !== state.wsGeneration) return;
     clearStatusTimer(state);
+    handlers.onDisconnected?.();
     const message = reason?.toString() ?? "";
     const is503 = message.includes("503");
     if (!is503 && state.wsRetryDelay <= 3000) {
@@ -195,6 +197,7 @@ export function openFluidNCWebSocket(
 
   ws.on("error", (err) => {
     if (generation !== state.wsGeneration) return;
+    handlers.onDisconnected?.();
     const is503 = err.message.includes("503");
     const isHttp200 =
       err.message.includes("200") ||

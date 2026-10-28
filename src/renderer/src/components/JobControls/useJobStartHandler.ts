@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { useMachineStore } from "../../store/machineStore";
 import { useTaskStore } from "../../store/taskStore";
 import { useCanvasStore } from "../../store/canvasStore";
 import { selectJobControlsCanvasState } from "../../store/canvasSelectors";
@@ -76,7 +77,7 @@ async function startLocalFile(
       }
     }
     await window.terraForge.fluidnc.uploadFile(taskId, localPath, remotePath);
-    await window.terraForge.fluidnc.runFile(remotePath, "sd");
+    await window.terraForge.fluidnc.runFile(remotePath, "sd", useMachineStore.getState().activeConfig()!);
     upsertTask({
       id: uuid(),
       type: "job-start",
@@ -169,6 +170,7 @@ async function startRemoteFile(
     await window.terraForge.fluidnc.runFile(
       file.path,
       file.source as "fs" | "sd",
+      useMachineStore.getState().activeConfig()!,
     );
     upsertTask({
       id: jobTaskId,

@@ -55,6 +55,9 @@ export interface MachineConfig {
   connection: MachineConnection;
 }
 
+/** Snapshot of the active pen and travel settings for a running plot. */
+export type PlotCompletionConfig = Pick<MachineConfig, "penUpCommand" | "penUpDelayMs" | "jogSpeed">;
+
 export interface AppConfig {
   /** Enables verbose debug command transport logs in the console panel. */
   debugLoggingEnabled: boolean;
@@ -592,7 +595,7 @@ export interface FluidNCApi {
     filesystem?: "internal" | "sdcard",
   ) => Promise<string>;
   deleteFile: (remotePath: string, source?: "sd" | "fs") => Promise<void>;
-  runFile: (remotePath: string, filesystem?: "sd" | "fs") => Promise<void>;
+  runFile: (remotePath: string, filesystem: "sd" | "fs", completionConfig: PlotCompletionConfig) => Promise<void>;
   /**
    * Upload a G-code string directly to the machine SD card.
    * Main process writes a temp file, streams it via the existing upload

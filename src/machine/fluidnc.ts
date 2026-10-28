@@ -184,6 +184,44 @@ export class FluidNCClient extends EventEmitter {
     }
   }
 
+  private acknowledgedCommandPending = false;
+
+  /** Safety sequences use the live socket's parser ACK, never an HTTP enqueue
+   * response. Do not retry/fall back: an uncertain motion must not be repeated.
+   */
+  async sendCommandAndWait(command: string): Promise<string> {
+    if (this.acknowledgedCommandPending) throw new Error("A confirmed command is already pending");
+    const socket = this.ws;
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("Live WebSocket required for safe plot return");
+    if (/\r|\n/.test(command)) throw new Error("Confirmed commands must contain one line");
+    this.acknowledgedCommandPending = true;
+    const dwell = command.match(/^G4\s+P([\d.]+)/i);
+    const timeoutMs = Math.min(2_147_000_000, Math.max(12_000, Number(dwell?.[1] ?? 0) * 1000 + 12_000));
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          this.off("console", onMessage);
+          this.off("connection-lost", onLost);
+        };
+        const fail = (error: Error) => { cleanup(); reject(error); };
+        const onLost = () => fail(new Error("Connection lost during safe plot return"));
+        const onMessage = (message: string) => {
+          const line = message.trim();
+          if (line === "ok") { cleanup(); resolve("ok"); }
+          else if (/^(?:error:|ALARM:)|\[MSG:ERR/i.test(line)) fail(new Error(line));
+        };
+        const timer = setTimeout(() => fail(new Error("Safe plot return command acknowledgement timed out")), timeoutMs);
+        this.on("console", onMessage);
+        this.on("connection-lost", onLost);
+        try { socket.send(command + "\n"); }
+        catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
+      });
+    } finally {
+      this.acknowledgedCommandPending = false;
+    }
+  }
+
   // ─── Job Control ──────────────────────────────────────────────────────────
 
   async runFile(
@@ -195,7 +233,8 @@ export class FluidNCClient extends EventEmitter {
         ? `$SD/Run=${remotePath}`
         : `$LocalFS/Run=${remotePath}`;
     // Delegate to sendCommand which handles the 3.x / 4.x HTTP convention difference.
-    await this.sendCommand(cmd);
+    const response = await this.sendCommand(cmd);
+    if (/(?:^|\n)(?:error:|ALARM:)|\[MSG:ERR/i.test(response)) throw new Error(response);
   }
 
   async pauseJob(): Promise<void> {
@@ -743,6 +782,7 @@ export class FluidNCClient extends EventEmitter {
   }
 
   disconnectWebSocket(): void {
+    this.emit("connection-lost");
     this.fwMajor = null;
     this.fwInfo = null;
     disconnectFluidNCWebSocket(this.getWsState(), {
@@ -752,6 +792,7 @@ export class FluidNCClient extends EventEmitter {
 
   /** Hard-stop: cancel reconnect timer, terminate socket, bump generation. */
   private killWs(): void {
+    this.emit("connection-lost");
     killFluidNCWebSocket(this.getWsState());
   }
 
@@ -761,6 +802,7 @@ export class FluidNCClient extends EventEmitter {
 
   private openWs(): void {
     openFluidNCWebSocket(this.getWsState(), {
+      onDisconnected: () => this.emit("connection-lost"),
       parseStatus: parseMachineStatus,
       emitConsole: (message) => this.emit("console", message),
       emitStatus: (status) => this.emit("status", status),

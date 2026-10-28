@@ -149,7 +149,7 @@ export function PlotCanvas() {
     updateRotateMove,
     endScale,
     endRotate,
-  } = useObjectScaleRotate(containerRef, vpRef, updateImport);
+  } = useObjectScaleRotate(containerRef, vpRef, updateImport, getBedY);
 
   // ── useGroupOBB ─── group scale / rotate + persistent OBB ───────────────────
   const {

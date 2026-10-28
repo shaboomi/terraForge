@@ -327,6 +327,16 @@ describe("svgWorker — G-code body", () => {
     expect(gcode).toContain("; -- End of job");
   });
 
+  it("lifts before returning even when lift-at-end is disabled and observes the lift delay", async () => {
+    dispatch({
+      type: "generate", taskId: "safe-return-without-lift-option", objects: [makeSimpleObj()],
+      config: makeConfig({ penType: "servo", penUpDelayMs: 400 }),
+      options: createGcodeOptions({ liftPenAtEnd: false, returnToHome: true }),
+    });
+    const gcode = (await waitForMsg("complete")).gcode as string;
+    expect(gcode).toContain("M3S0 ; Pen up - safe\nG4 P0.4 ; Pen lift delay\nG0 X0 Y0 ; Return to origin");
+  });
+
   it("omits pen-up and return-to-origin when disabled", async () => {
     dispatch({
       type: "generate",

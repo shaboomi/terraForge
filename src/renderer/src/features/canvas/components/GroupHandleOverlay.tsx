@@ -1,6 +1,7 @@
 import { type CanvasItem } from "../../../../../types";
 import { HANDLE_SCREEN_R, MM_TO_PX, PAD, ROTATE_CURSOR } from "../constants";
 import type { HandlePos } from "../types";
+import { resizeCursor } from "../utils/geometry";
 import { DeleteActionBadge } from "./DeleteActionBadge";
 
 interface GroupHandleOverlayProps {
@@ -55,16 +56,6 @@ export function GroupHandleOverlay({
   ];
 
   type HEntry = [HandlePos, number, number];
-  const cursorMap: Record<HandlePos, string> = {
-    tl: "nwse-resize",
-    t: "ns-resize",
-    tr: "nesw-resize",
-    r: "ew-resize",
-    br: "nwse-resize",
-    b: "ns-resize",
-    bl: "nesw-resize",
-    l: "ew-resize",
-  };
 
   const ROTATE_STEM_PX = 24;
   const GROUP_DEL_OFFSET_PX = 26;
@@ -151,7 +142,7 @@ export function GroupHandleOverlay({
               fill="white"
               stroke="var(--tf-accent)"
               strokeWidth={1.5}
-              style={{ cursor: cursorMap[id], pointerEvents: "all" }}
+              style={{ cursor: resizeCursor(id, angle), pointerEvents: "all" }}
               onMouseDown={(e) => onGroupHandleMouseDown(e, id)}
             />
           ))}
@@ -297,7 +288,7 @@ export function GroupHandleOverlay({
           fill="white"
           stroke="var(--tf-accent)"
           strokeWidth={1.5}
-          style={{ cursor: cursorMap[id], pointerEvents: "all" }}
+          style={{ cursor: resizeCursor(id), pointerEvents: "all" }}
           onMouseDown={(e) => onGroupHandleMouseDown(e, id)}
         />
       ))}

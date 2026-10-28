@@ -10,6 +10,8 @@ vi.mock("serialport", () => ({
   SerialPort: class MockSerialPort {
     static list = vi.fn().mockResolvedValue([]);
     isOpen = true;
+    listeners = new Map<string, (...args: unknown[]) => void>();
+    on = vi.fn((event: string, listener: (...args: unknown[]) => void) => { this.listeners.set(event, listener); });
     write = vi.fn((_data: string, cb?: (err?: Error) => void) => cb?.());
     open = vi.fn((cb: (err?: Error) => void) => cb());
     close = vi.fn((cb: (err?: Error) => void) => cb());
@@ -604,6 +606,17 @@ describe("SerialClient connect and disconnect", () => {
 
     await expect(current).resolves.toEqual(["new response"]);
     await client.disconnect();
+  });
+
+  it("invalidates automatic return on an unexpected cable close or transport error", async () => {
+    const client = new SerialClient();
+    const lost = vi.fn();
+    client.on("connection-lost", lost);
+    await client.connect("COM3");
+    const port = (client as any).port;
+    port.listeners.get("close")();
+    port.listeners.get("error")(new Error("cable lost"));
+    expect(lost).toHaveBeenCalledTimes(2);
   });
 
   it("connect() opens the port and sets up parser", async () => {

@@ -13,9 +13,15 @@ import { useCanvasStore } from "@renderer/store/canvasStore";
 import { FileBrowserPanel } from "@renderer/components/FileBrowserPanel";
 import { createMachineConfig } from "../helpers/factories";
 
+let cfg: ReturnType<typeof createMachineConfig>;
+
 beforeEach(() => {
-  const cfg = createMachineConfig({
+  cfg = createMachineConfig({
     connection: { type: "wifi", host: "fluidnc.local", port: 80 },
+    penType: "stepper",
+    penUpCommand: "G0 Z5",
+    penUpDelayMs: 250,
+    jogSpeed: 4200,
   });
   useMachineStore.setState({
     configs: [cfg],
@@ -448,6 +454,7 @@ describe("FileBrowserPanel", () => {
         expect(window.terraForge.fluidnc.runFile).toHaveBeenCalledWith(
           "/job.gcode",
           "sd",
+          cfg,
         );
       },
       { timeout: 3000 },

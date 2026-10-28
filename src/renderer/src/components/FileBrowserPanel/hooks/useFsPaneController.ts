@@ -300,7 +300,7 @@ export function useFsPaneController({
       setActiveJobPath(file.path);
 
       try {
-        await window.terraForge.fluidnc.runFile(file.path, source);
+        await window.terraForge.fluidnc.runFile(file.path, source, useMachineStore.getState().activeConfig()!);
         upsertTask({
           id: jobTaskId,
           type: "job-start",

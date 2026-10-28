@@ -40,7 +40,10 @@ export interface ScalingState {
   startScale: number;
   startScaleX: number;
   startScaleY: number;
-  ratioLocked: boolean;
+  hasAxisScales: boolean;
+  startRotation: number;
+  startZoom: number;
+  yDirection: number;
   startObjX: number;
   startObjY: number;
   startW: number;
