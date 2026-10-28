@@ -5,11 +5,20 @@ import { useMachineStore } from "@renderer/store/machineStore";
 import { useTaskStore } from "@renderer/store/taskStore";
 import { useCanvasStore } from "@renderer/store/canvasStore";
 import { JobControls } from "@renderer/components/JobControls";
+import { createMachineConfig } from "../helpers/factories";
+
+let cfg: ReturnType<typeof createMachineConfig>;
 
 beforeEach(() => {
+  cfg = createMachineConfig({
+    penType: "servo",
+    penUpCommand: "M3 S750",
+    penUpDelayMs: 300,
+    jogSpeed: 4500,
+  });
   useMachineStore.setState({
-    configs: [],
-    activeConfigId: null,
+    configs: [cfg],
+    activeConfigId: cfg.id,
     status: null,
     connected: false,
     wsLive: false,
@@ -236,6 +245,7 @@ describe("JobControls", () => {
         expect(window.terraForge.fluidnc.runFile).toHaveBeenCalledWith(
           "/test.gcode",
           "sd",
+          cfg,
         ),
       { timeout: 2000 },
     );
@@ -261,6 +271,7 @@ describe("JobControls", () => {
     expect(window.terraForge.fluidnc.runFile).toHaveBeenCalledWith(
       "/art.gcode",
       "sd",
+      cfg,
     );
   });
 
@@ -397,6 +408,7 @@ describe("JobControls", () => {
     expect(window.terraForge.fluidnc.runFile).toHaveBeenCalledWith(
       "/art.gcode",
       "sd",
+      cfg,
     );
   });
 });

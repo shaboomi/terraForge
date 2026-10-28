@@ -214,3 +214,12 @@ export function scaleHexColor(hex: string, factor: number): string {
   const b = Math.min(255, Math.round(parseInt(hex.slice(5, 7), 16) * factor));
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`.toLowerCase();
 }
+
+/** Native resize cursors follow the artwork axes, rounded to the nearest 45 degrees. */
+export function resizeCursor(handle: HandlePos, rotation = 0): string {
+  const angles: Record<HandlePos, number> = {
+    r: 0, br: 45, b: 90, bl: 135, l: 180, tl: 225, t: 270, tr: 315,
+  };
+  const index = ((Math.round((angles[handle] + rotation) / 45) % 4) + 4) % 4;
+  return ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"][index];
+}

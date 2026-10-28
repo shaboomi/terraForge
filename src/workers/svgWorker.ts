@@ -1277,8 +1277,12 @@ async function generate(msg: GenerateMessage): Promise<void> {
   }
 
   lines.push("; -- End of job -----------------------------------------------");
-  if (liftPenAtEnd) {
+  if (liftPenAtEnd || returnToHome) {
     lines.push(config.penUpCommand + " ; Pen up - safe");
+    const finalLiftDelayMs = hasUpDelayOverride ? penUpDelayMs : config.penUpDelayMs;
+    if (returnToHome && Number.isFinite(finalLiftDelayMs) && finalLiftDelayMs > 0) {
+      lines.push(`G4 P${fmtSeconds(finalLiftDelayMs / 1000)} ; Pen lift delay`);
+    }
   }
   if (returnToHome) {
     lines.push("G0 X0 Y0 ; Return to origin");

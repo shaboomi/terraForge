@@ -3,6 +3,7 @@ import { selectPlotCanvasHandleOverlayState } from "../../../store/canvasSelecto
 import { type CanvasItem } from "../../../../../types";
 import { HANDLE_SCREEN_R, MM_TO_PX, PAD, ROTATE_CURSOR } from "../constants";
 import type { HandlePos } from "../types";
+import { resizeCursor } from "../utils/geometry";
 import { DeleteActionBadge } from "./DeleteActionBadge";
 import { SelectionOverlay } from "./SelectionOverlay";
 
@@ -89,16 +90,6 @@ export function HandleOverlay({
     { id: "bl", ox: -hw, oy: hh },
     { id: "l", ox: -hw, oy: 0 },
   ];
-  const cursorMap: Record<HandlePos, string> = {
-    tl: "nwse-resize",
-    t: "ns-resize",
-    tr: "nesw-resize",
-    r: "ew-resize",
-    br: "nwse-resize",
-    b: "ns-resize",
-    bl: "nesw-resize",
-    l: "ew-resize",
-  };
 
   const [tcDx, tcDy] = rotPt(0, -hh);
   const [topCx, topCy] = w2s(cxSvg + tcDx, cySvg + tcDy);
@@ -179,9 +170,11 @@ export function HandleOverlay({
             fill="#16213e"
             stroke="var(--tf-accent)"
             strokeWidth={1.5}
-            style={{ cursor: cursorMap[id], pointerEvents: "all" }}
+            style={{ cursor: resizeCursor(id, deg), pointerEvents: "all" }}
             onMouseDown={(e) => onHandleMouseDown(e, imp.id, id)}
-          />
+          >
+            <title>Hold Ctrl to resize freely.</title>
+          </circle>
         );
       })}
 

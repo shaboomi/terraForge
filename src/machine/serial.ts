@@ -104,6 +104,8 @@ export class SerialClient extends EventEmitter {
     await this.disconnect();
 
     this.port = new SerialPort({ path, baudRate, autoOpen: false });
+    this.port.on("close", () => this.emit("connection-lost"));
+    this.port.on("error", () => this.emit("connection-lost"));
     this.parser = this.port.pipe(new ReadlineParser({ delimiter: "\n" }));
 
     this.parser.on("data", (line: string) =>

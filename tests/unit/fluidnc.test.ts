@@ -878,3 +878,71 @@ describe("FluidNCClient", () => {
     });
   });
 });
+
+describe("FluidNC confirmed safe-return commands", () => {
+  async function connected() {
+    const client = new FluidNCClient();
+    await client.connectWebSocket("192.168.1.100", 80, 80);
+    const socket = wsCapture.instances[wsCapture.instances.length - 1];
+    socket.readyState = 1;
+    socket.emit("open");
+    return { client, socket };
+  }
+
+  it("waits for parser ok, ignoring status and unrelated output, without using HTTP", async () => {
+    const { client, socket } = await connected();
+    let done = false;
+    const result = client.sendCommandAndWait("M3 S0").then(() => { done = true; });
+    expect(socket.send).toHaveBeenCalledWith("M3 S0\n");
+    socket.emit("message", "<Idle|WPos:0,0,0>\n[MSG:INFO: hello]");
+    await Promise.resolve();
+    expect(done).toBe(false);
+    socket.emit("message", "ok");
+    await result;
+    expect(done).toBe(true);
+    expect(mockFetch).not.toHaveBeenCalled();
+    client.disconnectWebSocket();
+  });
+
+  it.each(["error:20", "ALARM:1", "[MSG:ERR: lift failed]"])("rejects asynchronously on %s", async (line) => {
+    const { client, socket } = await connected();
+    const result = client.sendCommandAndWait("M3 S0");
+    const assertion = expect(result).rejects.toThrow(line);
+    socket.emit("message", line);
+    await assertion;
+    expect(socket.send.mock.calls.filter(([cmd]) => cmd === "M3 S0\n")).toHaveLength(1);
+    client.disconnectWebSocket();
+  });
+
+  it("rejects on socket loss and never falls back to HTTP or retries motion", async () => {
+    const { client, socket } = await connected();
+    const result = client.sendCommandAndWait("G4 P0.3");
+    const assertion = expect(result).rejects.toThrow("Connection lost");
+    socket.emit("close", 1006, "gone");
+    await assertion;
+    expect(mockFetch).not.toHaveBeenCalled();
+    client.disconnectWebSocket();
+  });
+
+  it("fails closed when no acknowledgement arrives and rejects concurrent commands", async () => {
+    vi.useFakeTimers();
+    try {
+      const { client } = await connected();
+      const result = client.sendCommandAndWait("M3 S0");
+      const assertion = expect(result).rejects.toThrow("timed out");
+      await expect(client.sendCommandAndWait("G1 X0 Y0")).rejects.toThrow("already pending");
+      await vi.advanceTimersByTimeAsync(12_000);
+      await assertion;
+      expect(mockFetch).not.toHaveBeenCalled();
+      client.disconnectWebSocket();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("requires a live socket and rejects multiline commands", async () => {
+    const client = new FluidNCClient();
+    await expect(client.sendCommandAndWait("M3 S0")).rejects.toThrow("Live WebSocket");
+    const live = await connected();
+    await expect(live.client.sendCommandAndWait("M3 S0\nG1 X0")).rejects.toThrow("one line");
+    live.client.disconnectWebSocket();
+  });
+});

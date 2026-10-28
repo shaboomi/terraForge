@@ -520,7 +520,7 @@ Supports:
 
 drag to move (clamped to bed boundary)
 
-8-handle bounding box for scaling; aspect ratio lock / unlock per axis
+8-handle individual-artwork bounding box for scaling in the rotated local frame; rotation-aware cursors and fixed opposite anchors at any canvas zoom. Preserve gesture-start proportions by default, including unequal axis scales; hold Ctrl to resize freely. Numeric dimension fields retain their independent aspect-ratio toggle. Each drag is one Undo/Redo step.
 
 rotation handle (drag-to-rotate) and numeric angle input with preset shortcuts
 
@@ -601,6 +601,8 @@ Upload G-code to SD (or run local file -- auto-uploads on job start if source is
 Start job (disabled until valid G-code file selected; file validated by extension)
 
 Pause/Resume/Abort
+
+After confirmed file end and a subsequent planner Idle, lift the pen with its configured command, wait the configured lift delay, and return once to the existing work-coordinate X0 Y0 at configured travel speed. Require parser acknowledgments and known units, distance and feed modes; preserve work offsets and controller limits. Pause, cancellation, disconnect, alarm, failure or manual intervention cannot trigger successful return. No automatic homing cycle. Missing completion or acknowledgment evidence fails closed; see [verification and limitations](resize-plot-return-verification.md).
 
 Job progress bar (line number / total lines from Ln: status field)
 

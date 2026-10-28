@@ -62,6 +62,7 @@ function lastWs() {
 
 function createHandlers() {
   return {
+    onDisconnected: vi.fn(),
     parseStatus: vi.fn().mockReturnValue({ state: "Idle" }),
     emitConsole: vi.fn(),
     emitStatus: vi.fn(),
@@ -82,6 +83,14 @@ afterEach(() => {
 });
 
 describe("FluidNC WebSocket lifecycle", () => {
+  it("invalidates automatic completion on socket close and error", () => {
+    const state = createState();
+    const handlers = createHandlers();
+    openFluidNCWebSocket(state, handlers);
+    lastWs().emit("error", new Error("lost"));
+    lastWs().emit("close", 1006, "lost");
+    expect(handlers.onDisconnected).toHaveBeenCalledTimes(2);
+  });
   it("opens a socket, emits connection output, and requests status updates", () => {
     const state = createState();
     const emitConsole = vi.fn();

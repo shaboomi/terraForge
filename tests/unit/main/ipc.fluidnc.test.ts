@@ -25,7 +25,11 @@ describe("registerFluidncIpcHandlers", () => {
   function buildDeps() {
     let connectionType: "wifi" | "serial" | null = null;
 
+    const wifiEvents = new Map<string, (...args: any[]) => void>();
+    const serialEvents = new Map<string, (...args: any[]) => void>();
     const fluidnc = {
+      on: vi.fn((event: string, handler: (...args: any[]) => void) => wifiEvents.set(event, handler)),
+      sendCommandAndWait: vi.fn(async () => "ok"),
       getStatus: vi.fn(),
       sendCommand: vi.fn(),
       listFiles: vi.fn(),
@@ -43,7 +47,8 @@ describe("registerFluidncIpcHandlers", () => {
     };
 
     const serial = {
-      sendCommand: vi.fn(),
+      on: vi.fn((event: string, handler: (...args: any[]) => void) => serialEvents.set(event, handler)),
+      sendCommand: vi.fn(async () => "ok"),
       listFiles: vi.fn(),
       listSDFiles: vi.fn(),
       fetchFileText: vi.fn(),
@@ -86,6 +91,8 @@ describe("registerFluidncIpcHandlers", () => {
     return {
       fluidnc,
       serial,
+      emitWifi: (event: string, ...args: any[]) => wifiEvents.get(event)?.(...args),
+      emitSerial: (event: string, ...args: any[]) => serialEvents.get(event)?.(...args),
       taskManager,
       safeSend,
       setConnectionType,
@@ -94,6 +101,70 @@ describe("registerFluidncIpcHandlers", () => {
       },
     };
   }
+
+  const completionConfig = { penUpCommand: "G53 G0 Z-2", penUpDelayMs: 250, jogSpeed: 1700 };
+  const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
+  const plotStatus = (state: string) => ({
+    state, raw: `<${state}|WPos:15,25,0>`,
+    wpos: { x: 15, y: 25, z: 0 }, mpos: { x: 65, y: 75, z: 0 },
+  });
+
+  it.each(["wifi", "serial"] as const)("routes exactly one acknowledged lift-delay-return sequence over %s after actual completion", async (type) => {
+    const deps = buildDeps();
+    deps.setCurrentType(type);
+    const emit = type === "wifi" ? deps.emitWifi : deps.emitSerial;
+    const commands = type === "wifi" ? deps.fluidnc.sendCommandAndWait : deps.serial.sendCommand;
+    await mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", completionConfig);
+    expect(type === "wifi" ? deps.fluidnc.runFile : deps.serial.runFile).toHaveBeenCalledWith("/art.gcode", "sd");
+    expect(commands).not.toHaveBeenCalled();
+    emit(type === "wifi" ? "console" : "data", "[MSG:INFO: /sd/art.gcode file job succeeded]");
+    emit("status", plotStatus("Run"));
+    expect(commands).not.toHaveBeenCalled();
+    emit("status", plotStatus("Idle"));
+    await flush();
+    expect(commands.mock.calls.map(([command]) => command)).toEqual([
+      "G90 G21 G94", "G53 G0 Z-2", "G4 P0.25", "G90 G21 G94 G1 X0 Y0 F1700",
+    ]);
+    emit("status", plotStatus("Idle"));
+    emit("status", plotStatus("Idle"));
+    await flush();
+    expect(commands).toHaveBeenCalledTimes(4);
+    if (type === "wifi") expect(deps.fluidnc.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it.each(["connection-lost", "abort", "manual", "start-failure"])("invalidates completion for %s", async (reason) => {
+    const deps = buildDeps(); deps.setCurrentType("wifi");
+    if (reason === "start-failure") deps.fluidnc.runFile.mockRejectedValueOnce(new Error("rejected"));
+    const start = mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", completionConfig);
+    if (reason === "start-failure") await expect(start).rejects.toThrow("rejected");
+    else await start;
+    deps.emitWifi("console", "[MSG:INFO: /sd/art.gcode file job succeeded]");
+    if (reason === "connection-lost") deps.emitWifi("connection-lost");
+    if (reason === "abort") await mocks.handlers.get("fluidnc:abortJob")?.();
+    if (reason === "manual") await mocks.handlers.get("fluidnc:sendCommand")?.({}, "G91 G0 X5");
+    deps.emitWifi("status", plotStatus("Idle")); await flush();
+    expect(deps.fluidnc.sendCommandAndWait).not.toHaveBeenCalled();
+  });
+
+  it("manual raw pause latches completion until explicit resume while status queries leave it armed", async () => {
+    const deps = buildDeps(); deps.setCurrentType("wifi");
+    await mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", completionConfig);
+    await mocks.handlers.get("fluidnc:sendCommand")?.({}, "!");
+    deps.emitWifi("status", plotStatus("Run"));
+    deps.emitWifi("console", "[MSG:INFO: /sd/art.gcode file job succeeded]");
+    deps.emitWifi("status", plotStatus("Idle")); await flush();
+    expect(deps.fluidnc.sendCommandAndWait).not.toHaveBeenCalled();
+    await mocks.handlers.get("fluidnc:sendCommand")?.({}, "?");
+    await mocks.handlers.get("fluidnc:sendCommand")?.({}, "~");
+    deps.emitWifi("status", plotStatus("Idle")); await flush();
+    expect(deps.fluidnc.sendCommandAndWait).toHaveBeenCalledTimes(4);
+  });
+
+  it("refuses to start without a safe machine configuration", async () => {
+    const deps = buildDeps(); deps.setCurrentType("wifi");
+    await expect(mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", undefined)).rejects.toThrow("machine profile");
+    expect(deps.fluidnc.runFile).not.toHaveBeenCalled();
+  });
 
   it("routes getStatus to serial when connection is serial, otherwise to fluidnc", async () => {
     const deps = buildDeps();

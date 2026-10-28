@@ -5,6 +5,8 @@ import { readFile, writeFile, unlink } from "fs/promises";
 import { FluidNCClient } from "../../machine/fluidnc";
 import { SerialClient } from "../../machine/serial";
 import { TaskManager } from "../../tasks/taskManager";
+import { PlotCompletionController } from "../../machine/plotCompletion";
+import type { PlotCompletionConfig, MachineStatus } from "../../types";
 
 export interface FluidNCIpcOptions {
   fluidnc: FluidNCClient;
@@ -26,6 +28,24 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   } = options;
 
   const transferAbortControllers = new Map<string, AbortController>();
+  const completion = new PlotCompletionController(async (command) => {
+    const type = getConnectionType();
+    if (type === null) throw new Error("Not connected");
+    return type === "serial" ? serial.sendCommand(command) : fluidnc.sendCommandAndWait(command);
+  }, (message) => safeSend("fluidnc:console", message));
+  fluidnc.on?.("status", (status: MachineStatus) => { if (getConnectionType() === "wifi") completion.status(status); });
+  serial.on?.("status", (status: MachineStatus) => { if (getConnectionType() === "serial") completion.status(status); });
+  fluidnc.on?.("console", (message: string) => { if (getConnectionType() === "wifi") completion.message(message); });
+  serial.on?.("data", (message: string) => { if (getConnectionType() === "serial") completion.message(message); });
+  fluidnc.on?.("connection-lost", () => completion.cancel());
+  serial.on?.("connection-lost", () => completion.cancel());
+
+  const manualCommand = (command: string) => {
+    if (command.trim() === "?") return;
+    if (command.trim() === "!") completion.pause();
+    else if (command.trim() === "~") completion.resume();
+    else completion.cancel(); // Manual motion/modal changes supersede automatic return.
+  };
 
   // All handlers transparently route to either the HTTP client (Wi-Fi) or the
   // serial command layer (USB) depending on which transport is active.
@@ -36,6 +56,7 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   });
 
   ipcMain.handle("fluidnc:sendCommand", (_e, cmd: string) => {
+    manualCommand(cmd);
     const connType = getConnectionType();
     if (connType === null) return Promise.reject(new Error("Not connected"));
     if (connType === "serial") return serial.sendCommand(cmd);
@@ -72,14 +93,23 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
 
   ipcMain.handle(
     "fluidnc:runFile",
-    (_e, remotePath: string, filesystem?: "sd" | "fs") => {
-      if (getConnectionType() === "serial")
-        return serial.runFile(remotePath, filesystem ?? "sd");
-      return fluidnc.runFile(remotePath, filesystem);
+    async (_e, remotePath: string, filesystem: "sd" | "fs", config: PlotCompletionConfig) => {
+      const type = getConnectionType();
+      if (type === null) throw new Error("Not connected");
+      const plot = completion.begin(remotePath, config);
+      try {
+        if (type === "serial") await serial.runFile(remotePath, filesystem ?? "sd");
+        else await fluidnc.runFile(remotePath, filesystem);
+        completion.accepted(plot);
+      } catch (error) {
+        completion.cancel();
+        throw error;
+      }
     },
   );
 
   ipcMain.handle("fluidnc:pauseJob", () => {
+    completion.pause();
     if (getConnectionType() === "serial") {
       serial.sendRealtime("!");
       return;
@@ -88,6 +118,7 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   });
 
   ipcMain.handle("fluidnc:resumeJob", () => {
+    completion.resume();
     if (getConnectionType() === "serial") {
       serial.sendRealtime("~");
       return;
@@ -96,6 +127,7 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   });
 
   ipcMain.handle("fluidnc:abortJob", () => {
+    completion.cancel();
     if (getConnectionType() === "serial") {
       serial.sendRealtime("\x18");
       return;
@@ -106,12 +138,14 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   ipcMain.handle(
     "fluidnc:connectWebSocket",
     (_e, host: string, port: number, wsPort?: number) => {
+      completion.cancel();
       setConnectionType("wifi");
       return fluidnc.connectWebSocket(host, port, wsPort);
     },
   );
 
   ipcMain.handle("fluidnc:disconnectWebSocket", () => {
+    completion.cancel();
     setConnectionType(null);
     return fluidnc.disconnectWebSocket();
   });
@@ -238,6 +272,7 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   ipcMain.handle(
     "serial:connect",
     async (_e, path: string, baudRate?: number) => {
+      completion.cancel();
       await serial.connect(path, baudRate);
       setConnectionType("serial");
       // Start polling `?` for status reports (same cadence as WS $RI=500).
@@ -250,10 +285,14 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   );
 
   ipcMain.handle("serial:disconnect", async () => {
+    completion.cancel();
     serial.stopStatusPolling();
     setConnectionType(null);
     await serial.disconnect();
   });
 
-  ipcMain.handle("serial:send", (_e, data: string) => serial.send(data));
+  ipcMain.handle("serial:send", (_e, data: string) => {
+    manualCommand(data);
+    return serial.send(data);
+  });
 }
