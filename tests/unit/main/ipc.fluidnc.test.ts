@@ -146,6 +146,29 @@ describe("registerFluidncIpcHandlers", () => {
     expect(deps.fluidnc.sendCommandAndWait).not.toHaveBeenCalled();
   });
 
+  it.each(["pause", "abort", "manual", "disconnect"])("aborts a return waiting in the transport when %s supersedes it", async (action) => {
+    const deps = buildDeps(); deps.setCurrentType("wifi");
+    let finishCommand!: (value: string) => void;
+    let signal: AbortSignal | undefined;
+    deps.fluidnc.sendCommandAndWait.mockImplementationOnce((...args: any[]) => {
+      signal = args[1];
+      return new Promise<string>((resolve) => { finishCommand = resolve; });
+    });
+    await mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", completionConfig);
+    deps.emitWifi("console", "[MSG:INFO: /sd/art.gcode file job succeeded]");
+    deps.emitWifi("status", plotStatus("Idle"));
+    await flush();
+    expect(signal).toBeDefined();
+    expect(signal!.aborted).toBe(false);
+    if (action === "pause") await mocks.handlers.get("fluidnc:pauseJob")?.();
+    if (action === "abort") await mocks.handlers.get("fluidnc:abortJob")?.();
+    if (action === "manual") await mocks.handlers.get("fluidnc:sendCommand")?.({}, "G91 G0 X5");
+    if (action === "disconnect") deps.emitWifi("connection-lost");
+    expect(signal!.aborted).toBe(true);
+    finishCommand("ok"); await flush();
+    expect(deps.fluidnc.sendCommandAndWait).toHaveBeenCalledTimes(1);
+  });
+
   it("manual raw pause latches completion until explicit resume while status queries leave it armed", async () => {
     const deps = buildDeps(); deps.setCurrentType("wifi");
     await mocks.handlers.get("fluidnc:runFile")?.({}, "/art.gcode", "sd", completionConfig);

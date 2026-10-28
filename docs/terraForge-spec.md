@@ -600,6 +600,8 @@ Upload G-code to SD (or run local file -- auto-uploads on job start if source is
 
 Start job (disabled until valid G-code file selected; file validated by extension)
 
+Wi-Fi file start uses the established WebSocket session exactly once, without HTTP retry/fallback. Matching file execution confirms start without imposing a short timeout on total plot duration. The deferred Run acknowledgement and initial status-report setup acknowledgement must be consumed before acknowledged lift/return commands. A cancelled waiting return must not transmit. See [timeout correction and device verification](plot-start-timeout-verification.md).
+
 Pause/Resume/Abort
 
 After confirmed file end and a subsequent planner Idle, lift the pen with its configured command, wait the configured lift delay, and return once to the existing work-coordinate X0 Y0 at configured travel speed. Require parser acknowledgments and known units, distance and feed modes; preserve work offsets and controller limits. Pause, cancellation, disconnect, alarm, failure or manual intervention cannot trigger successful return. No automatic homing cycle. Missing completion or acknowledgment evidence fails closed; see [verification and limitations](resize-plot-return-verification.md).

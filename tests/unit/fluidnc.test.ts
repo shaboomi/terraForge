@@ -69,6 +69,16 @@ function mockResponse(body: string | object, status = 200): Response {
   } as unknown as Response;
 }
 
+async function connectedClient(client = new FluidNCClient(), setupAck = true) {
+  await client.connectWebSocket("192.168.1.100", 80, 80);
+  const socket = wsCapture.instances[wsCapture.instances.length - 1];
+  socket.readyState = 1;
+  socket.emit("open");
+  if (setupAck) socket.emit("message", "ok"); // $RI=500 owns this reply.
+  return { client, socket };
+}
+const flushMicrotasks = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+
 describe("FluidNCClient", () => {
   let client: FluidNCClient;
 
@@ -183,18 +193,15 @@ describe("FluidNCClient", () => {
 
   // ── runFile ─────────────────────────────────────────────────────────────
 
-  it("sends $SD/Run command for sd filesystem", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse("ok"));
-    await client.runFile("/job.gcode", "sd");
-    const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-    expect(url).toContain("$SD/Run=/job.gcode");
-  });
-
-  it("sends $LocalFS/Run command for fs filesystem", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse("ok"));
-    await client.runFile("/job.gcode", "fs");
-    const url = decodeURIComponent(mockFetch.mock.calls[0][0] as string);
-    expect(url).toContain("$LocalFS/Run=/job.gcode");
+  it.each(["sd", "fs"] as const)("sends one file Run on the live socket for %s", async (filesystem) => {
+    const { socket } = await connectedClient(client);
+    const run = client.runFile("/job.gcode", filesystem);
+    const command = filesystem === "sd" ? "$SD/Run=/job.gcode\n" : "$LocalFS/Run=/job.gcode\n";
+    expect(socket.send).toHaveBeenCalledWith(command);
+    socket.emit("message", "ok");
+    await run;
+    expect(mockFetch).not.toHaveBeenCalled();
+    client.disconnectWebSocket();
   });
 
   it("does not transmit a Run command whose Unicode filename would be altered by FluidNC",async()=>{
@@ -885,14 +892,7 @@ describe("FluidNCClient", () => {
 });
 
 describe("FluidNC confirmed safe-return commands", () => {
-  async function connected() {
-    const client = new FluidNCClient();
-    await client.connectWebSocket("192.168.1.100", 80, 80);
-    const socket = wsCapture.instances[wsCapture.instances.length - 1];
-    socket.readyState = 1;
-    socket.emit("open");
-    return { client, socket };
-  }
+  const connected = connectedClient;
 
   it("waits for parser ok, ignoring status and unrelated output, without using HTTP", async () => {
     const { client, socket } = await connected();
@@ -949,5 +949,153 @@ describe("FluidNC confirmed safe-return commands", () => {
     const live = await connected();
     await expect(live.client.sendCommandAndWait("M3 S0\nG1 X0")).rejects.toThrow("one line");
     live.client.disconnectWebSocket();
+  });
+});
+
+
+describe("FluidNC single-send file start and deferred Run acknowledgement", () => {
+  it("confirms a long job from matching progress without a duration timeout or HTTP retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const {client,socket} = await connectedClient();
+      let started = false;
+      const run = client.runFile("/art.gcode", "sd").then(() => { started = true; });
+      socket.emit("message", "<Run|WPos:10,20,0|SD:0.20,/sd/art.gcode>");
+      await run;
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(started).toBe(true);
+      expect(socket.send.mock.calls.filter(([line]) => line === "$SD/Run=/art.gcode\n")).toHaveLength(1);
+      expect(mockFetch).not.toHaveBeenCalled();
+      socket.emit("message", "ok");
+      client.disconnectWebSocket();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps the deferred Run ACK separate from every safe-return command ACK", async () => {
+    const {client,socket} = await connectedClient();
+    const run = client.runFile("/art.gcode", "sd");
+    socket.emit("message", "<Run|SD:30.00,/sd/art.gcode>");
+    await run;
+    let lifted = false;
+    const lift = client.sendCommandAndWait("M3 S0").then(() => { lifted = true; });
+    expect(socket.send).not.toHaveBeenCalledWith("M3 S0\n");
+    socket.emit("message", "ok"); // Only the file Run's reply.
+    await flushMicrotasks();
+    expect(socket.send).toHaveBeenCalledWith("M3 S0\n");
+    expect(lifted).toBe(false);
+    socket.emit("message", "ok");
+    await lift;
+    expect(lifted).toBe(true);
+    client.disconnectWebSocket();
+  });
+
+  it.each(["[MSG:INFO: /localfs/tiny.gcode file job succeeded]", "[MSG:DEBUG: /localfs/tiny.gcode job sent]"])(
+    "confirms a tiny file from matching EOF: %s", async (eof) => {
+      const {client,socket} = await connectedClient();
+      const run = client.runFile("/tiny.gcode", "fs");
+      socket.emit("message", eof);
+      await run;
+      socket.emit("message", "ok");
+      expect(mockFetch).not.toHaveBeenCalled();
+      client.disconnectWebSocket();
+    },
+  );
+
+  it("never mistakes the $RI setup ACK for the Run ACK", async () => {
+    const {client,socket} = await connectedClient(undefined,false);
+    const run = client.runFile("/art.gcode", "sd");
+    expect(socket.send).not.toHaveBeenCalledWith("$SD/Run=/art.gcode\n");
+    socket.emit("message", "ok");
+    await flushMicrotasks();
+    expect(socket.send).toHaveBeenCalledWith("$SD/Run=/art.gcode\n");
+    let started = false; void run.then(() => { started = true; });
+    await flushMicrotasks();
+    expect(started).toBe(false);
+    socket.emit("message", "ok");
+    await run;
+    client.disconnectWebSocket();
+  });
+
+  it("ignores other filenames, transient Idle, and unrelated console messages as start confirmation", async () => {
+    const {client,socket} = await connectedClient();
+    let started = false;
+    const run = client.runFile("/art.gcode", "sd").then(() => { started = true; });
+    socket.emit("message", "<Idle|WPos:0,0,0>\n<Run|SD:2.00,/sd/other.gcode>\n[MSG:INFO: /sd/other.gcode file job succeeded]");
+    await flushMicrotasks();
+    expect(started).toBe(false);
+    socket.emit("message", "<Run|SD:2.00,/sd/art.gcode>");
+    await run;
+    socket.emit("message", "ok");
+    client.disconnectWebSocket();
+  });
+
+  it.each(["error:8", "ALARM:1", "[MSG:ERR: Cannot open file]"])("rejects failed start %s with one send and no HTTP", async (error) => {
+    const {client,socket} = await connectedClient();
+    const run = client.runFile("/art.gcode", "sd");
+    const assertion = expect(run).rejects.toThrow(error);
+    socket.emit("message", error);
+    await assertion;
+    expect(socket.send.mock.calls.filter(([line]) => line === "$SD/Run=/art.gcode\n")).toHaveLength(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(client.listenerCount("status")).toBe(0);
+    client.disconnectWebSocket();
+  });
+
+  it("aborts a return waiting behind Run ACK without transmitting it, then drains that ACK", async () => {
+    const {client,socket} = await connectedClient();
+    const run = client.runFile("/art.gcode","sd");
+    socket.emit("message", "<Run|SD:2.00,/sd/art.gcode>"); await run;
+    const abort = new AbortController();
+    const lift = client.sendCommandAndWait("M3 S0",abort.signal);
+    const assertion = expect(lift).rejects.toThrow("interrupted before transmission");
+    abort.abort(); await assertion;
+    socket.emit("message","ok"); await flushMicrotasks();
+    expect(socket.send).not.toHaveBeenCalledWith("M3 S0\n");
+    const later = client.sendCommandAndWait("G90 G21 G94");
+    socket.emit("message","ok"); await later;
+    client.disconnectWebSocket();
+  });
+
+  it("times out an unconfirmed start without retry and prevents stale ACK reuse until reconnect", async () => {
+    vi.useFakeTimers();
+    try {
+      const {client,socket} = await connectedClient();
+      const run = client.runFile("/art.gcode","sd");
+      const assertion = expect(run).rejects.toThrow("sent once and may still run");
+      await vi.advanceTimersByTimeAsync(12_000); await assertion;
+      socket.emit("message","ok");
+      await expect(client.sendCommandAndWait("M3 S0")).rejects.toThrow("acknowledgement is uncertain");
+      await expect(client.runFile("/art.gcode","sd")).rejects.toThrow("acknowledgement is uncertain");
+      expect(socket.send.mock.calls.filter(([line]) => line === "$SD/Run=/art.gcode\n")).toHaveLength(1);
+      expect(client.listenerCount("status")).toBe(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+      client.disconnectWebSocket();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("fails closed if EOF arrives but the deferred Run ACK never does", async () => {
+    vi.useFakeTimers();
+    try {
+      const {client,socket} = await connectedClient();
+      const run = client.runFile("/art.gcode","sd");
+      socket.emit("message","<Run|SD:2.00,/sd/art.gcode>"); await run;
+      const lift = client.sendCommandAndWait("M3 S0");
+      const assertion = expect(lift).rejects.toThrow("Previous command acknowledgement timed out");
+      await vi.advanceTimersByTimeAsync(12_000); await assertion;
+      expect(socket.send).not.toHaveBeenCalledWith("M3 S0\n");
+      expect(client.listenerCount("status")).toBe(0);
+      client.disconnectWebSocket();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("rejects a pending start on disconnect and leaves no ACK/status listeners", async () => {
+    const {client,socket} = await connectedClient();
+    const run = client.runFile("/art.gcode","sd");
+    const assertion = expect(run).rejects.toThrow("Connection lost");
+    socket.emit("close",1006,"gone"); await assertion;
+    expect(client.listenerCount("status")).toBe(0);
+    expect(client.listenerCount("console")).toBe(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+    client.disconnectWebSocket();
   });
 });

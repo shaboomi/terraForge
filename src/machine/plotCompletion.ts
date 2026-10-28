@@ -10,6 +10,7 @@ interface ActivePlot {
   finishing: boolean;
   returnQueued: boolean;
   returnTargetMachine?: { x: number; y: number };
+  abortController: AbortController;
 }
 
 function knownWorkPosition(status: MachineStatus): boolean {
@@ -32,7 +33,7 @@ export class PlotCompletionController {
   private active: ActivePlot | null = null;
 
   constructor(
-    private readonly send: (command: string) => Promise<string>,
+    private readonly send: (command: string, signal: AbortSignal) => Promise<string>,
     private readonly report: (message: string) => void,
   ) {}
 
@@ -45,6 +46,7 @@ export class PlotCompletionController {
     const plot: ActivePlot = {
       path: normalizedPath(path), config: { ...config }, accepted: false,
       sawFile: false, fileEnded: false, paused: false, finishing: false, returnQueued: false,
+      abortController: new AbortController(),
     };
     this.active = plot;
     return plot;
@@ -54,7 +56,11 @@ export class PlotCompletionController {
     if (this.active === plot) plot.accepted = true;
   }
 
-  cancel(): void { this.active = null; }
+  cancel(): void {
+    const plot = this.active;
+    this.active = null;
+    plot?.abortController.abort(new Error("Safe plot return cancelled"));
+  }
   pause(): void {
     if (this.active?.finishing) this.cancel();
     else if (this.active) this.active.paused = true;
@@ -112,7 +118,7 @@ export class PlotCompletionController {
     try {
       const command = async (line: string) => {
         if (this.active !== plot || plot.paused) throw new Error("Safe return interrupted");
-        const response = await this.send(line);
+        const response = await this.send(line, plot.abortController.signal);
         if (/(?:^|\n)(?:error:|ALARM:)|\[MSG:ERR/i.test(response ?? "")) throw new Error(response);
       };
       // Set known units/distance mode before a configured servo or Z-stepper

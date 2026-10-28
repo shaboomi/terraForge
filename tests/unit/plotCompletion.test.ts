@@ -184,7 +184,7 @@ describe("safe controller-file plot completion", () => {
     controller.accepted(controller.begin("/art.gcode", local));
     local.penUpCommand = "M3 S100";
     controller.message(eof); controller.status(status("Idle")); await flush();
-    expect(send).toHaveBeenCalledWith("M3 S0");
+    expect(send).toHaveBeenCalledWith("M3 S0", expect.any(AbortSignal));
     controller.cancel();
     expect(() => controller.begin("/art.gcode", { ...config, penUpCommand: "" })).toThrow("machine profile");
   });
