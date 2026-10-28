@@ -124,9 +124,7 @@ async function main() {
         expect(restored.assets).toEqual(saved.assets);
         await expect(reopened.getByRole("button", { name: "Generate G-code", exact: true })).toBeDisabled();
         await reopened.getByRole("button", { name: "Plugins", exact: true }).click();
-        const manager = reopened.getByRole("dialog", { name: "Plugins", exact: true });
-        await manager.getByRole("button", { name: "Add Example Generator" }).click();
-        await manager.getByRole("button", { name: "Example Grid", exact: true }).click();
+        await reopened.getByRole("menuitem", { name: "Add Example Generator", exact: true }).click();
         const plugin = reopened.getByRole("region", { name: "Plugin: Example Grid", exact: true });
         await plugin.getByRole("button", { name: "Add artwork", exact: true }).click();
         await expect(reopened.locator("span[title='Double-click to rename']").filter({ hasText: /^Example Grid$/ })).toBeVisible({ timeout: 35000 });

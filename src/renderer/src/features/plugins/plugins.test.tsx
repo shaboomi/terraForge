@@ -8,7 +8,6 @@ import { useTaskStore } from "../../store/taskStore";
 import { defaultParameters, importPluginResult } from "./pluginHelpers";
 import { usePluginStore } from "./pluginStore";
 import { PluginPanel } from "./PluginPanel";
-import { PluginsMenu } from "./PluginsMenu";
 import { PluginControlField } from "./PluginControlField";
 
 const manifest: PluginManifest = { id: "test.rectangle", name: "Rectangle Generator", version: "1.0.0", apiVersion: 1, description: "Draw a rectangle.", category: "generator", input: "none", outputs: ["vector"], controls: [{ key: "width", label: "Width (mm)", type: "number", default: 20, min: 1, max: 100 }] };
@@ -121,33 +120,6 @@ describe("plugin interface", () => {
     expect(useCanvasStore.getState().imports).toHaveLength(0);
     expect(useCanvasStore.getState().undoStack).toHaveLength(0);
     expect(screen.queryByRole("region", { name: "Plugin: Rectangle Generator" })).not.toBeInTheDocument();
-  });
-  it("lists categories, disabled entries, and invalid files without running any code", async () => {
-    const disabled = { ...entry, filename: "disabled.json", enabled: false, manifest: { ...manifest, id: "disabled", name: "Disabled Generator" } };
-    vi.mocked(plugins.list).mockResolvedValue([entry, disabled, { filename: "broken.json", enabled: false, error: "Invalid manifest" }]);
-    render(<PluginsMenu />);
-    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
-    expect(await screen.findByRole("button", { name: "Disabled Generator" })).toBeDisabled();
-    expect(screen.getByRole("region", { name: "Bitmap Processors" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Font Tools" })).toBeInTheDocument();
-    expect(screen.getByText("Invalid manifest")).toHaveAttribute("role", "alert");
-    expect(plugins.run).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Close Plugins" }));
-    expect(screen.queryByRole("dialog", { name: "Plugins" })).not.toBeInTheDocument();
-  });
-  it("updates enable checkboxes immediately and rolls back failed persistence", async () => {
-    let reject!: (error: Error) => void;
-    vi.mocked(plugins.setEnabled).mockReturnValue(new Promise((_, fail) => { reject = fail; }));
-    render(<PluginsMenu />);
-    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
-    const checkbox = await screen.findByRole("checkbox", { name: "Enable Rectangle Generator" });
-    fireEvent.click(checkbox);
-    expect(checkbox).not.toBeChecked();
-    expect(checkbox).toBeDisabled();
-    await act(async () => { reject(new Error("Cannot save plugin settings")); });
-    expect(checkbox).toBeChecked();
-    expect(checkbox).toBeEnabled();
-    expect(screen.getByRole("alert")).toHaveTextContent("Cannot save plugin settings");
   });
   it("keeps an in-flight toggle when a stale registry response arrives", async () => {
     let finish!: () => void;

@@ -66,9 +66,9 @@ const panel = () => page.getByRole("region", { name: `Plugin: ${NAME}`, exact: t
 const control = (key: string) => panel().locator(`#plugin-control-${key}`);
 async function choosePlugin() {
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Plugins", exact: true });
-  await dialog.getByRole("button", { name: NAME, exact: true }).click();
-  if (await dialog.isVisible()) await dialog.getByRole("button", { name: "Close Plugins" }).click();
+  await page.getByRole("menuitem", { name: "Bitmap to Vector", exact: true }).click();
+  await page.getByRole("menuitem", { name: NAME, exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Plugins", exact: true })).toHaveCount(0);
 }
 async function setupScene() {
   const layoutPath = path.join(temporaryRoot, "source.tforge");

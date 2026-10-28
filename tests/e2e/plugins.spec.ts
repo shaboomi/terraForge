@@ -68,11 +68,9 @@ async function stopApp() {
 
 async function chooseRectangle() {
   await window.getByRole("button", { name: "Plugins", exact: true }).click();
-  const dialog = window.getByRole("dialog", { name: "Plugins", exact: true });
-  await dialog.getByRole("button", { name: NAME, exact: true }).click();
-  if (await dialog.isVisible()) {
-    await dialog.getByRole("button", { name: "Close Plugins" }).click();
-  }
+  await window.getByRole("menuitem", { name: "Generators", exact: true }).click();
+  await window.getByRole("menuitem", { name: NAME, exact: true }).click();
+  await expect(window.getByRole("menu", { name: "Plugins", exact: true })).toHaveCount(0);
   return window.getByRole("region", { name: `Plugin: ${NAME}`, exact: true });
 }
 
@@ -105,7 +103,8 @@ test.afterEach(async () => {
 test("discovers a saved plugin after restart without evaluating its top-level code", async () => {
   await launchPlugins();
   await window.getByRole("button", { name: "Plugins", exact: true }).click();
-  await expect(window.getByRole("button", { name: NAME, exact: true })).toHaveCount(0);
+  await window.getByRole("menuitem", { name: "Generators", exact: true }).click();
+  await expect(window.getByRole("menuitem", { name: NAME, exact: true })).toHaveCount(0);
   await stopApp();
 
   writeFileSync(path.join(pluginDir, "rectangle.tf-plugin.js"),
@@ -161,16 +160,19 @@ test("bad metadata and duplicate IDs are reported while a valid generator remain
   writeFileSync(path.join(pluginDir, "duplicate-b.tf-plugin.js"), duplicate);
   await launchPlugins();
   await window.getByRole("button", { name: "Plugins", exact: true }).click();
-  const manager = window.getByRole("dialog", { name: "Plugins", exact: true });
+  await window.getByRole("menuitem", { name: "Generators", exact: true }).click();
+  await expect(window.getByRole("menuitem", { name: NAME, exact: true })).toBeEnabled();
+  await window.getByRole("menuitem", { name: "Manage Plugins", exact: true }).click();
+  const manager = window.getByRole("dialog", { name: "Manage Plugins", exact: true });
   await expect(manager.getByText("broken.tf-plugin.js", { exact: false })).toBeVisible();
   await expect(manager.getByText(/duplicate.*id|id.*duplicate/i).first()).toBeVisible();
-  await expect(manager.getByRole("button", { name: NAME, exact: true })).toBeEnabled();
   const toggle = manager.getByRole("checkbox", { name: `Enable ${NAME}`, exact: true });
   await toggle.click();
   await expect(toggle).not.toBeChecked();
   await stopApp();
   await launchPlugins();
   await window.getByRole("button", { name: "Plugins", exact: true }).click();
+  await window.getByRole("menuitem", { name: "Manage Plugins", exact: true }).click();
   await expect(window.getByRole("checkbox", { name: `Enable ${NAME}`, exact: true })).not.toBeChecked();
 });
 
@@ -265,18 +267,21 @@ test("a tight loop reaches its deadline and leaves no hidden runtime or artwork"
 test("the example installer adds one usable grid without overwriting its file", async () => {
   await launchPlugins();
   await window.getByRole("button", { name: "Plugins", exact: true }).click();
-  const manager = window.getByRole("dialog", { name: "Plugins", exact: true });
-  await manager.getByRole("button", { name: "Add Example Generator" }).click();
-  const example = manager.getByRole("button", { name: "Example Grid", exact: true });
-  await expect(example).toHaveCount(1);
+  await window.getByRole("menuitem", { name: "Add Example Generator" }).click();
+  const panel = window.getByRole("region", { name: "Plugin: Example Grid", exact: true });
+  await expect(panel.getByLabel("Width", { exact: true })).toBeVisible();
   const examplePath = path.join(pluginDir, "example-grid.tf-plugin.js");
   const firstSource = readFileSync(examplePath, "utf8") + "\n// user customisation must survive another example install\n";
   writeFileSync(examplePath, firstSource);
-  await manager.getByRole("button", { name: "Add Example Generator" }).click();
+  await window.getByRole("button", { name: "Plugins", exact: true }).click();
+  await window.getByRole("menuitem", { name: "Add Example Generator" }).click();
+  await expect(panel.getByLabel("Width", { exact: true })).toBeVisible();
+  await window.getByRole("button", { name: "Plugins", exact: true }).click();
+  await window.getByRole("menuitem", { name: "Generators", exact: true }).click();
+  const example = window.getByRole("menuitem", { name: "Example Grid", exact: true });
   await expect(example).toHaveCount(1);
   expect(readFileSync(examplePath, "utf8")).toBe(firstSource);
   await example.click();
-  const panel = window.getByRole("region", { name: "Plugin: Example Grid", exact: true });
   await expect(panel.getByLabel("Width", { exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "Add artwork" }).click();
   await expect(window.locator("span[title='Double-click to rename']")

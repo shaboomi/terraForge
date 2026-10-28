@@ -89,9 +89,7 @@ async function main(): Promise<void> {
     const first = await launch();
     const page = first.page;
     await page.getByRole("button", { name: "Plugins", exact: true }).click();
-    const manager = page.getByRole("dialog", { name: "Plugins", exact: true });
-    await manager.getByRole("button", { name: "Add Example Generator" }).click();
-    await manager.getByRole("button", { name: "Example Grid", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add Example Generator", exact: true }).click();
     const panel = page.getByRole("region", { name: "Plugin: Example Grid", exact: true });
     await panel.getByLabel("Width", { exact: true }).fill("50");
     await panel.getByLabel("Height", { exact: true }).fill("40");

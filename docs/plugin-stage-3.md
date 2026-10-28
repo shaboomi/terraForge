@@ -11,13 +11,13 @@ User-configured pens form the palette for colour-aware plugins. Generated pen as
 1. Start TerraForge and choose **Plugins → Open Plugin Folder**.
 2. Copy the `.tf-plugin.js` files from [the examples folder](examples/README.md) into that folder, then restart TerraForge. **Add Example Generator** continues to install the existing grid generator only.
 3. Import a PNG or JPEG and select the image itself. Set its width, height, position and rotation using Properties.
-4. Choose **Plugins → Bitmap Processors → Bitmap Tones**. Its controls appear under Properties. Choose Greyscale or Invert, then **Preview**.
+4. Choose **Plugins → Bitmap Filters → Bitmap Tones**. Its controls appear under Properties and the menu closes. Choose Greyscale or Invert, then **Preview**.
 5. The canvas labels the temporary preview. Choose **Cancel preview** to discard it, or **Apply artwork** to add a separate bitmap. The original image remains unchanged.
 6. Select a generated result and choose **Edit with Bitmap Tones**. Change its settings, choose **Preview**, then **Update artwork**. This replaces the preceding generated result together. One Undo restores the whole previous result.
 
 **Bitmap Scanlines** demonstrates bitmap-to-vector output. Row spacing and Darkness threshold control the example's simple horizontal marks. **Match my pens** compares sampled colours to the pens defined in **Pens** and assigns the marks to those real pen groups. Add at least two different pens and use a colour image to see multiple vector colours. Without configured pens it returns black vector marks. This is a small engine example; it does not implement DrawingBotV3's artistic algorithms.
 
-**Reverse Vectors** demonstrates one selected vector as input and a plugin with no parameter controls. Category controls menu placement; input declarations control which artwork a plugin can process.
+**Reverse Vectors** demonstrates one selected vector as input and a plugin with no parameter controls. Find it under **Plugins → Generators**, labelled **Vector input**. Bitmap-to-vector tools such as **Bitmap Scanlines** and **Spiral Sawtooth** are under **Plugins → Bitmap to Vector**. The menu uses existing input/output metadata; plugins explicitly categorised as font tools appear under **Font Tools**. See [the Plugins menu guide](plugins-menu.md).
 
 ## Preview, Properties and editing
 
