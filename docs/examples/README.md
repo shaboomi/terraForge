@@ -1,9 +1,10 @@
 # Stage 3 example plugins
 
-These small, self-contained JavaScript plugins demonstrate the processing API. They are original examples for TerraForge, not ports of DrawingBotV3 algorithms.
+These self-contained JavaScript plugins demonstrate the processing API. They are original examples for TerraForge, not ports of DrawingBotV3 algorithms.
 
 | File | Demonstrates |
 | --- | --- |
+| [spiral-sawtooth.tf-plugin.js](spiral-sawtooth.tf-plugin.js) | Tone-responsive Archimedean spiral with angular teeth, exact clipping and optional matching to real pens. See the [installation, controls and artwork previews](../spiral-sawtooth.md). |
 | [bitmap-tones.tf-plugin.js](bitmap-tones.tf-plugin.js) | Greyscale/invert bitmap output, alpha preservation and parameter controls. |
 | [bitmap-scanlines.tf-plugin.js](bitmap-scanlines.tf-plugin.js) | Bitmap-to-vector scanlines with threshold/spacing controls and optional matching to user-configured pens. |
 | [reverse-vectors.tf-plugin.js](reverse-vectors.tf-plugin.js) | Vector input and a tool with no parameter controls. |

@@ -14,6 +14,7 @@ Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create v
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
 - [Plugin processing Stage 3](docs/plugin-stage-3.md) — preview bitmap/vector processors and generate artwork with your pens
+- [Spiral Sawtooth](docs/spiral-sawtooth.md) — install a bitmap-to-vector spiral plugin, with controls and actual artwork previews
 - [Bitmap Stage 2](docs/plugin-stage-2.md) — image import, editing and portable layouts
 - [Plugin Stage 1](docs/plugin-stage-1.md) — supported features and a quick start
 - [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator or processor
