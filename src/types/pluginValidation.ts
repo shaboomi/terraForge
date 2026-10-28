@@ -132,6 +132,10 @@ function control(value: unknown): PluginControl {
       if (new Set(options.map((option) => option.value)).size !== options.length || !options.some((option) => option.value === defaultValue)) throw new Error("Select options must be unique and include the default.");
       return { ...base, type: "select", default: defaultValue, options };
     }
+    case "pen":
+      fields(item, ["key", "label", "type", "default", "suggestedColor"], "Pen control");
+      return { ...base, type: "pen", default: string(item.default, "Pen default", 256),
+        ...(item.suggestedColor === undefined ? {} : { suggestedColor: colour(item.suggestedColor, "Suggested colour") }) };
     case "text":
       fields(item, ["key", "label", "type", "default", "multiline"], "Text control");
       if (item.multiline !== undefined && typeof item.multiline !== "boolean") throw new Error("Multiline must be boolean.");
@@ -210,6 +214,9 @@ export function validatePluginParameters(manifest: PluginManifest, value: unknow
         break;
       case "select":
         if (typeof current !== "string" || !entry.options.some((option) => option.value === current)) throw new Error(`Parameter '${entry.label}' is not an available choice.`);
+        break;
+      case "pen":
+        string(current, entry.label, 256);
         break;
       case "text":
         string(current, entry.label);
@@ -326,8 +333,8 @@ function rgba(item: UnknownRecord, budget: { pixels: number }): { widthPx: numbe
   return { widthPx, heightPx, data: new Uint8Array(data) };
 }
 
-function polylines(value: unknown, width: number, height: number, budget: { paths: number; points: number }): PluginPolyline[] {
-  if (!Array.isArray(value) || value.length < 1 || (budget.paths += value.length) > PLUGIN_LIMITS.paths) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.paths} paths in total.`);
+function polylines(value: unknown, width: number, height: number, budget: { paths: number; points: number }, allowEmpty = false): PluginPolyline[] {
+  if (!Array.isArray(value) || (value.length < 1 && !allowEmpty) || (budget.paths += value.length) > PLUGIN_LIMITS.paths) throw new Error(`Output must contain between 1 and ${PLUGIN_LIMITS.paths} paths in total.`);
   return Array.from(value, (entry: unknown) => {
     const path = object(entry, "Path");
     fields(path, ["points", "closed", "color", "penId"], "Path");
@@ -381,8 +388,13 @@ export function validatePluginResult(value: unknown, request?: PluginRunRequest,
       const dimensions = frame(output);
       const name = output.name === undefined ? {} : { name: nonempty(output.name, "Output name") };
       if (output.kind === "vector") {
-        fields(output, ["kind", "width", "height", "paths", "name"], "Vector output");
-        return { ...dimensions, ...name, kind: "vector", paths: polylines(output.paths, dimensions.width, dimensions.height, budget) };
+        fields(output, ["kind", "width", "height", "paths", "name", "penId", "plotOrder"], "Vector output");
+        const penId = output.penId === undefined ? undefined : reference(output.penId, "Output pen ID");
+        const plotOrder = output.plotOrder === undefined ? undefined : uint32(output.plotOrder, "Plot order");
+        if (plotOrder !== undefined && plotOrder > 15) throw new Error("Plot order must be between 0 and 15.");
+        return { ...dimensions, ...name, kind: "vector",
+          ...(penId === undefined ? {} : { penId }), ...(plotOrder === undefined ? {} : { plotOrder }),
+          paths: polylines(output.paths, dimensions.width, dimensions.height, budget, penId !== undefined) };
       }
       if (output.kind === "bitmap") {
         fields(output, ["kind", "width", "height", "widthPx", "heightPx", "data", "name"], "Bitmap output");
@@ -394,7 +406,12 @@ export function validatePluginResult(value: unknown, request?: PluginRunRequest,
   }
   for (const output of pluginResultItems(result)) {
     if (manifest && !manifest.outputs.includes(output.kind)) throw new Error(`Plugin returned undeclared ${output.kind} output.`);
-    if (request && output.kind === "vector") validatePenReferences(output.paths, request.input.palette ?? []);
+    if (request && output.kind === "vector") {
+      const pens = request.input.palette ?? [];
+      validatePenReferences(output.paths, pens);
+      if (output.penId !== undefined && !pens.some((pen) => pen.id === output.penId)) throw new Error("Output references a pen outside the supplied palette.");
+      if (output.penId !== undefined && output.paths.some((path) => path.penId !== undefined && path.penId !== output.penId)) throw new Error("Output paths must use the declared output pen.");
+    }
   }
   return result;
 }

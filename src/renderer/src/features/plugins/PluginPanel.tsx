@@ -62,7 +62,7 @@ export function PluginPanel() {
         {processor && <p className="text-xs text-content-muted">Preview keeps the source artwork unchanged. Apply adds a separate result.</p>}
         {preview && <p role="status" className="text-xs text-content">Preview · {preview.items.length} {preview.items.length === 1 ? "item" : "items"}. Apply to keep this artwork.</p>}
         <form noValidate onSubmit={(event) => { event.preventDefault(); void (processor ? previewRun() : run()); }} className="space-y-3">
-          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} palette={canvas.layerGroups} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
           {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
           <div className="flex flex-wrap gap-2">
             {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <>

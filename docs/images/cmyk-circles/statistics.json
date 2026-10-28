@@ -1,0 +1,234 @@
+[
+  {
+    "name": "photograph",
+    "width": 384,
+    "height": 384,
+    "paths": 6279,
+    "points": 76091,
+    "milliseconds": 3781,
+    "parameters": {
+      "cyanPen": "demo-c",
+      "magentaPen": "demo-m",
+      "yellowPen": "demo-y",
+      "blackPen": "demo-k",
+      "diameter": 12,
+      "toneMode": "area",
+      "style": "filled",
+      "gap": 1,
+      "fillSpacing": 2.5,
+      "blackGeneration": 100,
+      "cyanX": 0,
+      "cyanY": 0,
+      "cyanAngle": 15,
+      "magentaX": 0,
+      "magentaY": 0,
+      "magentaAngle": 75,
+      "yellowX": 0,
+      "yellowY": 0,
+      "yellowAngle": 0,
+      "blackX": 0,
+      "blackY": 0,
+      "blackAngle": 45,
+      "border": false,
+      "borderWidth": 3,
+      "samples": 2,
+      "tolerance": 0.3
+    },
+    "channels": [
+      {
+        "penId": "demo-c",
+        "plotOrder": 0,
+        "paths": 182
+      },
+      {
+        "penId": "demo-m",
+        "plotOrder": 1,
+        "paths": 1708
+      },
+      {
+        "penId": "demo-y",
+        "plotOrder": 2,
+        "paths": 1850
+      },
+      {
+        "penId": "demo-k",
+        "plotOrder": 3,
+        "paths": 2539
+      }
+    ]
+  },
+  {
+    "name": "diagnostics",
+    "width": 320,
+    "height": 200,
+    "paths": 3317,
+    "points": 39386,
+    "milliseconds": 3061,
+    "parameters": {
+      "cyanPen": "demo-c",
+      "magentaPen": "demo-m",
+      "yellowPen": "demo-y",
+      "blackPen": "demo-k",
+      "diameter": 10,
+      "toneMode": "area",
+      "style": "filled",
+      "gap": 1,
+      "fillSpacing": 1.5,
+      "blackGeneration": 100,
+      "cyanX": 0,
+      "cyanY": 0,
+      "cyanAngle": 15,
+      "magentaX": 0,
+      "magentaY": 0,
+      "magentaAngle": 75,
+      "yellowX": 0,
+      "yellowY": 0,
+      "yellowAngle": 0,
+      "blackX": 0,
+      "blackY": 0,
+      "blackAngle": 45,
+      "border": false,
+      "borderWidth": 3,
+      "samples": 2,
+      "tolerance": 0.2
+    },
+    "channels": [
+      {
+        "penId": "demo-c",
+        "plotOrder": 0,
+        "paths": 424
+      },
+      {
+        "penId": "demo-m",
+        "plotOrder": 1,
+        "paths": 998
+      },
+      {
+        "penId": "demo-y",
+        "plotOrder": 2,
+        "paths": 804
+      },
+      {
+        "penId": "demo-k",
+        "plotOrder": 3,
+        "paths": 1091
+      }
+    ]
+  },
+  {
+    "name": "diagnostics-outline",
+    "width": 320,
+    "height": 200,
+    "paths": 1196,
+    "points": 13281,
+    "milliseconds": 2924,
+    "parameters": {
+      "cyanPen": "demo-c",
+      "magentaPen": "demo-m",
+      "yellowPen": "demo-y",
+      "blackPen": "demo-k",
+      "diameter": 10,
+      "toneMode": "area",
+      "style": "outline",
+      "gap": 1,
+      "fillSpacing": 1,
+      "blackGeneration": 100,
+      "cyanX": 0,
+      "cyanY": 0,
+      "cyanAngle": 15,
+      "magentaX": 0,
+      "magentaY": 0,
+      "magentaAngle": 75,
+      "yellowX": 0,
+      "yellowY": 0,
+      "yellowAngle": 0,
+      "blackX": 0,
+      "blackY": 0,
+      "blackAngle": 45,
+      "border": false,
+      "borderWidth": 3,
+      "samples": 2,
+      "tolerance": 0.2
+    },
+    "channels": [
+      {
+        "penId": "demo-c",
+        "plotOrder": 0,
+        "paths": 128
+      },
+      {
+        "penId": "demo-m",
+        "plotOrder": 1,
+        "paths": 341
+      },
+      {
+        "penId": "demo-y",
+        "plotOrder": 2,
+        "paths": 295
+      },
+      {
+        "penId": "demo-k",
+        "plotOrder": 3,
+        "paths": 432
+      }
+    ]
+  },
+  {
+    "name": "diagnostics-equal-size",
+    "width": 320,
+    "height": 200,
+    "paths": 2103,
+    "points": 24595,
+    "milliseconds": 3494,
+    "parameters": {
+      "cyanPen": "demo-c",
+      "magentaPen": "demo-m",
+      "yellowPen": "demo-y",
+      "blackPen": "demo-k",
+      "diameter": 10,
+      "toneMode": "number",
+      "style": "filled",
+      "gap": 1,
+      "fillSpacing": 1.5,
+      "blackGeneration": 100,
+      "cyanX": 0,
+      "cyanY": 0,
+      "cyanAngle": 15,
+      "magentaX": 0,
+      "magentaY": 0,
+      "magentaAngle": 75,
+      "yellowX": 0,
+      "yellowY": 0,
+      "yellowAngle": 0,
+      "blackX": 0,
+      "blackY": 0,
+      "blackAngle": 45,
+      "border": false,
+      "borderWidth": 3,
+      "samples": 2,
+      "tolerance": 0.2
+    },
+    "channels": [
+      {
+        "penId": "demo-c",
+        "plotOrder": 0,
+        "paths": 400
+      },
+      {
+        "penId": "demo-m",
+        "plotOrder": 1,
+        "paths": 662
+      },
+      {
+        "penId": "demo-y",
+        "plotOrder": 2,
+        "paths": 496
+      },
+      {
+        "penId": "demo-k",
+        "plotOrder": 3,
+        "paths": 545
+      }
+    ]
+  }
+]

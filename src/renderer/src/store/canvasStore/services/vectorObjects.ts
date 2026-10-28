@@ -36,7 +36,8 @@ function projectPathToVectorObjects(
     originalHeight: imp.svgHeight,
     viewBoxX: imp.viewBoxX,
     viewBoxY: imp.viewBoxY,
-    layer: path.layer,
+    layer: imp.pluginSource?.plotOrder === undefined ? path.layer : imp.name,
+    ...(imp.pluginSource?.plotOrder === undefined ? {} : { plotOrder: imp.pluginSource.plotOrder }),
     passCount: path.passCount ?? 1,
     passMode: path.passMode ?? "repeat",
   };
@@ -136,8 +137,9 @@ export function vectorObjectsForImportLayer(
 }
 
 export function vectorObjectsForImports(imports: CanvasItem[], layerGroups: LayerGroup[] = []): VectorObject[] {
-  const penColors = new Map(layerGroups.flatMap((group) => group.importIds.map((id) => [id, group.color] as const)));
-  return imports.flatMap((imp) => vectorObjectsForImport(imp, penColors.get(imp.id)));
+  const pens = new Map(layerGroups.flatMap((group) => group.importIds.map((id) => [id, group] as const)));
+  return imports.flatMap((imp) => vectorObjectsForImport(imp, pens.get(imp.id)?.color)
+    .map((object) => object.plotOrder === undefined ? object : { ...object, penId: pens.get(imp.id)?.id }));
 }
 
 export function vectorObjectsForGroup(
@@ -150,7 +152,8 @@ export function vectorObjectsForGroup(
   const groupImportIds = new Set(group.importIds);
   return imports
     .filter((imp) => groupImportIds.has(imp.id))
-    .flatMap((imp) => vectorObjectsForImport(imp, group.color));
+    .flatMap((imp) => vectorObjectsForImport(imp, group.color).map((object) =>
+      object.plotOrder === undefined ? object : { ...object, penId: group.id }));
 }
 
 export function vectorObjectsUngrouped(

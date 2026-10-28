@@ -93,6 +93,7 @@ Every control has a unique `key`, a `label`, a `type` and a `default`. Keys star
 | `slider` | Same fields as `number`. |
 | `boolean` | Boolean default; displayed as a checkbox. |
 | `select` | `options: [{"label":"Friendly name","value":"value"}]`; default must match an option value. |
+| `pen` | String default (usually empty); optional `suggestedColor` six-digit hex. Dropdown lists configured real pens; a unique exact colour can be suggested. Missing saved IDs require a new explicit choice. |
 | `text` | Text default; optional `multiline: true`. |
 | `colour` | Six-digit hexadecimal default such as `#224466`. |
 
@@ -205,3 +206,9 @@ A plugin is a self-contained JavaScript ES module. Pure JavaScript library code 
 | Sandbox unavailable | Run a supported desktop configuration with Electron sandboxing enabled. The plugin runtime does not run with global `--no-sandbox` flags. |
 
 The broader roadmap is in [the design proposal](plugin-engine-design.md). [Stage 1](plugin-stage-1.md), [Stage 2](plugin-stage-2.md) and [Stage 3](plugin-stage-3.md) record the milestone boundaries and verification. Example processor files are in [examples](examples/README.md).
+
+### Ordered real-pen outputs
+
+Structured vector items may additionally declare `penId` from the supplied palette and `plotOrder` (integer 0–15). Item-level `penId` supplies the real pen for every path; conflicting per-path IDs are rejected. A vector item with a real item-level pen may have `paths: []`, preserving an empty channel without dummy marks. Legacy single-vector results still require nonempty paths.
+
+`plotOrder` persists in saved plugin provenance and takes precedence over colour batching in combined and per-pen export. Unordered geometry precedes ordered passes; optimization remains inside ordered pen batches, and path joining is disabled for ordered jobs to preserve exclusions. Per-pen filenames include their pass number. Colour/SVG-layer split export and vinyl mode are rejected for ordered artwork with guidance to use combined or per-group pen output. Pen ID markers identify the ink; they do not operate a pen changer. These optional API-1 extensions do not change legacy plugin output. See [CMYK Circles](cmyk-circles.md).

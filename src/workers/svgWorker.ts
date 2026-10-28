@@ -70,6 +70,8 @@ function fmtSeconds(n: number): string {
 }
 
 interface TravelSubpath {
+  plotOrder?: number;
+  penId?: string;
   points: Subpath;
   layer?: string;
   color?: string;
@@ -83,6 +85,7 @@ interface TravelPoint {
 }
 
 interface ToolpathMetadata {
+  penId?: string;
   color?: string;
   layer?: string;
   dip?: string;
@@ -93,11 +96,12 @@ function encodeMarkerValue(value: string): string {
 }
 
 function metadataKey(meta: ToolpathMetadata): string {
-  return [meta.color ?? "", meta.layer ?? "", meta.dip ?? ""].join("|");
+  return [meta.color ?? "", meta.layer ?? "", meta.dip ?? "", meta.penId ?? ""].join("|");
 }
 
 function emitTfMarker(lines: string[], meta: ToolpathMetadata): void {
   const tokens = [";@tf", "v=1"];
+  if (meta.penId) tokens.push(`pen=${encodeMarkerValue(meta.penId)}`);
   if (meta.color) tokens.push(`color=${encodeMarkerValue(meta.color)}`);
   if (meta.layer) tokens.push(`layer=${encodeMarkerValue(meta.layer)}`);
   if (meta.dip) tokens.push(`dip=${encodeMarkerValue(meta.dip)}`);
@@ -481,7 +485,7 @@ function remapLayerMetadata(
         best = candidate;
       }
     }
-    return { points, layer: best.layer, color: best.color };
+    return { ...best, points };
   });
 }
 
@@ -642,7 +646,8 @@ async function generate(msg: GenerateMessage): Promise<void> {
   const optimise = options?.optimisePaths ?? false;
   const pathDirectionMode = options?.pathDirectionMode ?? "minimize-travel";
   const allowPathReversal = pathDirectionMode === "minimize-travel";
-  const doJoin = options?.joinPaths ?? false;
+  const orderedOutput = objects.some(object => object.visible && object.plotOrder !== undefined);
+  const doJoin = (options?.joinPaths ?? false) && !orderedOutput;
   const joinTol = options?.joinTolerance ?? 0.2;
   const liftPenAtEnd = options?.liftPenAtEnd ?? true;
   const returnToHome = options?.returnToHome ?? false;
@@ -735,12 +740,23 @@ async function generate(msg: GenerateMessage): Promise<void> {
   }
 
   const visibleObjects = objects.filter((o) => o.visible);
+  if (orderedOutput && visibleObjects.some(object => object.pointTap)) {
+    throw new Error("Export point-tap artwork separately from ordered CMYK layers so Black remains the final plotted pass.");
+  }
+  if (visibleObjects.some(object => object.plotOrder !== undefined && !object.penId)) {
+    throw new Error("An ordered plugin layer has no configured real pen. Assign its pen in Pens before exporting.");
+  }
+  if (options?.vinylCutting && visibleObjects.some(object => object.plotOrder !== undefined)) {
+    throw new Error("Ordered plugin artwork requires pen plotting mode. Disable vinyl cutting for CMYK output.");
+  }
   const pageClipBounds = options?.pageClip
     ? resolvePageClipRect(config, options.pageClip)
     : null;
 
   // Sort objects by sourceColor to batch by color for pen-swapping workflow
   const colorSortedObjects = visibleObjects.sort((a, b) => {
+    const order = (a.plotOrder ?? -1) - (b.plotOrder ?? -1);
+    if (order) return order;
     const aColor = a.sourceColor ?? "";
     const bColor = b.sourceColor ?? "";
     return aColor.localeCompare(bColor);
@@ -880,6 +896,8 @@ async function generate(msg: GenerateMessage): Promise<void> {
           points: sp,
           layer: obj.layer,
           color: obj.sourceColor,
+          plotOrder: obj.plotOrder,
+          penId: obj.penId,
         });
       }
     }
@@ -917,23 +935,33 @@ async function generate(msg: GenerateMessage): Promise<void> {
     if (optimise) {
       phase3Stage = "optimizing";
       emitPhase3Progress(phase3Progress, true);
-      const sorted = await nearestNeighbourSortCooperative(
-        allSubpaths.map((sp) => sp.points),
-        {
-          allowReverse: allowPathReversal,
-          shouldCancel: () => cancelled.has(taskId),
-          onProgress: (completed, total) => {
-            if (total <= 0) return;
-            // Ease-out mapping gives earlier visible movement for very large
-            // path counts where linear integer percentages stay flat too long.
-            const ratio = Math.max(0, Math.min(1, completed / total));
-            const eased = Math.sqrt(ratio);
-            const pct = 40 + eased * 50;
-            emitPhase3Progress(pct);
+      const batches = new Map<string, TravelSubpath[]>();
+      for (const path of allSubpaths) {
+        const key = path.plotOrder === undefined ? "legacy" : `${path.plotOrder}:${path.penId ?? path.color}`;
+        const batch = batches.get(key) ?? []; batch.push(path); batches.set(key, batch);
+      }
+      orderedSubpaths = [];
+      let sortedCount = 0;
+      for (const batch of batches.values()) {
+        const sorted = await nearestNeighbourSortCooperative(
+          batch.map((sp) => sp.points),
+          {
+            allowReverse: allowPathReversal,
+            shouldCancel: () => cancelled.has(taskId),
+            onProgress: (completed, total) => {
+              if (total <= 0) return;
+              // Ease-out mapping gives earlier visible movement for very large
+              // path counts where linear integer percentages stay flat too long.
+              const ratio = Math.max(0, Math.min(1, (sortedCount + completed) / allSubpaths.length));
+              const eased = Math.sqrt(ratio);
+              const pct = 40 + eased * 50;
+              emitPhase3Progress(pct);
+            },
           },
-        },
-      );
-      orderedSubpaths = remapLayerMetadata(allSubpaths, sorted);
+        );
+        orderedSubpaths = orderedSubpaths.concat(remapLayerMetadata(batch, sorted));
+        sortedCount += batch.length;
+      }
       emitPhase3Progress(90);
     }
 
@@ -1067,6 +1095,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
       firstColor,
     );
     const firstMeta: ToolpathMetadata = {
+      penId: orderedSubpaths[0]?.penId,
       color: firstColor,
       layer: firstLayer,
       dip: preferredFirstDip,
@@ -1096,6 +1125,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
     const currentMeta: ToolpathMetadata = {
       color: currentColor,
       layer: currentLayer,
+      penId: orderedSubpaths[i].penId,
       dip: preferredDipStationId,
     };
     const currentMetaKey = metadataKey(currentMeta);

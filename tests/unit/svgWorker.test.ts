@@ -1832,3 +1832,34 @@ describe("svgWorker — error handling", () => {
     expect(typeof msg.error).toBe("string");
   });
 });
+
+
+describe("ordered plugin execution", () => {
+  it.each([false, true])("keeps C/M/Y/K order with optimization=%s and joining enabled", async optimise => {
+    const objects = [3, 1, 0, 2].flatMap(rank => [0, 1].map(i => createVectorObject({
+      id: "channel-"+rank+"-"+i, path: "M "+(30+rank*10+i*2)+" 10 L "+(31+rank*10+i*2)+" 10",
+      x:0, y:-30, originalWidth:100, originalHeight:30, sourceColor:["#00ffff","#ff00ff","#ffff00","#000000"][rank],
+      penId:"real-"+["c","m","y","k"][rank], plotOrder:rank, layer:"ink-"+rank,
+    })));
+    dispatch({type:"generate",taskId:"ordered",objects,config:makeConfig(),options:createGcodeOptions({optimisePaths:optimise,joinPaths:true,joinTolerance:100})});
+    const message=await waitForMsg("complete");const gcode=message.gcode as string;
+    const pens=[...gcode.matchAll(/^;@tf .*pen=([^\s]+)/gm)].map(match=>match[1]);
+    expect(pens).toEqual(["real-c","real-m","real-y","real-k"]);
+    expect((gcode.match(/; Pen down/g)||[])).toHaveLength(8);
+    expect(gcode.lastIndexOf("pen=real-k")).toBeGreaterThan(gcode.lastIndexOf("pen=real-y"));
+  });
+  it("retains distinct pen identities even with identical display colours", async () => {
+    const objects=[1,0].map(rank=>createVectorObject({id:"pen"+rank,path:"M0 0 L10 0",x:0,y:-20,originalWidth:20,originalHeight:20,sourceColor:"#000000",plotOrder:rank,penId:"actual-"+rank}));
+    dispatch({type:"generate",taskId:"same-colour",objects,config:makeConfig(),options:createGcodeOptions({optimisePaths:true,joinPaths:true,joinTolerance:100})});
+    const gcode=(await waitForMsg("complete")).gcode as string;
+    expect([...gcode.matchAll(/^;@tf .*pen=([^\s]+)/gm)].map(m=>m[1])).toEqual(["actual-0","actual-1"]);
+  });
+  it.each(["missing pen","vinyl","point tap"])("rejects %s instead of breaking ordered pen execution",async kind=>{
+    const ordered=createVectorObject({id:"k",path:"M0 0L10 0",x:0,y:-20,originalWidth:20,originalHeight:20,plotOrder:3,penId:kind==="missing pen"?undefined:"real-k"});
+    const objects=kind==="point tap"?[ordered,createVectorObject({id:"tap",pointTap:{x:1,y:1},path:""})]:[ordered];
+    const options=createGcodeOptions();if(kind==="vinyl")options.vinylCutting={bladeOffset:0.2} as typeof options.vinylCutting;
+    dispatch({type:"generate",taskId:"reject-ordered",objects,config:makeConfig(),options});
+    expect((await waitForMsg("error")).error).toMatch(/real pen|vinyl|point-tap/i);
+  });
+
+});

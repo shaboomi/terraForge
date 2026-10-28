@@ -323,10 +323,12 @@ export async function preparePluginArtwork(
     const partitions = new Map<string | undefined, PluginPolyline[]>();
     for (const path of output.paths) {
       if (path.penId && !palette.some((pen) => pen.id === path.penId)) throw new Error("The plugin returned an unavailable pen assignment.");
-      const paths = partitions.get(path.penId) ?? [];
+      const penId = path.penId ?? output.penId;
+      const paths = partitions.get(penId) ?? [];
       paths.push(path);
-      partitions.set(path.penId, paths);
+      partitions.set(penId, paths);
     }
+    if (!output.paths.length && output.penId) partitions.set(output.penId, []);
     for (const [penId, paths] of partitions) {
       if (items.length >= PLUGIN_LIMITS.outputItems) throw new Error("The plugin result produces too many canvas items after pen separation.");
       const pen = palette.find((entry) => entry.id === penId);
@@ -341,6 +343,7 @@ export async function preparePluginArtwork(
             visible: true, label: `Path ${index + 1}`, strokeColor: color, sourceColor: color,
             sourceOutlineVisible: true, outlineVisible: true, strokeEnabled: true, hasFill: false };
         }) };
+      if (output.plotOrder !== undefined) artwork.pluginSource!.plotOrder = output.plotOrder;
       items.push(artwork);
       if (penId) penAssignments[id] = penId;
     }

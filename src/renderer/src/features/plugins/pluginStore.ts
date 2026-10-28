@@ -1,3 +1,4 @@
+import { suggestedPluginPen } from "./pluginPens";
 import { create } from "zustand";
 import { pluginEditor, resolvePluginTarget } from "./pluginEditing";
 import { v4 as uuid } from "uuid";
@@ -328,6 +329,12 @@ async function runActivePlugin(previewOnly: boolean) {
     });
     try {
       const palette = canvas.layerGroups.map(({ id, name, color }) => ({ id, name: name.slice(0, 120), color: normalizeSvgColor(color) }));
+      for (const control of manifest.controls ?? []) {
+        if (control.type !== "pen") continue;
+        const selected = suggestedPluginPen(control, String(parameters[control.key]), palette);
+        if (!selected || !palette.some(pen => pen.id === selected)) throw new Error(`Choose an available ${control.label} from your configured pens.`);
+        parameters[control.key] = selected;
+      }
       const input: PluginInput = manifest.input === "none"
         ? { kind: "none", page, ...(palette.length ? { palette } : {}) }
         : await buildPluginInput(manifest, canvas, page, source, abort.signal);

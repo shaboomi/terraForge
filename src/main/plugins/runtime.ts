@@ -103,6 +103,11 @@ export class PluginRuntime {
     if (manifest.input !== request.input.kind) throw new Error(`This plugin requires ${manifest.input === "none" ? "no selected input" : `one selected ${manifest.input}`}.`);
     run.manifest = manifest;
     const parameters = validatePluginParameters(manifest, request.parameters);
+    for (const control of manifest.controls ?? []) {
+      if (control.type === "pen" && !(request.input.palette ?? []).some(pen => pen.id === parameters[control.key])) {
+        throw new Error(`Choose an available ${control.label} from your configured pens.`);
+      }
+    }
     const task = this.tasks.get(request.runId);
     if (task) task.label = manifest.name;
     const host = new BrowserWindow({

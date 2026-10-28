@@ -4,6 +4,7 @@ These self-contained JavaScript plugins demonstrate the processing API. They are
 
 | File | Demonstrates |
 | --- | --- |
+| [cmyk-circles.tf-plugin.js](cmyk-circles.tf-plugin.js) | Four overlapping CMYK circle screens with real pen controls, plotted fills and K-last execution. Requires the extended engine; see the [installation and control guide](../cmyk-circles.md). |
 | [spiral-sawtooth.tf-plugin.js](spiral-sawtooth.tf-plugin.js) | Tone-responsive Archimedean spiral with angular teeth, exact clipping and optional matching to real pens. See the [installation, controls and artwork previews](../spiral-sawtooth.md). |
 | [bitmap-tones.tf-plugin.js](bitmap-tones.tf-plugin.js) | Greyscale/invert bitmap output, alpha preservation and parameter controls. |
 | [bitmap-scanlines.tf-plugin.js](bitmap-scanlines.tf-plugin.js) | Bitmap-to-vector scanlines with threshold/spacing controls and optional matching to user-configured pens. |
