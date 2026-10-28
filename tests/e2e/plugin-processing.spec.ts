@@ -85,11 +85,11 @@ async function save(filename: string, count: number): Promise<CanvasLayout> {
   return JSON.parse(readFileSync(target, "utf8"));
 }
 const rows = () => page.locator("span[title='Double-click to rename']").filter({ hasNotText: /^(White|Red)$/ });
-async function choosePlugin() {
+async function choosePlugin(category = "Bitmap Filters") {
   await page.getByRole("button", { name: "Plugins", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Plugins", exact: true });
-  await dialog.getByRole("button", { name: NAME, exact: true }).click();
-  if (await dialog.isVisible()) await dialog.getByRole("button", { name: "Close Plugins" }).click();
+  await page.getByRole("menuitem", { name: category, exact: true }).click();
+  await page.getByRole("menuitem", { name: NAME, exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Plugins", exact: true })).toHaveCount(0);
   return page.getByRole("region", { name: `Plugin: ${NAME}`, exact: true });
 }
 async function setupScene(layout = sourceLayout()) {
@@ -98,7 +98,7 @@ async function setupScene(layout = sourceLayout()) {
   await launch(); await open(layoutPath);
   await expect(rows()).toHaveCount(1);
   await rows().filter({ hasText: /^Source image$/ }).click();
-  return choosePlugin();
+  return choosePlugin(layout.imports[0].kind === "vector" ? "Generators" : "Bitmap Filters");
 }
 async function undo() { await page.locator("body").click({ position: { x: 470, y: 350 } }); await page.keyboard.press("Control+z"); }
 async function canvasChecksum() {

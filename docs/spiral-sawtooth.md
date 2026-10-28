@@ -11,7 +11,7 @@ You need a TerraForge build containing the merged [Stage 3 PR #6](https://github
 1. Download [spiral-sawtooth.tf-plugin.js](examples/spiral-sawtooth.tf-plugin.js). On GitHub, open that file and use **Download raw file**. Keep the exact filename, including `.tf-plugin.js`; avoid saving the GitHub webpage or adding `.txt`.
 2. Open TerraForge and choose **Plugins → Open Plugin Folder**.
 3. Copy the downloaded file into the folder that opens, then completely close and restart TerraForge. The app uses different folders for development and packaged builds, so use its Open Plugin Folder action.
-4. Import a PNG or JPEG, select the image itself, and choose **Plugins → Bitmap Processors → Spiral Sawtooth**. Close the Plugins dialog if it remains open. Controls appear in **Properties**.
+4. Import a PNG or JPEG, select the image itself, and choose **Plugins → Bitmap to Vector → Spiral Sawtooth**. The cascading menu closes and controls appear in **Properties**. Older Stage 3 builds list this plugin under Bitmap Processors.
 5. Start with the defaults and choose **Preview**. Scroll within the plugin panel to reach its actions. Preview is temporary and does not add layers or enter saves or plotting.
 6. Choose **Apply artwork** to add the complete vector result. The source remains on the canvas. Hide the source with its visibility control when you want to inspect just the vectors.
 7. Save a `.tforge` layout. To change an applied result, select one of its vector items and choose **Edit with Spiral Sawtooth**. Change controls, Preview, then **Update artwork**. All pen parts of that result update together, and one Undo restores the preceding result.

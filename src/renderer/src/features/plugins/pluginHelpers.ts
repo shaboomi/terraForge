@@ -3,12 +3,6 @@ import type { MachineConfig, PluginControl, PluginManifest, PluginParameters, Pl
 import type { CanvasState } from "../../store/canvasStore/types";
 import { resolvePageBounds } from "../properties-panel/utils/pageBounds";
 
-export const PLUGIN_CATEGORIES = [
-  ["bitmap-processor", "Bitmap Processors"],
-  ["generator", "Generators"],
-  ["font-tool", "Font Tools"],
-] as const;
-
 export function defaultParameters(manifest: PluginManifest): PluginParameters {
   return Object.fromEntries((manifest.controls ?? []).map((control) => [control.key, control.default]));
 }

@@ -51,7 +51,7 @@ See [Stage 2](docs/plugin-stage-2.md) for instructions and supported limits.
 ### Local Plugins — Stage 1
 
 - Save a self-contained `.tf-plugin.js` file in the folder opened by **Plugins → Open Plugin Folder**, then restart TerraForge to discover it without executing its code.
-- Browse Bitmap Processors, Generators and Font Tools; enable/disable plugins and view per-file errors.
+- Browse cascading Bitmap Filters, Bitmap to Vector, Generators and Font Tools menus. Use **Plugins → Manage Plugins** for enable/disable controls and per-file errors; see [the menu guide](docs/plugins-menu.md).
 - Run generators with optional controls beneath **Properties**, including on an empty canvas. **Add Example Generator** installs a working grid example.
 - Minimise or close plugin controls without deleting artwork; select a generated item and use **Edit with [plugin name]** to restore saved settings and **Update artwork** in place. Updates preserve placement and support Undo.
 - Isolated execution with progress, cancellation and a default 30-second deadline. Validated polyline results become ordinary vector artwork in one undoable edit and remain usable in saved layouts without the plugin.

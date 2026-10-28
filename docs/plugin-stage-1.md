@@ -2,12 +2,12 @@
 
 Stage 1 proves a directory-based JavaScript plugin engine using vector generators. It is the first implementation milestone in [the plugin/bitmap design proposal](plugin-engine-design.md), not completion of the entire bitmap and plugin roadmap.
 
-These notes record Stage 1. The current processing workflow is documented in [Stage 3](plugin-stage-3.md).
+These notes record Stage 1. The current processing workflow is documented in [Stage 3](plugin-stage-3.md), and the current cascading menu in [the Plugins menu guide](plugins-menu.md).
 
 ## Included
 
 - Discover one self-contained `.tf-plugin.js` file per tool at launch; read the JSON metadata header without executing plugin code.
-- List tools under Bitmap Processors, Generators and Font Tools, with enable/disable and useful per-file errors.
+- Discover tools by their manifest metadata. The current menu has Bitmap Filters, Bitmap to Vector, Generators and Font Tools categories, with enable/disable and useful per-file errors under **Manage Plugins**.
 - Open Plugin Folder and Add Example Generator actions. The explicit example install refreshes the list; ordinary file edits/additions require restart.
 - Structured controls beneath Properties, including generators on an empty canvas and tools without settings. The panel can be minimised, expanded or closed without deleting generated artwork.
 - Select existing generated artwork and choose Edit with its plugin to restore saved settings. Update artwork regenerates that same item in one undoable edit while preserving its position, scale and rotation, including after saving/reopening a layout.
@@ -25,8 +25,8 @@ Stage 1 vector results are polylines in local millimetres. The later bitmap inpu
 
 ## Try it
 
-1. Open TerraForge, choose **Plugins → Add Example Generator**, then choose **Example Grid**.
-2. Close the Plugins menu if it is still open. Adjust its controls under **Properties**.
+1. Open TerraForge and choose **Plugins → Add Example Generator**. The installed **Example Grid** opens automatically in **Properties**. Later, choose it from **Plugins → Generators → Example Grid**.
+2. Adjust its controls under **Properties**. Choosing a plugin closes the cascading menu.
 3. Choose **Add artwork**. Move or resize the new import with normal controls.
 4. Minimise or close the plugin panel when finished. Select the generated item and choose **Edit with Example Grid** to change its saved settings later, then choose **Update artwork**. Undo reverses the update in one step. Saving/opening a `.tforge` layout preserves this edit-again workflow.
 5. To write your own plugin, follow [the author guide](plugin-author-guide.md). Save it in the folder opened by **Plugins → Open Plugin Folder**, then restart TerraForge.
