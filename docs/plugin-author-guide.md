@@ -83,6 +83,7 @@ TerraForge reads the JSON header during startup without running the code below i
 | `outputs` | A unique list containing `"vector"`, `"bitmap"`, or both. Every returned item must use a declared output kind. |
 | `controls` | Optional array of parameter controls. Omit it or use `[]` for a command with no settings. |
 | `bitmapPreparation` | Optional literal `true`, for bitmap input only. Adds host preparation controls and `input.prepared` while preserving original `input.data`; see [the preparation contract](plugin-bitmap-preparation.md). |
+| `previewRequired` | Optional literal `true`. Requires Preview → Apply/Update for generators too. Existing generators keep their direct Add artwork action when this field is absent. |
 
 Unknown fields are rejected to catch spelling mistakes. Two installed files with the same ID are both unavailable until their IDs are made unique. Do not add `author`, permission declarations or other planned fields until they are part of the implemented schema.
 

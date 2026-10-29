@@ -808,6 +808,8 @@ export type PluginControl =
   | (PluginControlBase & { type: "pen"; default: string; suggestedColor?: string });
 
 export interface PluginManifest {
+  /** Require a temporary preview before any result can be committed. */
+  previewRequired?: true;
   /** Explicit opt-in: original data is preserved; shared tones/channels are supplied separately. */
   bitmapPreparation?: true;
   id: string;

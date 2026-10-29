@@ -115,5 +115,6 @@ it("offers host presets only to capable plugins and rejects invalid palette sett
   expect(await screen.findByRole("alert")).toHaveTextContent(/palette/); expect(run).not.toHaveBeenCalled();
   view.unmount();
   usePluginStore.setState({ entries: [{ ...entry, manifest: { ...manifest, bitmapPreparation: undefined } }] });
-  render(<PluginPanel />); expect(screen.queryByText("Shared bitmap preparation")).not.toBeInTheDocument();
+  const legacyView = render(<PluginPanel />); expect(screen.queryByText("Shared bitmap preparation")).not.toBeInTheDocument();
+  legacyView.unmount();
 });

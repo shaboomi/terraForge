@@ -399,7 +399,7 @@ async function runActivePlugin(previewOnly: boolean) {
       const legacy = manifest.input === "none" && "paths" in result &&
         !result.paths.some((path) => path.penId) && (!target || !target.pluginSource?.outputGroupId);
       let commit: () => void;
-      if (legacy && !previewOnly) {
+      if (legacy && !previewOnly && !manifest.previewRequired) {
         const artwork = importPluginResult(result, manifest, parameters, page, machine);
         artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
         commit = () => commitPluginArtwork(artwork, target && isVectorImport(target) ? target : undefined);
@@ -432,7 +432,7 @@ async function runActivePlugin(previewOnly: boolean) {
             replaceIds: previous.map((item) => item.id), penAssignments: prepared.penAssignments,
           })) throw new Error("The artwork changed or was removed. Preview again before applying.");
         };
-        if (previewOnly || manifest.input !== "none") {
+        if (previewOnly || manifest.input !== "none" || manifest.previewRequired) {
           retainedPreview = true;
           releasePreview = release;
           applyPrepared = () => {
