@@ -17,6 +17,7 @@ Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create v
 - [CMYK Circles](docs/cmyk-circles.md) — overlapping CMYK circle screens, real pen fills, K-last export and installation guide
 - [Spiral Sawtooth](docs/spiral-sawtooth.md) — install a bitmap-to-vector spiral plugin, with controls and actual artwork previews
 - [Comic Ink Vectorizer](docs/comic-ink-vectorizer.md) — limited colour separations, bold shadows and directional hatching as editable plot paths, with installation and controls
+- [Sculptural Generators](docs/sculptural-generators.md) — Flowing Ribbons, Wave Volume and Organic Contours, with four vector presets, installation and a complete control guide
 - [Bitmap Stage 2](docs/plugin-stage-2.md) — image import, editing and portable layouts
 - [Plugin Stage 1](docs/plugin-stage-1.md) — supported features and a quick start
 - [Plugin Author Guide](docs/plugin-author-guide.md) — write a single-file JavaScript generator or processor

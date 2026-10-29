@@ -1,0 +1,34 @@
+Sculptural Generators 1.0.0 border update for shaboomi/terraForge
+
+1. Extract this ZIP (Windows: Extract All).
+2. In TerraForge choose Plugins > Open Plugin Folder.
+3. Copy the THREE .tf-plugin.js files from plugins into that folder.
+4. Choose Plugins > Rescan Plugins.
+5. Choose A4 Portrait, then Plugins > Generators > a generator name.
+6. Keep the defaults. Click Preview, then Apply artwork.
+
+No GitHub account, pull request, command line or extra library installation is needed.
+CONTROL-GUIDE.md explains every setting and all four starting looks.
+The previews folder contains editable SVGs, PNG previews, full settings JSON,
+and FOUR ready-to-open .tforge layouts. Open a .tforge layout in TerraForge for
+a complete preset composition; select it and choose Edit with [plugin] to adjust it.
+Opening a layout replaces the current canvas after confirmation; save your work first.
+JSON is a settings reference; the current app has no JSON preset-import action.
+
+To frame the composition: tick Add border, choose Around artwork, and set
+Border gap from artwork in mm (default 5). The artwork itself is not resized.
+If the gap will not fit, reduce it or increase Margin. At artwork margin
+(original) retains the previous border placement and ignores the gap setting.
+Replace the three older plugin files, then Rescan Plugins to install this update.
+
+Primary pen position 0 uses one stroke colour. For configured pens use their current
+positions in the Pens list (1 is first, 2 second, etc.). These resolve to real pen IDs.
+Check positions again before regenerating if you changed the pen palette.
+Use separate output files per group for manual multi-pen plotting.
+
+The .tforge presets use a thin 0.18 mm DISPLAY stroke. The app's normal 0.5 mm
+display stroke can visually merge dense lines. Change Stroke width value in the
+artwork's normal Properties to view fine lines; it does not change plot paths.
+
+Original geometric interpretations, not traced photographs or copied artist algorithms.
+No physical plotter was operated during verification.
