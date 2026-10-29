@@ -2,6 +2,8 @@
 
 The JavaScript API supports generators and tools that process one selected bitmap or vector item. Plugins return ordinary vector artwork and/or bitmap pixels. Stage 3 adds manual previews, separate generated results and colour-aware output using the user's pens. See [the Stage 3 guide](plugin-stage-3.md) for the workflow and [the bitmap guide](plugin-stage-2.md) for image imports. A font-loading service and detailed artistic filters remain later work.
 
+Plugins may explicitly opt into [shared bitmap preparation](plugin-bitmap-preparation.md) for saved host-controlled levels, gamma, contrast, smoothing and colour channels. Original RGBA and existing plugin algorithms remain available unchanged.
+
 ## Install your first plugin
 
 1. Start TerraForge and choose **Plugins → Add Example Generator**.
@@ -80,6 +82,7 @@ TerraForge reads the JSON header during startup without running the code below i
 | `input` | `none` for a generator, `bitmap` for one bitmap source or `vector` for one vector source. Category controls menu placement independently of input kind. |
 | `outputs` | A unique list containing `"vector"`, `"bitmap"`, or both. Every returned item must use a declared output kind. |
 | `controls` | Optional array of parameter controls. Omit it or use `[]` for a command with no settings. |
+| `bitmapPreparation` | Optional literal `true`, for bitmap input only. Adds host preparation controls and `input.prepared` while preserving original `input.data`; see [the preparation contract](plugin-bitmap-preparation.md). |
 
 Unknown fields are rejected to catch spelling mistakes. Two installed files with the same ID are both unavailable until their IDs are made unique. Do not add `author`, permission declarations or other planned fields until they are part of the implemented schema.
 
