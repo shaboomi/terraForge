@@ -11,6 +11,7 @@ Import SVG and PDF artwork, place PNG/JPEG references on the canvas, or create v
 ## Documentation
 
 - [User Guide](docs/terraForge-user-guide.md) — full feature walkthrough with screenshots
+- [Pen calibration](docs/pen-calibration.md) — speed, brush depth and lift-clearance test sheets from the Calibrate toolbar button
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
 - [Plugin processing Stage 3](docs/plugin-stage-3.md) — preview bitmap/vector processors and generate artwork with your pens
