@@ -11,6 +11,7 @@ function startPluginWorker(payload: unknown): void {
   if (!payload || typeof payload !== "object") throw new Error("Invalid plugin startup message.");
   // Startup data comes exclusively from the main process's validated execution request.
   const { request, manifest } = payload as { request: PluginRunRequest; manifest: PluginManifest };
+  let requestForValidation = request;
   const workerUrl = URL.createObjectURL(
     new Blob([__TERRAFORGE_PLUGIN_WORKER__], { type: "text/javascript" }),
   );
@@ -37,7 +38,7 @@ function startPluginWorker(payload: unknown): void {
         // Copy and bound untrusted output before it crosses into the main process.
         report(message.type === "error"
           ? { type: "error", error: String(message.error).slice(0, 2000) }
-          : { type: "result", result: validatePluginResult(message.result, request, manifest) });
+          : { type: "result", result: validatePluginResult(message.result, requestForValidation, manifest) });
       } catch (error) {
         report({ type: "error", error: String(error).slice(0, 2000) });
       }
@@ -54,7 +55,22 @@ function startPluginWorker(payload: unknown): void {
     });
     worker.terminate();
   };
-  worker.postMessage({ ...payload, limits: pluginExecutionLimits(request.detailBudget) });
+  // The worker owns this one-run snapshot. Transfer pixel arrays rather than cloning a second
+  // full image inside the isolated host. The renderer/main validation copies remain deliberate.
+  const transfers: ArrayBuffer[] = [];
+  if (request.input.kind === "bitmap") {
+    transfers.push(request.input.data.buffer as ArrayBuffer);
+    if (request.input.prepared) {
+      transfers.push(request.input.prepared.tones.buffer as ArrayBuffer,
+        ...request.input.prepared.channels.map(channel => channel.data.buffer as ArrayBuffer));
+    }
+  }
+  const validationRequest = request.input.kind === "bitmap"
+    ? { ...request, input: { ...request.input, data: new Uint8Array(0), prepared: undefined } }
+    : request;
+  // Result validation uses frame/palette/parameters only; never retain detached pixel buffers.
+  requestForValidation = validationRequest;
+  worker.postMessage({ ...payload, limits: pluginExecutionLimits(request.detailBudget) }, transfers);
 }
 
 ipcRenderer.once("plugins:host-start", (_event, payload: unknown) => {

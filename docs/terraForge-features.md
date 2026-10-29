@@ -146,6 +146,7 @@ See [Stage 1](plugin-stage-1.md) for the completion boundary and [the author gui
 ### Job Control
 
 - [x] Start job button — disabled until a valid G-code file is selected in the file browser
+- [x] **Long-running Wi-Fi plot start** — send Run once through the live WebSocket, confirm matching file execution without a job-duration timeout, and drain its deferred acknowledgement before safe-return commands. See [timeout correction and device verification](plot-start-timeout-verification.md).
 - [x] Selected job file shown in Job panel with name; warns if selected file is not a recognised G-code extension
 - [x] Supported G-code extensions: `.gcode`, `.nc`, `.g`, `.gc`, `.gco`, `.ngc`, `.ncc`, `.cnc`, `.tap`
 - [x] Pause job

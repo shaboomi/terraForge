@@ -98,9 +98,13 @@ export class PluginRuntime {
   }
 
   private async prepare(request: PluginRunRequest, run: ActiveRun): Promise<void> {
-    const { manifest, source } = await this.registry.getExecutable(request.pluginId);
+    const { manifest, source, sourceFingerprint } = await this.registry.getExecutable(request.pluginId);
     if (run.done) return;
+    if (request.sourceFingerprint && request.sourceFingerprint !== sourceFingerprint) {
+      throw new Error("Plugin source changed since this operation was opened. Reopen the plugin and preview again.");
+    }
     if (manifest.input !== request.input.kind) throw new Error(`This plugin requires ${manifest.input === "none" ? "no selected input" : `one selected ${manifest.input}`}.`);
+    if (request.input.kind === "bitmap" && !!request.input.prepared !== !!manifest.bitmapPreparation) throw new Error("Shared bitmap preparation must match the plugin's explicit opt-in.");
     run.manifest = manifest;
     const parameters = validatePluginParameters(manifest, request.parameters);
     for (const control of manifest.controls ?? []) {

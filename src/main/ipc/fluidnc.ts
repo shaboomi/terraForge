@@ -28,10 +28,11 @@ export function registerFluidncIpcHandlers(options: FluidNCIpcOptions): void {
   } = options;
 
   const transferAbortControllers = new Map<string, AbortController>();
-  const completion = new PlotCompletionController(async (command) => {
+  const completion = new PlotCompletionController(async (command, signal) => {
+    signal.throwIfAborted();
     const type = getConnectionType();
     if (type === null) throw new Error("Not connected");
-    return type === "serial" ? serial.sendCommand(command) : fluidnc.sendCommandAndWait(command);
+    return type === "serial" ? serial.sendCommand(command) : fluidnc.sendCommandAndWait(command, signal);
   }, (message) => safeSend("fluidnc:console", message));
   fluidnc.on?.("status", (status: MachineStatus) => { if (getConnectionType() === "wifi") completion.status(status); });
   serial.on?.("status", (status: MachineStatus) => { if (getConnectionType() === "serial") completion.status(status); });

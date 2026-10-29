@@ -12,6 +12,17 @@ import { arcToBeziers, cubicBezier, quadBezier } from "../../../../workers/gcode
 import type { CanvasState } from "../../store/canvasStore/types";
 import { vectorObjectsForImport } from "../../store/canvasStore/services/vectorObjects";
 import { normalizeSvgColor } from "../imports/services/svgImportHelpers";
+import { DEFAULT_BITMAP_PREPARATION, PluginBitmapPreparationCache, type PluginBitmapPreparationSettings } from "../../../../types/pluginBitmapPreparation";
+
+const preparationCache = new PluginBitmapPreparationCache();
+// Immutable encoded content plus dimensions guard even a reused/malformed asset ID.
+const decodedPixels = new Map<string, { asset: BitmapAsset; pixels: Uint8Array; bytes: number }>();
+const DECODE_CACHE_BYTES = 24 * 1024 * 1024;
+let decodedBytes = 0;
+
+export function clearPluginBitmapCaches(): void {
+  decodedPixels.clear(); decodedBytes = 0; preparationCache.clear();
+}
 
 type Page = { widthMM: number; heightMM: number };
 export interface PreparedPluginArtwork {
@@ -22,6 +33,8 @@ export interface PreparedPluginArtwork {
   groupName: string;
 }
 export interface ExistingPluginGroup {
+  bitmapPreparation?: PluginBitmapPreparationSettings;
+  sourceFingerprint?: string;
   detailBudget?: PluginDetailBudget;
   groupId?: string;
   groupName?: string;
@@ -72,6 +85,11 @@ async function bitmapPixels(asset: BitmapAsset, signal?: AbortSignal): Promise<U
   if (asset.widthPx > BITMAP_LIMITS.dimensionPx || asset.heightPx > BITMAP_LIMITS.dimensionPx ||
       asset.widthPx * asset.heightPx > BITMAP_LIMITS.decodedPixels) throw new Error("The bitmap exceeds the plugin input pixel limit.");
   cancelled(signal);
+  const cached = decodedPixels.get(asset.id);
+  if (cached && cached.asset.data === asset.data && cached.asset.widthPx === asset.widthPx && cached.asset.heightPx === asset.heightPx) {
+    decodedPixels.delete(asset.id); decodedPixels.set(asset.id, cached);
+    return new Uint8Array(cached.pixels);
+  }
   const binary = atob(asset.data);
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   const image = await createImageBitmap(new Blob([bytes.buffer], { type: "image/png" }), {
@@ -92,6 +110,19 @@ async function bitmapPixels(asset: BitmapAsset, signal?: AbortSignal): Promise<U
       if (pixels[index + 3] === 0) pixels[index] = pixels[index + 1] = pixels[index + 2] = 0;
     }
     cancelled(signal);
+    // Count the retained encoded string as UTF-16 too, not only the decoded buffer.
+    const retainedBytes = pixels.byteLength + asset.data.length * 2;
+    if (retainedBytes <= DECODE_CACHE_BYTES) {
+      const previous = decodedPixels.get(asset.id);
+      if (previous) { decodedBytes -= previous.bytes; decodedPixels.delete(asset.id); }
+      while (decodedBytes + retainedBytes > DECODE_CACHE_BYTES) {
+        const oldest = decodedPixels.keys().next().value;
+        if (oldest === undefined) break;
+        decodedBytes -= decodedPixels.get(oldest)!.bytes; decodedPixels.delete(oldest);
+      }
+      decodedPixels.set(asset.id, { asset: { ...asset }, pixels: new Uint8Array(pixels), bytes: retainedBytes });
+      decodedBytes += retainedBytes;
+    }
     return pixels;
   } finally {
     image.close();
@@ -216,6 +247,7 @@ export async function buildPluginInput(
   source?: CanvasItem,
   signal?: AbortSignal,
   detailBudget?: PluginDetailBudget,
+  preparation: PluginBitmapPreparationSettings = { ...DEFAULT_BITMAP_PREPARATION, palette: [] },
 ): Promise<PluginInput> {
   const palette = paletteFor(canvas);
   cancelled(signal);
@@ -230,8 +262,11 @@ export async function buildPluginInput(
   if (isBitmapImport(source)) {
     const asset = canvas.assets[source.assetId];
     if (!asset) throw new Error("The selected bitmap's embedded asset is missing.");
-    return { ...common, kind: "bitmap", widthPx: asset.widthPx, heightPx: asset.heightPx,
-      data: await bitmapPixels(asset, signal) };
+    const data = await bitmapPixels(asset, signal);
+    const prepared = manifest.bitmapPreparation ? await preparationCache.prepare({ widthPx: asset.widthPx, heightPx: asset.heightPx, data }, preparation, signal) : undefined;
+    cancelled(signal);
+    return { ...common, kind: "bitmap", widthPx: asset.widthPx, heightPx: asset.heightPx, data,
+      ...(prepared ? { prepared } : {}) };
   }
   const paths = vectorPixels(source, canvas, detailBudget);
   cancelled(signal);
@@ -308,6 +343,8 @@ export async function preparePluginArtwork(
       rotation: source.rotation,
     } : generatorPlacement(output.width, output.height, machine);
     const provenance = (outputKey: string) => ({ pluginId: manifest.id, pluginVersion: manifest.version,
+      ...(existingGroup.bitmapPreparation ? { bitmapPreparation: structuredClone(existingGroup.bitmapPreparation) } : {}),
+      ...(existingGroup.sourceFingerprint ? { sourceFingerprint: existingGroup.sourceFingerprint } : {}),
       parameters: { ...parameters }, apiVersion: 1 as const, seed, outputGroupId: groupId,
       ...(existingGroup.detailBudget === "extended" ? { detailBudget: "extended" as const } : {}),
       outputGroupName: groupName, outputIndex: items.length, outputKey, outputWidth: output.width, outputHeight: output.height,

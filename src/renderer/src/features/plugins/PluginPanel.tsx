@@ -5,6 +5,8 @@ import { usePluginStore } from "./pluginStore";
 import { PluginControlField } from "./PluginControlField";
 import { useCanvasStore } from "../../store/canvasStore";
 import { selectedPluginSource } from "./pluginProcessing";
+import { pluginEditor } from "./pluginEditing";
+import { PluginBitmapPreparationControls } from "./PluginBitmapPreparationControls";
 
 export function PluginPanel() {
   const bodyId = useId();
@@ -18,6 +20,7 @@ export function PluginPanel() {
   const detailBudgets = usePluginStore(state => state.detailBudgets);
   const setDetailBudget = usePluginStore(state => state.setDetailBudget);
   const running = usePluginStore((state) => state.running);
+  const loading = usePluginStore((state) => state.loading);
   const error = usePluginStore((state) => state.runError);
   const setCollapsed = usePluginStore((state) => state.setCollapsed);
   const closePanel = usePluginStore((state) => state.closePanel);
@@ -33,8 +36,9 @@ export function PluginPanel() {
   const manifest = entry?.manifest;
   if (!manifest) return null;
   const pluginUnavailable = !entry.enabled || !!entry.error;
-  const unavailable = pluginUnavailable || (!!editingImportId && !editingArtwork);
+  const unavailable = pluginUnavailable || loading || (!!editingImportId && !editingArtwork);
   const processor = manifest.input !== "none";
+  const requiresPreview = processor || manifest.previewRequired;
   let selectionError: string | undefined;
   try { selectedPluginSource(manifest, canvas, editingImportId ?? undefined); }
   catch (reason) { selectionError = reason instanceof Error ? reason.message : String(reason); }
@@ -56,14 +60,16 @@ export function PluginPanel() {
         <div>
           <p className="text-[10px] text-content-faint">Plugin · v{manifest.version}</p>
           {editingArtwork && <p className="text-xs text-content-muted">Editing {editingArtwork.name}</p>}
+          {editingArtwork && pluginEditor(editingArtwork, entries, canvas.imports).notice && <p role="status" className="text-xs text-content-muted">{pluginEditor(editingArtwork, entries, canvas.imports).notice}</p>}
           {editingImportId && !editingArtwork && <p className="text-xs text-content-muted">This artwork no longer exists. Open a plugin from Plugins to create new artwork.</p>}
           <p className="mt-1 text-xs text-content-muted">{manifest.description}</p>
         </div>
         {pluginUnavailable && <p className="text-xs text-content-muted">This plugin is disabled or unavailable. Enable it from Plugins to use it.</p>}
         {selectionError && <p className="text-xs text-content-muted">{selectionError}</p>}
         {processor && <p className="text-xs text-content-muted">Preview keeps the source artwork unchanged. Apply adds a separate result.</p>}
+        {!processor && requiresPreview && <p className="text-xs text-content-muted">Preview is temporary. Apply keeps the complete generated result.</p>}
         {preview && <p role="status" className="text-xs text-content">Preview · {preview.items.length} {preview.items.length === 1 ? "item" : "items"}. Apply to keep this artwork.</p>}
-        <form noValidate onSubmit={(event) => { event.preventDefault(); void (processor ? previewRun() : run()); }} className="space-y-3">
+        <form noValidate onSubmit={(event) => { event.preventDefault(); void (requiresPreview ? previewRun() : run()); }} className="space-y-3">
           <div className="space-y-1">
             <label htmlFor="plugin-detail-budget" className="block text-xs text-content-muted">Artwork capacity</label>
             <select id="plugin-detail-budget" className="w-full rounded border border-border-ui bg-app px-2 py-1 text-xs text-content"
@@ -75,11 +81,12 @@ export function PluginPanel() {
             <p className="text-[10px] text-content-muted">More capacity for detailed artwork. Your size settings stay unchanged. Calculation can take up to three minutes.</p>
           </div>
           {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} palette={canvas.layerGroups} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+          {manifest.bitmapPreparation && <PluginBitmapPreparationControls pluginId={manifest.id} disabled={busy || unavailable} />}
           {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
           <div className="flex flex-wrap gap-2">
             {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <>
-              <Button size="sm" variant="primary" type="submit" disabled={unavailable || !!selectionError}>{processor ? "Preview" : editingImportId ? "Update artwork" : "Add artwork"}</Button>
-              {!processor && <Button size="sm" type="button" disabled={unavailable || !!selectionError} onClick={() => void previewRun()}>Preview</Button>}
+              <Button size="sm" variant="primary" type="submit" disabled={unavailable || !!selectionError}>{requiresPreview ? "Preview" : editingImportId ? "Update artwork" : "Add artwork"}</Button>
+              {!requiresPreview && <Button size="sm" type="button" disabled={unavailable || !!selectionError} onClick={() => void previewRun()}>Preview</Button>}
             </>}
             {preview && !busy && <>
               <Button size="sm" variant="primary" type="button" disabled={unavailable || !!selectionError} onClick={applyPreview}>{editingImportId ? "Update artwork" : "Apply artwork"}</Button>

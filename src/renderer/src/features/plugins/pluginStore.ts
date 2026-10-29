@@ -4,8 +4,9 @@ import { pluginEditor, resolvePluginTarget } from "./pluginEditing";
 import { v4 as uuid } from "uuid";
 import { isVectorImport, type CanvasItem, type PluginEntry, type PluginInput, type PluginParameters, type PluginRunRequest, type PluginDetailBudget, type SvgImport } from "../../../../types";
 import { validatePluginResult } from "../../../../types/pluginValidation";
+import { DEFAULT_BITMAP_PREPARATION, validateBitmapPreparationSettings, type PluginBitmapPreparationSettings } from "../../../../types/pluginBitmapPreparation";
 import { normalizeSvgColor } from "../imports/services/svgImportHelpers";
-import { buildPluginInput, preparePluginArtwork, selectedPluginSource } from "./pluginProcessing";
+import { buildPluginInput, clearPluginBitmapCaches, preparePluginArtwork, selectedPluginSource } from "./pluginProcessing";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useMachineStore } from "../../store/machineStore";
 import { useTaskStore } from "../../store/taskStore";
@@ -17,6 +18,8 @@ import {
 } from "./pluginHelpers";
 
 interface PluginState {
+  bitmapPreparation: Record<string, PluginBitmapPreparationSettings>;
+  setBitmapPreparation: (pluginId: string, value: PluginBitmapPreparationSettings) => void;
   entries: PluginEntry[];
   activeFilename: string | null;
   collapsed: boolean;
@@ -37,6 +40,7 @@ interface PluginState {
   applyPreview: () => void;
   discardPreview: () => void;
   refresh: () => Promise<void>;
+  rescan: () => Promise<void>;
   select: (entry: PluginEntry) => void;
   setParameter: (pluginId: string, key: string, value: string | number | boolean) => void;
   resetParameters: (pluginId: string) => void;
@@ -61,6 +65,7 @@ function message(error: unknown): string {
 }
 
 let panelGeneration = 0;
+let registryGeneration = 0;
 let pendingAbort: AbortController | undefined;
 let releasePreview: (() => void) | undefined;
 let applyPrepared: (() => void) | undefined;
@@ -73,6 +78,11 @@ function clearPreview() {
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
+  bitmapPreparation: {},
+  setBitmapPreparation: (pluginId, value) => {
+    get().cancel(); clearPreview(); panelGeneration++;
+    set(state => ({ bitmapPreparation: { ...state.bitmapPreparation, [pluginId]: structuredClone(value) }, runError: null }));
+  },
   entries: [],
   activeFilename: null,
   collapsed: false,
@@ -100,9 +110,11 @@ export const usePluginStore = create<PluginState>((set, get) => ({
 
   refresh: async () => {
     if (!api()) return;
+    const generation = ++registryGeneration;
     set({ loading: true, error: null });
     try {
       const entries = await api().list();
+      if (generation !== registryGeneration) return;
       set((state) => ({
         entries: entries.map((entry) => state.saving.includes(entry.manifest?.id ?? "") ? { ...entry, enabled: state.entries.find((current) => current.filename === entry.filename)?.enabled ?? entry.enabled } : entry),
         parameters: Object.fromEntries(entries.flatMap((entry) =>
@@ -112,9 +124,28 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         )),
       }));
     } catch (error) {
-      set({ error: message(error) });
+      if (generation === registryGeneration) set({ error: message(error) });
     } finally {
-      set({ loading: false });
+      if (generation === registryGeneration) set({ loading: false });
+    }
+  },
+
+  rescan: async () => {
+    const bridge = api();
+    if (!bridge?.rescan || get().loading || get().saving.length) return;
+    const generation = ++registryGeneration;
+    get().cancel(); clearPreview(); panelGeneration++;
+    clearPluginBitmapCaches();
+    set({ loading: true, error: null, runError: "Plugins rescanned. Preview or run again before applying artwork." });
+    try {
+      const entries = await bridge.rescan();
+      if (generation !== registryGeneration) return;
+      set(state => ({ entries, parameters: Object.fromEntries(entries.flatMap(entry => entry.manifest
+        ? [[entry.manifest.id, state.parameters[entry.manifest.id] ?? defaultParameters(entry.manifest)]] : [])) }));
+    } catch (error) {
+      if (generation === registryGeneration) set({ error: message(error) });
+    } finally {
+      if (generation === registryGeneration) set({ loading: false });
     }
   },
 
@@ -145,6 +176,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       runError: null,
       parameters: { ...state.parameters, [manifest.id]: editor.parameters },
       detailBudgets: { ...state.detailBudgets, [manifest.id]: artwork?.pluginSource?.detailBudget ?? "standard" },
+      bitmapPreparation: { ...state.bitmapPreparation, [manifest.id]: structuredClone(artwork?.pluginSource?.bitmapPreparation ?? DEFAULT_BITMAP_PREPARATION) },
     }));
   },
   setCollapsed: (collapsed) => set({ collapsed }),
@@ -177,6 +209,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       set((state) => ({
         parameters: { ...state.parameters, [pluginId]: defaultParameters(manifest) },
         detailBudgets: { ...state.detailBudgets, [pluginId]: "standard" },
+        bitmapPreparation: { ...state.bitmapPreparation, [pluginId]: structuredClone(DEFAULT_BITMAP_PREPARATION) },
         runError: null,
       }));
     }
@@ -217,6 +250,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
   installExample: async () => {
     if (!api()) return;
+    get().cancel(); clearPreview(); panelGeneration++;
     try {
       const before = new Set(get().entries.map((entry) => entry.filename));
       await api().installExample();
@@ -265,7 +299,7 @@ async function runActivePlugin(previewOnly: boolean) {
   const set = usePluginStore.setState;
     const state = get();
     const entry = state.entries.find((item) => item.filename === state.activeFilename);
-    if (!entry?.manifest || !entry.enabled || entry.error || state.running || !api()) return;
+    if (!entry?.manifest || !entry.enabled || entry.error || state.running || state.loading || !api()) return;
     const manifest = entry.manifest;
     const { target, error: editingError } = resolvePluginTarget(
       state.editingImportId, manifest.id, useCanvasStore.getState().imports, state.entries,
@@ -276,6 +310,9 @@ async function runActivePlugin(previewOnly: boolean) {
     }
     const parameters = { ...defaultParameters(manifest), ...state.parameters[manifest.id] };
     const detailBudget = state.detailBudgets[manifest.id] ?? "standard";
+    let preparation: PluginBitmapPreparationSettings | undefined;
+    try { if (manifest.bitmapPreparation) preparation = validateBitmapPreparationSettings(state.bitmapPreparation[manifest.id] ?? DEFAULT_BITMAP_PREPARATION); }
+    catch (error) { set({ runError: message(error) }); return; }
     const error = (manifest.controls ?? [])
       .map((control) => parameterError(control, parameters[control.key]))
       .find(Boolean);
@@ -321,8 +358,10 @@ async function runActivePlugin(previewOnly: boolean) {
     const unsubscribePlugins = usePluginStore.subscribe((next) => {
       const current = next.entries.find((item) => item.filename === entry.filename);
       if (!current?.enabled || current.error || current.manifest?.version !== manifest.version ||
+          current.sourceFingerprint !== entry.sourceFingerprint ||
           next.activeFilename !== entry.filename || next.parameters[manifest.id] !== state.parameters[manifest.id] ||
           next.detailBudgets[manifest.id] !== state.detailBudgets[manifest.id]) invalidate();
+      if (next.bitmapPreparation[manifest.id] !== state.bitmapPreparation[manifest.id]) invalidate();
     });
     let retainedPreview = false;
     const release = () => { unsubscribe(); unsubscribeMachine(); unsubscribePlugins(); };
@@ -331,7 +370,7 @@ async function runActivePlugin(previewOnly: boolean) {
         throw new Error("The document or page changed while this plugin was running. Preview or run it again to add artwork.");
       }
       const current = get().entries.find((item) => item.filename === entry.filename);
-      if (!current?.enabled || current.error || current.manifest?.version !== manifest.version) {
+      if (!current?.enabled || current.error || current.manifest?.version !== manifest.version || current.sourceFingerprint !== entry.sourceFingerprint) {
         throw new Error("The plugin changed or was disabled. No artwork was added.");
       }
     };
@@ -349,10 +388,10 @@ async function runActivePlugin(previewOnly: boolean) {
       }
       const input: PluginInput = manifest.input === "none"
         ? { kind: "none", page, ...(palette.length ? { palette } : {}) }
-        : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget);
+        : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget, preparation);
       assertCurrent();
       const seed = target?.pluginSource?.seed ?? 1;
-      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
+      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
       const returned = await api().run(request);
       if (get().running?.runId !== runId) return;
       assertCurrent();
@@ -360,12 +399,14 @@ async function runActivePlugin(previewOnly: boolean) {
       const legacy = manifest.input === "none" && "paths" in result &&
         !result.paths.some((path) => path.penId) && (!target || !target.pluginSource?.outputGroupId);
       let commit: () => void;
-      if (legacy && !previewOnly) {
+      if (legacy && !previewOnly && !manifest.previewRequired) {
         const artwork = importPluginResult(result, manifest, parameters, page, machine);
-        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
+        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
         commit = () => commitPluginArtwork(artwork, target && isVectorImport(target) ? target : undefined);
       } else {
         const prepared = await preparePluginArtwork(result, manifest, parameters, page, machine, source, seed, {
+          sourceFingerprint: entry.sourceFingerprint,
+          bitmapPreparation: preparation,
           groupId: target?.pluginSource?.outputGroupId,
           groupName: target?.pluginSource?.outputGroupName,
           palette: input.palette,
@@ -391,7 +432,7 @@ async function runActivePlugin(previewOnly: boolean) {
             replaceIds: previous.map((item) => item.id), penAssignments: prepared.penAssignments,
           })) throw new Error("The artwork changed or was removed. Preview again before applying.");
         };
-        if (previewOnly || manifest.input !== "none") {
+        if (previewOnly || manifest.input !== "none" || manifest.previewRequired) {
           retainedPreview = true;
           releasePreview = release;
           applyPrepared = () => {

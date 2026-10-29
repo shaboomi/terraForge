@@ -4,10 +4,12 @@ These self-contained JavaScript plugins demonstrate the processing API. They are
 
 | File | Demonstrates |
 | --- | --- |
+| [comic-ink-vectorizer.tf-plugin.js](comic-ink-vectorizer.tf-plugin.js) | Comic-inspired colour separations, independent black outlines/shadows and directional hatching; actual clipped coverage strokes for plotting. See the [installation and control guide](../comic-ink-vectorizer.md). |
 | [cmyk-circles.tf-plugin.js](cmyk-circles.tf-plugin.js) | Four overlapping CMYK circle screens with real pen controls, plotted fills and K-last execution. Requires the extended engine; see the [installation and control guide](../cmyk-circles.md). |
 | [spiral-sawtooth.tf-plugin.js](spiral-sawtooth.tf-plugin.js) | Tone-responsive Archimedean spiral with angular teeth, exact clipping and optional matching to real pens. See the [installation, controls and artwork previews](../spiral-sawtooth.md). |
 | [bitmap-tones.tf-plugin.js](bitmap-tones.tf-plugin.js) | Greyscale/invert bitmap output, alpha preservation and parameter controls. |
 | [bitmap-scanlines.tf-plugin.js](bitmap-scanlines.tf-plugin.js) | Bitmap-to-vector scanlines with threshold/spacing controls and optional matching to user-configured pens. |
+| [prepared-scanlines.tf-plugin.js](prepared-scanlines.tf-plugin.js) | Opt-in host tones and CMYK/RGB/palette channels with saved preparation settings, labelled colour layers and explicit manual Preview → Apply. Does not guess real pen assignments. See [shared preparation](../plugin-bitmap-preparation.md). |
 | [reverse-vectors.tf-plugin.js](reverse-vectors.tf-plugin.js) | Vector input and a tool with no parameter controls. |
 
 To install, choose **Plugins → Open Plugin Folder**, copy the desired files into that folder and restart TerraForge. Select one compatible source item, open its processor from Plugins, choose **Preview** and then **Apply artwork**. The source remains unchanged. No GitHub action or package installation is needed.

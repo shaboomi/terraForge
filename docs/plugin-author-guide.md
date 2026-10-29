@@ -2,6 +2,8 @@
 
 The JavaScript API supports generators and tools that process one selected bitmap or vector item. Plugins return ordinary vector artwork and/or bitmap pixels. Stage 3 adds manual previews, separate generated results and colour-aware output using the user's pens. See [the Stage 3 guide](plugin-stage-3.md) for the workflow and [the bitmap guide](plugin-stage-2.md) for image imports. A font-loading service and detailed artistic filters remain later work.
 
+Plugins may explicitly opt into [shared bitmap preparation](plugin-bitmap-preparation.md) for saved host-controlled levels, gamma, contrast, smoothing and colour channels. Original RGBA and existing plugin algorithms remain available unchanged.
+
 ## Install your first plugin
 
 1. Start TerraForge and choose **Plugins → Add Example Generator**.
@@ -9,7 +11,7 @@ The JavaScript API supports generators and tools that process one selected bitma
 3. Set Width, Height, Spacing and Border, then choose **Add artwork**.
 4. Move, resize or rotate the resulting vector import using the normal controls. **Undo** removes the generated import in one step. You can save it in a `.tforge` layout and reopen it without the plugin installed.
 
-To install your own file, choose **Plugins → Open Plugin Folder**, save a UTF-8 file ending in `.tf-plugin.js` there, then restart TerraForge. Use an editor such as Visual Studio Code. If you use Notepad, choose **Save as type: All files** so the filename does not become `.js.txt`.
+To install your own file, choose **Plugins → Open Plugin Folder**, save a UTF-8 file ending in `.tf-plugin.js` there, then choose **Plugins → Rescan Plugins**. Use an editor such as Visual Studio Code. If you use Notepad, choose **Save as type: All files** so the filename does not become `.js.txt`.
 
 The installed app uses the `plugins` folder inside its application data directory. Development uses a separate `plugins-dev` folder. Open Plugin Folder takes you to the correct one; you do not need to find AppData manually. Files in this folder survive application upgrades.
 
@@ -65,7 +67,7 @@ export default async function run(input, parameters, context) {
 }
 ```
 
-TerraForge reads the JSON header during startup without running the code below it. The JavaScript module is evaluated when you choose Add artwork. Syntax errors therefore appear when a plugin is run. If a file changes after startup, restart before running it; TerraForge will not silently run a different version from the one it discovered.
+TerraForge reads the JSON header during startup without running the code below it. The JavaScript module is evaluated when you choose Add artwork. Syntax errors therefore appear when a plugin is run. If a file changes after discovery, choose **Plugins → Rescan Plugins** before running it; TerraForge will not silently run different code from the discovered snapshot. See [Rescan and saved plugin code](plugin-rescan.md).
 
 ## Header fields
 
@@ -80,6 +82,8 @@ TerraForge reads the JSON header during startup without running the code below i
 | `input` | `none` for a generator, `bitmap` for one bitmap source or `vector` for one vector source. Category controls menu placement independently of input kind. |
 | `outputs` | A unique list containing `"vector"`, `"bitmap"`, or both. Every returned item must use a declared output kind. |
 | `controls` | Optional array of parameter controls. Omit it or use `[]` for a command with no settings. |
+| `bitmapPreparation` | Optional literal `true`, for bitmap input only. Adds host preparation controls and `input.prepared` while preserving original `input.data`; see [the preparation contract](plugin-bitmap-preparation.md). |
+| `previewRequired` | Optional literal `true`. Requires Preview → Apply/Update for generators too. Existing generators keep their direct Add artwork action when this field is absent. |
 
 Unknown fields are rejected to catch spelling mistakes. Two installed files with the same ID are both unavailable until their IDs are made unique. Do not add `author`, permission declarations or other planned fields until they are part of the implemented schema.
 
@@ -193,10 +197,10 @@ A plugin is a self-contained JavaScript ES module. Pure JavaScript library code 
 
 | What you see | What to do |
 | --- | --- |
-| Plugin missing | Check the folder opened by TerraForge, the exact `.tf-plugin.js` suffix and restart. |
+| Plugin missing | Check the folder opened by TerraForge, the exact `.tf-plugin.js` suffix and choose Rescan Plugins. |
 | Unavailable plugin | Read the filename and reason in Plugins; check header JSON, unique ID and `apiVersion`. |
 | Disabled | Tick its Enable checkbox. Disabling is remembered after restart. |
-| File changed since startup | Restart to load the edited file. |
+| File changed since startup or scan | Choose Rescan Plugins to load the edited file. |
 | Syntax/runtime error | Check JavaScript and the returned object; no partial artwork is applied. |
 | Artwork too large | Reduce the dimensions to fit the current page/bed. |
 | Select one bitmap/vector | Select exactly one compatible source item, then reopen the processor from Plugins. Group, multiple-item and path-only selections are not processor inputs. |

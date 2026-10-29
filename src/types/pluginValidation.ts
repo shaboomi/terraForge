@@ -11,6 +11,7 @@ import type {
   PluginPolyline,
   PluginDetailBudget,
 } from "./index";
+import { validatePreparedPluginBitmap } from "./pluginBitmapPreparation";
 
 export const PLUGIN_LIMITS = Object.freeze({
   sourceBytes: 1024 * 1024,
@@ -158,7 +159,9 @@ function control(value: unknown): PluginControl {
 
 export function validatePluginManifest(value: unknown): PluginManifest {
   const item = object(value, "Plugin metadata");
-  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls"], "Plugin metadata");
+  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls", "bitmapPreparation", "previewRequired"], "Plugin metadata");
+  if (item.previewRequired !== undefined && item.previewRequired !== true) throw new Error("Preview requirement must be an explicit true opt-in.");
+  if (item.bitmapPreparation !== undefined && (item.bitmapPreparation !== true || item.input !== "bitmap")) throw new Error("Shared bitmap preparation requires bitmap input and explicit true opt-in.");
   const id = identifier(item.id);
   const name = nonempty(item.name, "Plugin name");
   const version = nonempty(item.version, "Plugin version", 80);
@@ -176,7 +179,7 @@ export function validatePluginManifest(value: unknown): PluginManifest {
     controls = Array.from(item.controls, control);
     if (new Set(controls.map((entry) => entry.key)).size !== controls.length) throw new Error("Control keys must be unique.");
   }
-  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }) };
+  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }), ...(item.bitmapPreparation === true ? { bitmapPreparation: true as const } : {}), ...(item.previewRequired === true ? { previewRequired: true as const } : {}) };
 }
 
 export function parsePluginSource(source: string): PluginManifest {
@@ -240,7 +243,8 @@ export function validatePluginParameters(manifest: PluginManifest, value: unknow
 
 export function validatePluginRunRequest(value: unknown): PluginRunRequest {
   const item = object(value, "Plugin request");
-  fields(item, ["runId", "pluginId", "input", "parameters", "seed", "detailBudget"], "Plugin request");
+  fields(item, ["runId", "pluginId", "input", "parameters", "seed", "detailBudget", "sourceFingerprint"], "Plugin request");
+  if (item.sourceFingerprint !== undefined && (typeof item.sourceFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(item.sourceFingerprint))) throw new Error("Invalid plugin source fingerprint.");
   const runId = nonempty(item.runId, "Run ID", 128);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(runId)) throw new Error("Invalid run ID.");
   const detailBudget = item.detailBudget as PluginDetailBudget | undefined;
@@ -261,10 +265,10 @@ export function validatePluginRunRequest(value: unknown): PluginRunRequest {
     const frame = { width: sourceDimension(supplied.width, "Source width"), height: sourceDimension(supplied.height, "Source height") };
     const selection = { ...common, ...frame, sourceId: reference(supplied.sourceId, "Source ID"), placement: placement(supplied.placement) };
     if (supplied.kind === "bitmap") {
-      fields(supplied, [...allowed, "widthPx", "heightPx", "data"], "Bitmap input");
+      fields(supplied, [...allowed, "widthPx", "heightPx", "data", "prepared"], "Bitmap input");
       const pixels = rgba(supplied, { pixels: 0 });
       if (frame.width !== pixels.widthPx || frame.height !== pixels.heightPx) throw new Error("Bitmap source frame must match its pixel dimensions.");
-      input = { ...selection, kind: "bitmap", ...pixels };
+      input = { ...selection, kind: "bitmap", ...pixels, ...(supplied.prepared === undefined ? {} : { prepared: validatePreparedPluginBitmap(supplied.prepared, pixels.widthPx, pixels.heightPx) }) };
     } else if (supplied.kind === "vector") {
       fields(supplied, [...allowed, "paths"], "Vector input");
       input = { ...selection, kind: "vector", paths: polylines(supplied.paths, frame.width, frame.height, { paths: 0, points: 0 }, false, limits) };
@@ -272,7 +276,7 @@ export function validatePluginRunRequest(value: unknown): PluginRunRequest {
     validatePenReferences(input.kind === "vector" ? input.paths : [], common.palette ?? []);
   }
   const seed = item.seed === undefined ? undefined : uint32(item.seed, "Seed");
-  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }), ...(detailBudget === undefined ? {} : { detailBudget }) };
+  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }), ...(detailBudget === undefined ? {} : { detailBudget }), ...(item.sourceFingerprint === undefined ? {} : { sourceFingerprint: item.sourceFingerprint as string }) };
 }
 
 function reference(value: unknown, label: string): string {

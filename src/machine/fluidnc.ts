@@ -186,57 +186,157 @@ export class FluidNCClient extends EventEmitter {
   }
 
   private acknowledgedCommandPending = false;
+  private uncertainAcknowledgements = new WeakSet<WebSocket>();
+  private setupAcknowledgement: Promise<void> | null = null;
+  private runAcknowledgement: {
+    promise: Promise<void>;
+    fail: (error: Error, uncertain?: boolean) => void;
+  } | null = null;
+
+  private confirmedSocket(): WebSocket {
+    const socket = this.ws;
+    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("Live WebSocket required for confirmed plot commands");
+    if (this.uncertainAcknowledgements.has(socket)) {
+      throw new Error("Command acknowledgement is uncertain. Reconnect before sending another confirmed plot command; do not restart a job that may still be running.");
+    }
+    return socket;
+  }
+
+  /** A queued command must not inherit an earlier command's delayed ACK. */
+  private waitForAcknowledgement(
+    pending: Promise<void>, socket: WebSocket, signal?: AbortSignal,
+    onTimeout?: (error: Error) => void,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timer);
+        this.off("connection-lost", lost);
+        signal?.removeEventListener("abort", aborted);
+        if (error) reject(error); else resolve();
+      };
+      const aborted = () => finish(new Error("Confirmed plot command interrupted before transmission"));
+      const lost = () => finish(new Error("Connection lost while waiting for command acknowledgement"));
+      const timer = setTimeout(() => {
+        const error = new Error("Previous command acknowledgement timed out. Reconnect before sending another confirmed plot command.");
+        this.uncertainAcknowledgements.add(socket);
+        onTimeout?.(error);
+        finish(error);
+      }, 12_000);
+      this.on("connection-lost", lost);
+      signal?.addEventListener("abort", aborted, { once: true });
+      pending.then(() => finish(), (error: Error) => finish(error));
+      if (signal?.aborted) aborted();
+    });
+  }
 
   /** Safety sequences use the live socket's parser ACK, never an HTTP enqueue
    * response. Do not retry/fall back: an uncertain motion must not be repeated.
    */
-  async sendCommandAndWait(command: string): Promise<string> {
+  async sendCommandAndWait(command: string, signal?: AbortSignal): Promise<string> {
     if (this.acknowledgedCommandPending) throw new Error("A confirmed command is already pending");
-    const socket = this.ws;
-    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error("Live WebSocket required for safe plot return");
+    const socket = this.confirmedSocket();
     if (/\r|\n/.test(command)) throw new Error("Confirmed commands must contain one line");
+    if (signal?.aborted) throw new Error("Confirmed plot command interrupted before transmission");
     this.acknowledgedCommandPending = true;
-    const dwell = command.match(/^G4\s+P([\d.]+)/i);
-    const timeoutMs = Math.min(2_147_000_000, Math.max(12_000, Number(dwell?.[1] ?? 0) * 1000 + 12_000));
     try {
+      if (this.setupAcknowledgement) await this.waitForAcknowledgement(this.setupAcknowledgement, socket, signal);
+      const run = this.runAcknowledgement;
+      if (run) await this.waitForAcknowledgement(run.promise, socket, signal, (error) => run.fail(error, true));
+      if (signal?.aborted) throw new Error("Confirmed plot command interrupted before transmission");
+      if (this.confirmedSocket() !== socket) throw new Error("Plot connection changed before transmission");
+      const dwell = command.match(/^G4\s+P([\d.]+)/i);
+      const timeoutMs = Math.min(2_147_000_000, Math.max(12_000, Number(dwell?.[1] ?? 0) * 1000 + 12_000));
       return await new Promise<string>((resolve, reject) => {
         const cleanup = () => {
           clearTimeout(timer);
           this.off("console", onMessage);
           this.off("connection-lost", onLost);
+          signal?.removeEventListener("abort", onAbort);
         };
-        const fail = (error: Error) => { cleanup(); reject(error); };
-        const onLost = () => fail(new Error("Connection lost during safe plot return"));
+        const fail = (error: Error, uncertain = false) => {
+          if (uncertain) this.uncertainAcknowledgements.add(socket);
+          cleanup(); reject(error);
+        };
+        const onLost = () => fail(new Error("Connection lost during confirmed plot command"));
+        const onAbort = () => fail(new Error("Confirmed plot command interrupted"), true);
         const onMessage = (message: string) => {
           const line = message.trim();
           if (line === "ok") { cleanup(); resolve("ok"); }
           else if (/^(?:error:|ALARM:)|\[MSG:ERR/i.test(line)) fail(new Error(line));
         };
-        const timer = setTimeout(() => fail(new Error("Safe plot return command acknowledgement timed out")), timeoutMs);
+        const timer = setTimeout(() => fail(new Error("Confirmed plot command acknowledgement timed out"), true), timeoutMs);
         this.on("console", onMessage);
         this.on("connection-lost", onLost);
+        signal?.addEventListener("abort", onAbort, { once: true });
         try { socket.send(command + "\n"); }
-        catch (error) { fail(error instanceof Error ? error : new Error(String(error))); }
+        catch (error) { fail(error instanceof Error ? error : new Error(String(error)), true); }
       });
     } finally {
       this.acknowledgedCommandPending = false;
     }
   }
 
-  // ─── Job Control ──────────────────────────────────────────────────────────
-
-  async runFile(
-    remotePath: string,
-    filesystem: "sd" | "fs" = "sd",
-  ): Promise<void> {
+  // File-run ACKs are deferred until EOF on modern FluidNC. A matching file
+  // progress report confirms start promptly, while the Run command retains its
+  // ACK slot until the eventual terminal reply. Job duration has no deadline.
+  async runFile(remotePath: string, filesystem: "sd" | "fs" = "sd"): Promise<void> {
     assertRunnableFilePath(remotePath);
-    const cmd =
-      filesystem === "sd"
-        ? `$SD/Run=${remotePath}`
-        : `$LocalFS/Run=${remotePath}`;
-    // Delegate to sendCommand which handles the 3.x / 4.x HTTP convention difference.
-    const response = await this.sendCommand(cmd);
-    if (/(?:^|\n)(?:error:|ALARM:)|\[MSG:ERR/i.test(response)) throw new Error(response);
+    if (this.acknowledgedCommandPending || this.runAcknowledgement) throw new Error("A confirmed command or file run is already pending");
+    const socket = this.confirmedSocket();
+    this.acknowledgedCommandPending = true;
+    try {
+      if (this.setupAcknowledgement) await this.waitForAcknowledgement(this.setupAcknowledgement, socket);
+      if (this.confirmedSocket() !== socket) throw new Error("Plot connection changed before transmission");
+      await this.startFileOnSocket(socket, remotePath, filesystem);
+    } finally { this.acknowledgedCommandPending = false; }
+  }
+
+  private startFileOnSocket(socket: WebSocket, remotePath: string, filesystem: "sd" | "fs"): Promise<void> {
+    const normalize = (value: string) => "/" + value.trim().replace(/\\/g, "/").replace(/^\/(?:sd|localfs)\//i, "").replace(/^\/+/, "");
+    const expected = normalize(remotePath);
+    let release!: () => void;
+    let rejectAck!: (error: Error) => void;
+    const promise = new Promise<void>((resolve, reject) => { release = resolve; rejectAck = reject; });
+    // It may fail after start has already resolved, before a return awaits it.
+    void promise.catch(() => {});
+    return new Promise<void>((resolve, reject) => {
+      let accepted = false;
+      const accept = () => { accepted = true; clearTimeout(timer); resolve(); };
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.off("console", message);
+        this.off("status", status);
+        this.off("connection-lost", lost);
+        if (this.runAcknowledgement === owner) this.runAcknowledgement = null;
+      };
+      const fail = (error: Error, uncertain = false) => {
+        if (uncertain) this.uncertainAcknowledgements.add(socket);
+        cleanup(); rejectAck(error); if (!accepted) reject(error);
+      };
+      const owner = { promise, fail };
+      const message = (text: string) => {
+        const line = text.trim();
+        if (line === "ok") { accept(); cleanup(); release(); return; }
+        if (/^(?:error:|ALARM:|Grbl\s|FluidNC\s)|\[MSG:(?:ERR(?:OR)?:|[^\]]*(?:abort|cancel|reset|fail))/i.test(line)) {
+          fail(new Error(line)); return;
+        }
+        const eof = line.replace(/^\[MSG:(?:INFO|DEBUG):\s*/i, "").match(/^(.+?)(?: file)? job (?:succeeded|sent)\]?$/i);
+        if (eof && normalize(eof[1]) === expected) accept();
+      };
+      const status = (update: MachineStatus) => {
+        const file = update.raw.match(/\|SD:[^,|>]+,([^|>]+)/i);
+        if (file && normalize(file[1]) === expected) accept();
+      };
+      const lost = () => fail(new Error("Connection lost while starting or running the plot"));
+      const timer = setTimeout(() => fail(new Error("Plot start was not confirmed. The command was sent once and may still run; reconnect and check machine status before trying again."), true), 12_000);
+      this.runAcknowledgement = owner;
+      this.on("console", message);
+      this.on("status", status);
+      this.on("connection-lost", lost);
+      const command = filesystem === "sd" ? `$SD/Run=${remotePath}` : `$LocalFS/Run=${remotePath}`;
+      try { socket.send(command + "\n"); }
+      catch (error) { fail(error instanceof Error ? error : new Error(String(error)), true); }
+    });
   }
 
   async pauseJob(): Promise<void> {
@@ -803,10 +903,21 @@ export class FluidNCClient extends EventEmitter {
   }
 
   private openWs(): void {
+    let setupDone!: () => void;
+    const setup = new Promise<void>((resolve) => { setupDone = resolve; });
+    this.setupAcknowledgement = setup;
     openFluidNCWebSocket(this.getWsState(), {
       onDisconnected: () => this.emit("connection-lost"),
       parseStatus: parseMachineStatus,
-      emitConsole: (message) => this.emit("console", message),
+      emitConsole: (message) => {
+        // openFluidNCWebSocket sends $RI=500 before any user command. Its ACK
+        // belongs to setup, and must not be mistaken for a Run or lift ACK.
+        if (this.setupAcknowledgement === setup && /^(?:ok$|error:|ALARM:)/i.test(message.trim())) {
+          this.setupAcknowledgement = null;
+          setupDone();
+        }
+        this.emit("console", message);
+      },
       emitStatus: (status) => this.emit("status", status),
       emitPing: () => this.emit("ping"),
       scheduleReconnect: (generation) => this.scheduleReconnect(generation),

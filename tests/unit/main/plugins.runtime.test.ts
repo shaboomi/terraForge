@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginManifest, PluginRunRequest } from "../../../src/types";
 import type { PluginRegistry } from "../../../src/main/plugins/registry";
 import type { TaskManager } from "../../../src/tasks/taskManager";
+import { DEFAULT_BITMAP_PREPARATION, type PreparedPluginBitmap } from "../../../src/types/pluginBitmapPreparation";
 
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (event: unknown, payload: unknown) => void>(),
@@ -36,6 +37,13 @@ const pen = { id: "blue", name: "Blue", color: "#123abc" };
 const manifest: PluginManifest = { id: "test.processor", name: "Processor", version: "1.0.0", apiVersion: 1, description: "Process", category: "bitmap-processor", input: "bitmap", outputs: ["vector", "bitmap"] };
 const request = (): PluginRunRequest => ({ runId: "run-1", pluginId: manifest.id, parameters: {}, seed: 42, input: { kind: "bitmap", sourceId: "source", width: 1, height: 1, widthPx: 1, heightPx: 1, data: new Uint8Array([1, 2, 3, 0]), page: { widthMM: 210, heightMM: 297 }, placement: { x: 10, y: 20, scale: 2, rotation: 30 }, palette: [pen] } });
 const vector = { kind: "vector", width: 1, height: 1, paths: [{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }], penId: pen.id }] };
+const prepared = (): PreparedPluginBitmap => ({ version: 1, widthPx: 1, heightPx: 1,
+  settings: { ...DEFAULT_BITMAP_PREPARATION, palette: [] }, tones: new Uint8Array([255]), channels: [] });
+function preparedRequest(): PluginRunRequest {
+  const value = request();
+  if (value.input.kind !== "bitmap") throw new Error("Expected bitmap fixture");
+  return { ...value, input: { ...value.input, prepared: prepared() } };
+}
 
 describe("plugin processor runtime boundary", () => {
   let runtime: PluginRuntime;
@@ -66,6 +74,71 @@ describe("plugin processor runtime boundary", () => {
   it("checks selected input against the actual installed manifest before starting a host", async () => {
     mocks.getExecutable.mockResolvedValue({ manifest: { ...manifest, input: "vector" }, source: "" });
     await expect(runtime.run(request())).rejects.toThrow(/selected vector/);
+    expect(mocks.hosts).toHaveLength(0);
+  });
+
+  it("refuses shared preparation for a legacy plugin that has not explicitly opted in", async () => {
+    await expect(runtime.run(preparedRequest())).rejects.toThrow(/explicit opt-in/);
+    expect(mocks.hosts).toHaveLength(0);
+    expect(tasks.complete).not.toHaveBeenCalled();
+  });
+
+  it("requires a prepared payload when the installed manifest opts in", async () => {
+    mocks.getExecutable.mockResolvedValue({ manifest: { ...manifest, bitmapPreparation: true }, source: "" });
+    await expect(runtime.run(request())).rejects.toThrow(/explicit opt-in/);
+    expect(mocks.hosts).toHaveLength(0);
+  });
+
+  it("passes detached prepared tones alongside unchanged original RGBA only after explicit opt-in", async () => {
+    mocks.getExecutable.mockResolvedValue({ manifest: { ...manifest, bitmapPreparation: true }, source: "" });
+    const supplied = preparedRequest();
+    const running = runtime.run(supplied);
+    const host = await ready();
+    const payload = mocks.start.mock.calls[0][1] as { request: PluginRunRequest };
+    if (payload.request.input.kind !== "bitmap" || supplied.input.kind !== "bitmap") throw new Error("Expected bitmap");
+    expect(payload.request.input.data).toEqual(new Uint8Array([1, 2, 3, 0]));
+    expect(payload.request.input.data).not.toBe(supplied.input.data);
+    expect(payload.request.input.prepared).toEqual(supplied.input.prepared);
+    expect(payload.request.input.prepared?.tones).not.toBe(supplied.input.prepared?.tones);
+    payload.request.input.prepared!.tones[0] = 0;
+    expect(supplied.input.prepared?.tones[0]).toBe(255);
+    emit(host, { type: "result", result: { items: [vector] } });
+    await expect(running).resolves.toEqual({ items: [vector] });
+  });
+
+  it("rejects malformed prepared data before creating a task or host", async () => {
+    const supplied = preparedRequest();
+    if (supplied.input.kind !== "bitmap") throw new Error("Expected bitmap");
+    supplied.input.prepared!.tones = new Uint8Array(2);
+    await expect(runtime.run(supplied)).rejects.toThrow(/byte arrays/);
+    expect(tasks.create).not.toHaveBeenCalled();
+    expect(mocks.hosts).toHaveLength(0);
+  });
+
+  it("rejects a same-version source mismatch before starting a host", async () => {
+    mocks.getExecutable.mockResolvedValue({ manifest, source: "", sourceFingerprint: "b".repeat(64) });
+    await expect(runtime.run({ ...request(), sourceFingerprint: "a".repeat(64) })).rejects.toThrow(/source changed/);
+    expect(mocks.hosts).toHaveLength(0);
+    expect(tasks.complete).not.toHaveBeenCalled();
+  });
+
+  it("allows an explicitly pinned current source fingerprint", async () => {
+    const fingerprint = "a".repeat(64);
+    mocks.getExecutable.mockResolvedValue({ manifest, source: "", sourceFingerprint: fingerprint });
+    const running = runtime.run({ ...request(), sourceFingerprint: fingerprint });
+    const host = await ready();
+    emit(host, { type: "result", result: { items: [vector] } });
+    await expect(running).resolves.toEqual({ items: [vector] });
+  });
+
+  it("does not launch a host when cancelled while the executable is being read", async () => {
+    let finishRead: (value: unknown) => void;
+    mocks.getExecutable.mockReturnValue(new Promise(resolve => { finishRead = resolve; }));
+    const running = runtime.run(request());
+    runtime.cancelAll();
+    await expect(running).rejects.toThrow(/cancelled/);
+    finishRead!({ manifest, source: "" });
+    await Promise.resolve();
     expect(mocks.hosts).toHaveLength(0);
   });
 
