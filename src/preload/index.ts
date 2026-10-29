@@ -236,6 +236,7 @@ const api: TerraForgeAPI = {
   fonts: {
     list: () => invoke("fonts:list"),
     importFont: (characters, mode) => invoke("fonts:import", characters, mode),
+    convertToCenterline: (fontId) => invoke("fonts:convertToCenterline", fontId),
     remove: (id) => invoke("fonts:remove", id),
   },
   plugins,

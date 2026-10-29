@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { v4 as uuid } from "uuid";
-import { Plus, Trash2, Upload, X } from "lucide-react";
+import { Plus, Trash2, Upload, WandSparkles, X } from "lucide-react";
 import { isVectorImport, type SvgImport } from "../../../../types";
 import type { FontMode, ProcessedFont } from "../../../../types/fonts";
 import { Button } from "../../components/ui";
@@ -18,6 +18,7 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
   const [editing, setEditing] = useState<SvgImport | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const availableFonts = fonts.filter((item) => (item.mode ?? "centerline") === mode);
   const font = availableFonts.find((item) => item.id === fontId);
   useEffect(() => {
@@ -34,15 +35,17 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
         brushLeadInMM: textImport.brushLeadInMM ?? brushLeadInMM ?? 1 });
     }
     setError(null);
+    setNotice(null);
     setBusy("Loading font library…");
     void window.terraForge.fonts.list().then((items) => {
       if (!current) return;
       setFonts(items);
       const preferred = textImport?.textSource?.fontId ?? fontId;
       const original = items.find((item) => item.id === preferred);
-      const selectedMode = original?.mode ?? textImport?.textSource?.mode ?? (original ? "centerline" : mode);
-      setMode(selectedMode);
-      setFontId(original?.id ?? items.find((item) => (item.mode ?? "centerline") === selectedMode)?.id ?? "");
+      const preferredMode = original?.mode ?? textImport?.textSource?.mode ?? (original ? "centerline" : mode);
+      const selected = original ?? items.find((item) => (item.mode ?? "centerline") === preferredMode) ?? items[0];
+      setMode(selected ? selected.mode ?? "centerline" : preferredMode);
+      setFontId(selected?.id ?? "");
       if (textImport?.textSource && !items.some((item) => item.id === textImport.textSource?.fontId)) {
         setError(`The original font “${textImport.textSource.fontName}” is no longer in the library. Import it again or choose another font.`);
       }
@@ -59,20 +62,40 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
   const layout = preview.layout;
   const patch = <K extends keyof TextSettings,>(key: K, value: TextSettings[K]) => setSettings((current) => ({ ...current, [key]: value }));
   const importFont = async () => {
-    setBusy(mode === "outline" ? "Importing standard font outlines…" : "Processing font centre lines and stroke widths…"); setError(null);
+    setBusy(mode === "outline" ? "Importing standard font outlines…" : "Processing font centre lines and stroke widths…"); setError(null); setNotice(null);
     try {
       const imported = await window.terraForge.fonts.importFont(settings.text, mode);
       if (imported) { setFonts((items) => [...items.filter((item) => item.id !== imported.id), imported]); setFontId(imported.id); }
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(null); }
   };
+  const generateCentrelines = async () => {
+    if (!font || font.mode !== "outline") return;
+    setBusy("Generating long continuous centrelines…"); setError(null); setNotice(null);
+    try {
+      const saved = fonts.find((item) => (item.mode ?? "centerline") === "centerline" && item.sourceFontId === font.id);
+      const converted = saved ?? await window.terraForge.fonts.convertToCenterline(font.id);
+      setFonts((items) => [...items.filter((item) => item.id !== converted.id), converted]);
+      setFontId(converted.id); setMode("centerline");
+      setNotice("Centrelines are ready. Review the preview, then update the selected text or add it to the canvas.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(null); }
+  };
+  const changeMode = (next: FontMode) => {
+    if (next === mode) return;
+    if (next === "centerline" && font?.mode === "outline") { void generateCentrelines(); return; }
+    const source = next === "outline" && font?.sourceFontId ? fonts.find((item) => item.id === font.sourceFontId && item.mode === "outline") : undefined;
+    setMode(next); setFontId(source?.id ?? fonts.find((item) => (item.mode ?? "centerline") === next)?.id ?? ""); setError(null); setNotice(null);
+  };
   const removeFont = async () => {
     if (!font) return;
-    setBusy("Removing font from library…"); setError(null);
+    setBusy("Removing font from library…"); setError(null); setNotice(null);
     try {
       await window.terraForge.fonts.remove(font.id);
       const remaining = fonts.filter((item) => item.id !== font.id);
-      setFonts(remaining); setFontId(remaining.find((item) => (item.mode ?? "centerline") === mode)?.id ?? "");
+      const selected = remaining.find((item) => (item.mode ?? "centerline") === mode) ?? remaining[0];
+      setFonts(remaining); setFontId(selected?.id ?? "");
+      if (selected) setMode(selected.mode ?? "centerline");
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(null); }
   };
@@ -109,18 +132,19 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
               <Button size="sm" disabled={!!busy} onClick={() => void importFont()}><Upload size={14} />Import TTF / OTF</Button>
             </div>
             <label className="block text-xs text-content-muted">Font mode
-              <select aria-label="Font mode" className={inputStyle} value={mode} disabled={!!busy} onChange={(event) => {
-                const next = event.target.value as FontMode;
-                setMode(next); setFontId(fonts.find((item) => (item.mode ?? "centerline") === next)?.id ?? ""); setError(null);
-              }}><option value="centerline">Centreline</option><option value="outline">Standard outline</option></select>
+              <select aria-label="Font mode" className={inputStyle} value={mode} disabled={!!busy} onChange={(event) => changeMode(event.target.value as FontMode)}><option value="centerline">Centreline</option><option value="outline">Standard outline</option></select>
             </label>
             <label className="block text-xs text-content-muted">Font
-              <select aria-label="Text font" className={inputStyle} value={fontId} disabled={!!busy || !availableFonts.length} onChange={(event) => { setFontId(event.target.value); setError(null); }}>
+              <select aria-label="Text font" className={inputStyle} value={fontId} disabled={!!busy || !availableFonts.length} onChange={(event) => { setFontId(event.target.value); setError(null); setNotice(null); }}>
                 {!availableFonts.length && <option value="">Import {mode === "outline" ? "an outline" : "a centreline"} font to begin</option>}
                 {[...availableFonts].sort((a, b) => a.name.localeCompare(b.name)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </label>
-            <p className="text-xs text-content-muted">Showing {mode === "outline" ? "standard outline" : "centreline"} fonts. Import the same font in either mode to keep both versions.</p>
+            <p className="text-xs text-content-muted">{mode === "outline" ? "Showing standard outline fonts. Choose Centreline to generate continuous strokes from the selected font." : "Showing centreline fonts. Connected branches are joined into long continuous strokes to minimise pen lifts."}</p>
+            {font?.mode === "outline" && <div className="space-y-2 rounded border border-border-ui p-3">
+              <Button variant="primary" className="w-full" disabled={!!busy} onClick={() => void generateCentrelines()}><WandSparkles size={14} />Generate centrelines</Button>
+              <p className="text-xs text-content-muted">Generate long continuous strokes and measured widths, or use the saved centreline version if one exists. Its original outlines stay in your library; the source file is not needed.</p>
+            </div>}
             <p className="text-xs text-content-muted">Type your text before importing to prioritise its characters. Large fonts process up to 768 characters.</p>
             {font && <div className="flex items-center justify-between gap-2 text-xs text-content-muted">
               <span>{Object.keys(font.glyphs).length} processed characters</span>
@@ -186,6 +210,7 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
           </div>
         </div>
         {busy && <p role="status" className="mt-4 text-sm text-content-muted">{busy}</p>}
+        {notice && <p aria-live="polite" className="mt-4 text-sm text-content-muted">{notice}</p>}
         {(error || preview.error) && <p role="alert" className="mt-4 text-sm text-warning">{error || preview.error}</p>}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <Dialog.Close asChild><Button>Cancel</Button></Dialog.Close>

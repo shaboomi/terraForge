@@ -77,4 +77,70 @@ describe("font IPC and worker boundaries",() => {
     mocks.workers[0].emit("exit",0);
     await expect(result).rejects.toThrow(/before returning/);
   });
+  it("denies saved-font conversion from child frames or unrelated windows",async () => {
+    await expect(invoke("fonts:convertToCenterline",{sender:main.webContents,senderFrame:{}},"source-font")).rejects.toThrow(/unavailable/);
+    await expect(invoke("fonts:convertToCenterline",{sender:{},senderFrame:main.webContents.mainFrame},"source-font")).rejects.toThrow(/unavailable/);
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.workers).toHaveLength(0);
+  });
+  it("converts a saved native font off-thread under a separate library identity without reopening the source file",async () => {
+    const source = {...font,id:"source-font",mode:"outline"};
+    mocks.list.mockResolvedValue([source]);
+    const conversion = invoke("fonts:convertToCenterline",event,source.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    const workerData = mocks.workers[0].workerData as {font:unknown;identity:{id:string}};
+    expect(workerData.font).toEqual(source);
+    expect(workerData.identity.id).not.toBe(source.id);
+    const derived = {...font,id:workerData.identity.id,mode:"centerline",sourceFontId:source.id};
+    mocks.workers[0].emit("message",{font:derived});
+    await expect(conversion).resolves.toEqual(derived);
+    expect(mocks.save).toHaveBeenCalledWith(derived);
+    expect(mocks.dialog).not.toHaveBeenCalled();
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(mocks.workers[0].terminate).toHaveBeenCalled();
+    expect(source).toMatchObject({id:"source-font",mode:"outline"});
+  });
+  it("reuses a linked derived centreline font instead of processing it again",async () => {
+    const source = {...font,id:"source-font",mode:"outline"};
+    const derived = {...font,id:"derived-font",mode:"centerline",sourceFontId:source.id};
+    mocks.list.mockResolvedValue([source,derived]);
+    await expect(invoke("fonts:convertToCenterline",event,source.id)).resolves.toEqual(derived);
+    expect(mocks.workers).toHaveLength(0);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("rejects missing and non-outline saved fonts before creating a worker",async () => {
+    await expect(invoke("fonts:convertToCenterline",event,"missing-font")).rejects.toThrow(/missing|not found|no longer/i);
+    mocks.list.mockResolvedValue([font]);
+    await expect(invoke("fonts:convertToCenterline",event,font.id)).rejects.toThrow(/outline|standard/i);
+    expect(mocks.workers).toHaveLength(0);
+  });
+  it("shares the import lock with saved-font conversion and releases it after worker failure",async () => {
+    const source = {...font,id:"source-font",mode:"outline"};
+    mocks.list.mockResolvedValue([source]);
+    const conversion = invoke("fonts:convertToCenterline",event,source.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    await expect(invoke("fonts:import",event)).rejects.toThrow(/already/);
+    await expect(invoke("fonts:convertToCenterline",event,source.id)).rejects.toThrow(/already/);
+    mocks.workers[0].emit("message",{error:"Glyph conversion failed."});
+    await expect(conversion).rejects.toThrow("Glyph conversion failed.");
+    expect(mocks.save).not.toHaveBeenCalled();
+    await expect(invoke("fonts:import",event)).resolves.toBeNull();
+  });
+  it("validates saved-font identifiers before reading the library",async () => {
+    for (const id of [undefined,{},"../outside-font",""]) {
+      await expect(invoke("fonts:convertToCenterline",event,id)).rejects.toThrow(/identifier/);
+    }
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.workers).toHaveLength(0);
+  });
+  it("rejects a worker result linked to another font before persisting it",async () => {
+    const source = {...font,id:"source-font",mode:"outline"};
+    mocks.list.mockResolvedValue([source]);
+    const conversion = invoke("fonts:convertToCenterline",event,source.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    const workerData = mocks.workers[0].workerData as {identity:{id:string}};
+    mocks.workers[0].emit("message",{font:{...font,id:workerData.identity.id,mode:"centerline",sourceFontId:"different-source"}});
+    await expect(conversion).rejects.toThrow(/invalid centreline version/);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
 });

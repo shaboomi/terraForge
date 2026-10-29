@@ -18,6 +18,8 @@ export interface ProcessedFont {
   /** Absent in older saved libraries, which contain centreline geometry. */
   mode?: FontMode;
   id: string;
+  /** The saved outline font used to generate this separate centreline version. */
+  sourceFontId?: string;
   name: string;
   sourceName: string;
   createdAt: string;
@@ -34,5 +36,6 @@ export interface FontsApi {
   list: () => Promise<ProcessedFont[]>;
   /** Prioritize characters from the text being composed when processing large fonts. */
   importFont: (characters?: string, mode?: FontMode) => Promise<ProcessedFont | null>;
+  convertToCenterline: (fontId: string) => Promise<ProcessedFont>;
   remove: (id: string) => Promise<void>;
 }

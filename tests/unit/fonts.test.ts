@@ -36,6 +36,15 @@ describe("centreline extraction",() => {
     const drawnEdges = paths.reduce((sum,path) => sum+path.points.length-1,0);
     expect(drawnEdges).toBe(12);
   });
+  it("keeps the long stem continuous after rasterizing a branched font outline",() => {
+    const branch: PathCommand[] = [{type:"M",x:450,y:0},{type:"L",x:550,y:0},{type:"L",x:550,y:450},
+      {type:"L",x:650,y:450},{type:"L",x:650,y:550},{type:"L",x:550,y:550},{type:"L",x:550,y:1000},{type:"L",x:450,y:1000},{type:"Z"}];
+    const paths = centerlineFromOutline(branch,1000);
+    expect(paths).toHaveLength(2);
+    const main = paths[0].points;
+    expect(Math.max(...main.map((point) => point.y))-Math.min(...main.map((point) => point.y))).toBeGreaterThan(850);
+    expect(paths[1].points.every((point) => point.y > 400 && point.y < 600)).toBe(true);
+  });
   it("measures Euclidean distance to the unfilled edge",() => {
     const mask = new Uint8Array(49);
     for (let y=1;y<6;y++) for (let x=1;x<6;x++) mask[y*7+x]=1;

@@ -34,6 +34,10 @@ export function validateProcessedFont(value: unknown): ProcessedFont {
   if (!value || typeof value !== "object") throw new Error("Invalid processed font.");
   const font = value as ProcessedFont;
   assertId(font.id);
+  if (font.sourceFontId !== undefined) {
+    assertId(font.sourceFontId);
+    if (font.sourceFontId === font.id || font.mode !== "centerline") throw new Error("Invalid source font reference.");
+  }
   if (font.version !== 1 || typeof font.name !== "string" || !font.name || font.name.length > 200 || typeof font.sourceName !== "string" || typeof font.createdAt !== "string") throw new Error("Invalid font metadata.");
   if (font.mode !== undefined && font.mode !== "centerline" && font.mode !== "outline") throw new Error("Invalid font mode.");
   if (!Number.isFinite(font.unitsPerEm) || font.unitsPerEm < 16 || font.unitsPerEm > 16384 || !Number.isFinite(font.ascender) || !Number.isFinite(font.descender) || !Number.isFinite(font.lineGap)) throw new Error("Invalid font metrics.");

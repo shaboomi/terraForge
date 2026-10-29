@@ -85,6 +85,28 @@ function supportedCodepoint(code: number): boolean {
 
 export interface FontIdentity { id: string; sourceName: string; createdAt?: string; characters?: string; mode?: FontMode }
 
+/** Derive centrelines from a saved font without needing its original TTF/OTF file again. */
+export function convertOutlineFont(font: ProcessedFont, identity: { id: string; createdAt?: string }): ProcessedFont {
+  if (font.mode !== "outline") throw new Error("Select a standard outline font to generate centrelines.");
+  const glyphs: ProcessedFont["glyphs"] = {};
+  let totalPoints = 0;
+  for (const [character, glyph] of Object.entries(font.glyphs)) {
+    if (!glyph.outline) throw new Error("The saved font is missing its original outlines. Import it again.");
+    const paths = centerlineFromOutline(glyph.outline, font.unitsPerEm);
+    totalPoints += paths.reduce((sum, path) => sum + path.points.length, 0);
+    if (totalPoints > FONT_PROCESSING_LIMITS.points) throw new Error("Converted font exceeds the geometry limit. Choose a less detailed font.");
+    glyphs[character] = { advanceWidth: glyph.advanceWidth, paths };
+  }
+  return {
+    version: 1, id: identity.id, mode: "centerline", sourceFontId: font.id,
+    name: font.name, sourceName: font.sourceName, createdAt: identity.createdAt ?? new Date().toISOString(),
+    unitsPerEm: font.unitsPerEm, ascender: font.ascender, descender: font.descender, lineGap: font.lineGap,
+    glyphs, kerning: { ...font.kerning }, warnings: [...new Set([...font.warnings,
+      "Centreline and stroke widths are raster approximations at 192 pixels per em. Inspect fine details before plotting.",
+    ])],
+  };
+}
+
 /** Copy native contours without flattening, rasterizing or changing their winding. */
 function copyOutline(commands: PathCommand[]): FontOutlineCommand[] {
   if (commands.length > 50_000) throw new Error("Glyph outline exceeds the processing complexity limit.");

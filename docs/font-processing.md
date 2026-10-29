@@ -8,6 +8,16 @@ Choose the imported font, enter your text, and adjust the size, letter spacing, 
 
 Save the layout to keep its text settings, geometry and width samples. Existing text can still be plotted if its font is later deleted from the library. To regenerate or edit it, import that font again or choose another one.
 
+## Generate centrelines from an imported font
+
+Select an imported **Standard outline** font, then choose **Centreline** in **Font mode**. Terra Forge generates long continuous centre-line strokes and measures their widths from the saved glyph contours. You can also use **Generate centrelines** beside the selected outline font. The original font file is not needed, and the outline version stays in the library.
+
+The generator automatically selects the centreline version and displays its text preview. Your text, size, spacing and brush settings remain in place. Switching back to **Standard outline** selects the corresponding original font; switching to **Centreline** again reuses the generated version. A conversion error leaves the current font and preview selected.
+
+Review the preview, then choose **Add text to canvas** or **Update selected text** to apply it. Conversion itself does not change canvas artwork. Connected branches and loops are joined to keep strokes long and minimise pen lifts; separate marks still require separate strokes.
+
+![Imported font converted to visible centreline text](images/fonts/converted-centrelines.png)
+
 ## Standard outlines and infill
 
 **Standard outline** keeps the font's native quadratic or cubic curves and all contours, including the holes in letters such as `O` and `B`. It uses the selected pen's normal drawing height. Choose an **Infill**:
@@ -34,6 +44,8 @@ With width control enabled, **Brush lead-in** sets a moving approach before each
 
 TrueType quadratic outlines and OpenType/CFF cubic outlines are flattened, filled using the nonzero winding rule, and sampled at 192 pixels per em. A distance field measures local stroke thickness; thinning produces the centre-line graph. Its edges are joined into continuous trails, including loops through junctions, using the minimum number of trails possible for each connected graph without retracing edges. Disconnected marks, such as the dot on an `i`, still need separate pen strokes.
 
+Tracing favours the longest physical strokes first. Branch-only components use the longest remaining path, so a long stem is kept whole instead of being split into shorter balanced strokes. Components containing loops compare up to sixteen deterministic trail arrangements and keep the longest-first result. This bounded search aims for long continuous strokes while retaining complete coverage and minimum pen lifts; complex branching loops are not guaranteed a globally longest arrangement. Previously processed centreline fonts retain their saved geometry; reimport those fonts to apply the improved tracing.
+
 The result is an approximation of the font's medial lines, rather than the original designer's handwriting or an exact reconstruction of the filled outline. Very fine features and complex junctions can change during sampling and simplification. Inspect the preview at the intended plotting size before generating a job. Width samples scale with the text size and canvas transforms.
 
 The first version processes up to 768 mapped Unicode characters per font. Type your text before importing to prioritise those characters; remaining capacity goes to Latin, punctuation and other mapped characters. It preserves advance widths, spaces and supported kerning pairs. It does not perform complex-script shaping, bidirectional text layout, automatic ligatures or variable-font axis selection. Individual fonts report their processing notes in the generator. Text is limited to 2,000 characters and 250,000 sampled points; a font import is limited to 20 MiB and runs in a background worker with a two-minute deadline. Font files and the processed library remain on this computer; use fonts under their applicable licence terms.
@@ -51,6 +63,12 @@ Choose and calibrate the pen before generating G-code. The generated text retain
 ![Reusable pen library and brush calibration](images/fonts/pen-library.png)
 
 ## Verification
+
+Centreline mode selection and longest-first tracing verified on Windows on 30 October 2026:
+
+- Build and type checks passed; all **2,440 unit/component tests** passed.
+- All **four selected desktop checks** passed across `font-centreline-conversion`, `font-library` and `font-brush-lead-in`. The reported outline-to-centreline switch now converts the selected saved font and keeps the text preview populated, without another file picker.
+- Tracing tests verify full stems, physical stroke length, rotated/reflected branches, closed loops, minimum trail counts and exact coverage without retracing or invented connections. Conversion tests preserve original outlines, advance widths, kerning, spaces and library files.
 
 Font modes, infill, optional width control and moving brush approaches verified on Windows on 30 October 2026:
 

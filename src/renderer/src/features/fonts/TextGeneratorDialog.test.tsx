@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ProcessedFont } from "../../../../types/fonts";
 import { useCanvasStore } from "../../store/canvasStore";
 import { TextGeneratorDialog } from "./TextGeneratorDialog";
@@ -9,9 +9,12 @@ const font: ProcessedFont = { id: "test", version: 1, name: "Test font", sourceN
   unitsPerEm: 1000, ascender: 800, descender: -200, lineGap: 0, kerning: {}, warnings: ["Test processing note"],
   glyphs: { A: { advanceWidth: 600, paths: [{ points: [{ x: 0, y: 0, width: 100 }, { x: 500, y: 700, width: 200 }] }] },
     " ": { advanceWidth: 300, paths: [] } } };
+const outlineFont: ProcessedFont = { ...font, id: "outline", name: "Outline font", mode: "outline", glyphs: {
+  A: { advanceWidth: 600, paths: [], outline: [{ type: "M", x: 0, y: 0 }, { type: "L", x: 500, y: 0 }, { type: "L", x: 500, y: 700 }, { type: "L", x: 0, y: 700 }, { type: "Z" }] },
+} };
 
 beforeEach(() => {
-  window.terraForge.fonts = { list: vi.fn().mockResolvedValue([font]), importFont: vi.fn().mockResolvedValue(null), remove: vi.fn().mockResolvedValue(undefined) };
+  window.terraForge.fonts = { list: vi.fn().mockResolvedValue([font]), importFont: vi.fn().mockResolvedValue(null), remove: vi.fn().mockResolvedValue(undefined), convertToCenterline: vi.fn() };
   useCanvasStore.setState({ imports: [], layerGroups: [], activePenId: null, selectedImportId: null, selectedPathId: null,
     selectedGroupId: null, allImportsSelected: false, undoStack: [], redoStack: [] });
 });
@@ -94,9 +97,6 @@ describe("built-in text generator", () => {
   });
 
   it("filters font versions by import mode and previews real Solid/Sketch strokes", async () => {
-    const outlineFont: ProcessedFont = { ...font, id: "outline", name: "Outline font", mode: "outline", glyphs: {
-      A: { advanceWidth: 600, paths: [], outline: [{ type: "M", x: 0, y: 0 }, { type: "L", x: 500, y: 0 }, { type: "L", x: 500, y: 700 }, { type: "L", x: 0, y: 700 }, { type: "Z" }] },
-    } };
     vi.mocked(window.terraForge.fonts.list).mockResolvedValue([font, outlineFont]);
     render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
     await screen.findByRole("option", { name: "Test font" });
@@ -125,5 +125,86 @@ describe("built-in text generator", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add text to canvas" }));
     expect(useCanvasStore.getState().imports[0]).toMatchObject({ useStrokeWidths: true, brushLeadInMM: 2,
       textSource: { useStrokeWidths: true, brushLeadInMM: 2 }, paths: [{ centerline: { points: expect.any(Array) } }] });
+  });
+
+  it("automatically converts the selected outline font when switching modes and reuses linked versions", async () => {
+    vi.mocked(window.terraForge.fonts.list).mockResolvedValue([outlineFont]);
+    const settings = { ...DEFAULT_TEXT_SETTINGS, text: "A" };
+    const original = { ...createTextImport(outlineFont, settings, layoutText(outlineFont, settings), "existing-text"), x: 42, y: 24, rotation: 15, scale: 2 };
+    const canvas = useCanvasStore.getState();
+    const penId = canvas.addPen("Selected brush", "#000000"); canvas.setActivePen(penId);
+    canvas.addImport(original); canvas.selectImport(original.id);
+    const storedOriginal = structuredClone(useCanvasStore.getState().imports[0]);
+    let finish!: (value: ProcessedFont) => void;
+    vi.mocked(window.terraForge.fonts.convertToCenterline).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Outline font" });
+    expect(screen.getByLabelText("Font mode")).toHaveValue("outline");
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "AA" } });
+    fireEvent.change(screen.getByLabelText("Font size (mm)"), { target: { value: "18" } });
+    fireEvent.change(screen.getByLabelText("Letter spacing (mm)"), { target: { value: "0.7" } });
+    fireEvent.change(screen.getByLabelText("Font mode"), { target: { value: "centerline" } });
+    expect(screen.getByRole("status")).toHaveTextContent("Generating long continuous centrelines");
+    expect(screen.getByRole("button", { name: "Add text to canvas" })).toBeDisabled();
+    expect(screen.getByRole("img", { name: "Text outline preview" })).toBeInTheDocument();
+    const converted: ProcessedFont = { ...font, id: "converted", mode: "centerline", sourceFontId: outlineFont.id };
+    await act(async () => { finish(converted); });
+    expect(window.terraForge.fonts.convertToCenterline).toHaveBeenCalledWith(outlineFont.id);
+    expect(window.terraForge.fonts.importFont).not.toHaveBeenCalled();
+    expect(window.terraForge.fonts.remove).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Font mode")).toHaveValue("centerline");
+    expect(screen.getByLabelText("Text font")).toHaveValue(converted.id);
+    const preview = screen.getByRole("img", { name: "Text centre-line preview" });
+    expect(preview.querySelectorAll("path")).toHaveLength(2);
+    expect(preview.querySelector("path")!.getAttribute("d")).not.toContain("Z");
+    expect(screen.getByLabelText("Text to generate")).toHaveValue("AA");
+    expect(screen.getByLabelText("Font size (mm)")).toHaveValue(18);
+    expect(screen.getByLabelText("Letter spacing (mm)")).toHaveValue(0.7);
+    expect(useCanvasStore.getState().imports[0]).toEqual(storedOriginal);
+    expect(useCanvasStore.getState().activePenId).toBe(penId);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use stroke width information" }));
+    fireEvent.change(screen.getByLabelText("Brush lead-in (mm)"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Font mode"), { target: { value: "outline" } });
+    expect(screen.getByLabelText("Text font")).toHaveValue(outlineFont.id);
+    fireEvent.change(screen.getByLabelText("Font mode"), { target: { value: "centerline" } });
+    await waitFor(() => expect(screen.getByLabelText("Text font")).toHaveValue(converted.id));
+    expect(screen.getByRole("checkbox", { name: "Use stroke width information" })).toBeChecked();
+    expect(screen.getByLabelText("Brush lead-in (mm)")).toHaveValue(2);
+    expect(window.terraForge.fonts.convertToCenterline).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Update selected text" }));
+    expect(useCanvasStore.getState().imports[0]).toMatchObject({ id: original.id, x: 42, y: 24, rotation: 15, scale: 2,
+      textSource: { text: "AA", fontId: converted.id, mode: "centerline", fontSizeMM: 18, letterSpacingMM: 0.7, useStrokeWidths: true, brushLeadInMM: 2 } });
+    expect(useCanvasStore.getState().layerGroups[0].importIds).toEqual([original.id]);
+  });
+
+  it("starts with an available outline font and keeps its preview if conversion fails", async () => {
+    vi.mocked(window.terraForge.fonts.list).mockResolvedValue([outlineFont]);
+    vi.mocked(window.terraForge.fonts.convertToCenterline).mockRejectedValue(new Error("Font could not be converted"));
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Outline font" });
+    expect(screen.getByLabelText("Font mode")).toHaveValue("outline");
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "A" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate centrelines" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Font could not be converted"));
+    expect(screen.getByLabelText("Font mode")).toHaveValue("outline");
+    expect(screen.getByLabelText("Text font")).toHaveValue(outlineFont.id);
+    expect(screen.getByRole("img", { name: "Text outline preview" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add text to canvas" })).toBeEnabled();
+    expect(useCanvasStore.getState().imports).toHaveLength(0);
+    expect(window.terraForge.fonts.importFont).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the remaining outline version after deleting a derived centreline font", async () => {
+    const converted: ProcessedFont = { ...font, id: "converted", mode: "centerline", sourceFontId: outlineFont.id };
+    vi.mocked(window.terraForge.fonts.list).mockResolvedValue([outlineFont, converted]);
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Test font" });
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "A" } });
+    expect(screen.getByLabelText("Text font")).toHaveValue(converted.id);
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected font" }));
+    await waitFor(() => expect(screen.getByLabelText("Text font")).toHaveValue(outlineFont.id));
+    expect(screen.getByLabelText("Font mode")).toHaveValue("outline");
+    expect(screen.getByRole("img", { name: "Text outline preview" })).toBeInTheDocument();
+    expect(window.terraForge.fonts.remove).toHaveBeenCalledWith(converted.id);
   });
 });
