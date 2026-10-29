@@ -1,0 +1,29 @@
+{
+  "pluginId": "terraforge.organic-contours",
+  "pluginVersion": "1.0.0",
+  "parameters": {
+    "width": 180,
+    "height": 260,
+    "margin": 12,
+    "rotation": 0,
+    "count": 135,
+    "aspect": 0.68,
+    "opening": 7,
+    "lobes": 3,
+    "lobeStrength": 0.55,
+    "warp": 0.65,
+    "warpScale": 3.4,
+    "twist": 0.65,
+    "pinch": 0.55,
+    "pinchPosition": -0.15,
+    "bias": -0.15,
+    "randomSeed": 42,
+    "variation": 1,
+    "tolerance": 0.045,
+    "colour": "#164970",
+    "penIndex": 0,
+    "border": true,
+    "borderMode": "artwork",
+    "borderGap": 5
+  }
+}

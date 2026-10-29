@@ -4,3 +4,9 @@
 # G-code snapshots compare text exactly across Windows and Unix checkouts.
 *.gcode text eol=lf
 
+# Sculptural preset provenance fingerprints the bundled plugin source bytes.
+docs/examples/flowing-ribbons.tf-plugin.js text eol=lf
+docs/examples/wave-volume.tf-plugin.js text eol=lf
+docs/examples/organic-contours.tf-plugin.js text eol=lf
+scripts/lib/sculptural-generators/*.js text eol=lf
+

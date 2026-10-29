@@ -1,0 +1,32 @@
+{
+  "pluginId": "terraforge.flowing-ribbons",
+  "pluginVersion": "1.0.0",
+  "parameters": {
+    "preset": "braid",
+    "width": 180,
+    "height": 260,
+    "margin": 12,
+    "rotation": 0,
+    "ribbonCount": 3,
+    "ribbonWidth": 34,
+    "separation": 18,
+    "spacing": 0.6,
+    "bend": 9,
+    "wavelength": 90,
+    "twist": 1.1,
+    "phaseVariation": 1,
+    "crossweave": 0,
+    "irregularity": 2,
+    "irregularityScale": 110,
+    "penMode": "single",
+    "crossPenIndex": 0,
+    "randomSeed": 42,
+    "variation": 1,
+    "tolerance": 0.045,
+    "colour": "#292b30",
+    "penIndex": 0,
+    "border": false,
+    "borderMode": "artwork",
+    "borderGap": 5
+  }
+}
