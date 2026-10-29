@@ -1,6 +1,7 @@
 # TerraForge plugin engine and bitmap support — proposed design
 
 Date: 27 October 2026 (New Zealand)
+Current extension: [selective upstream integration assessment](plugin-upstream-assessment.md), [Rescan and code fingerprints](plugin-rescan.md), [shared preparation](plugin-bitmap-preparation.md) and [generator conversion limits](renderer-plugin-conversion.md). The historical stages below retain their original scope.
 Review baseline: fork `shaboomi/terraForge`, main commit `5e554c6d5823f36214a5bed4982057ec5e5e71e8`.
 Status: the Stage 1 generator engine and Stage 2 bitmap foundation are implemented. Stage 3 connects selected bitmap/vector snapshots, raster/vector output, manual Preview → Apply and atomic processing-result updates. See [the Stage 1 scope](plugin-stage-1.md), [the Stage 2 notes](plugin-stage-2.md), [the Stage 3 notes](plugin-stage-3.md) and [the author guide](plugin-author-guide.md) for supported features and verification boundaries. This document retains the broader design and future artistic/font roadmap.
 

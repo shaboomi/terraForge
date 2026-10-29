@@ -159,7 +159,8 @@ function control(value: unknown): PluginControl {
 
 export function validatePluginManifest(value: unknown): PluginManifest {
   const item = object(value, "Plugin metadata");
-  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls", "bitmapPreparation"], "Plugin metadata");
+  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls", "bitmapPreparation", "previewRequired"], "Plugin metadata");
+  if (item.previewRequired !== undefined && item.previewRequired !== true) throw new Error("Preview requirement must be an explicit true opt-in.");
   if (item.bitmapPreparation !== undefined && (item.bitmapPreparation !== true || item.input !== "bitmap")) throw new Error("Shared bitmap preparation requires bitmap input and explicit true opt-in.");
   const id = identifier(item.id);
   const name = nonempty(item.name, "Plugin name");
@@ -178,7 +179,7 @@ export function validatePluginManifest(value: unknown): PluginManifest {
     controls = Array.from(item.controls, control);
     if (new Set(controls.map((entry) => entry.key)).size !== controls.length) throw new Error("Control keys must be unique.");
   }
-  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }), ...(item.bitmapPreparation === true ? { bitmapPreparation: true as const } : {}) };
+  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }), ...(item.bitmapPreparation === true ? { bitmapPreparation: true as const } : {}), ...(item.previewRequired === true ? { previewRequired: true as const } : {}) };
 }
 
 export function parsePluginSource(source: string): PluginManifest {

@@ -2,12 +2,13 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { PluginEntry, PluginManifest, PluginResult } from "../../../../types";
 import { parseCanvasLayout, serializeCanvasLayout } from "../../../../types/layoutValidation";
-import { validatePluginRunRequest } from "../../../../types/pluginValidation";
+import { validatePluginManifest, validatePluginRunRequest } from "../../../../types/pluginValidation";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useMachineStore } from "../../store/machineStore";
 import { usePluginStore } from "./pluginStore";
 import { pluginEditor } from "./pluginEditing";
 import { PluginArtworkAction } from "./PluginArtworkAction";
+import { PluginPanel } from "./PluginPanel";
 
 const manifest: PluginManifest = { id: "test.rescan", name: "Rescan Test", version: "1.0.0", apiVersion: 1,
   description: "Test", category: "generator", input: "none", outputs: ["vector"] };
@@ -109,4 +110,22 @@ it("refuses malformed fingerprint input and leaves older requests compatible", (
   const request = { runId: "test", pluginId: manifest.id, parameters: {}, input: { kind: "none", page: { widthMM: 20, heightMM: 10 } } };
   expect(validatePluginRunRequest(request)).toEqual(request);
   expect(() => validatePluginRunRequest({ ...request, sourceFingerprint: "arbitrary" })).toThrow(/fingerprint/);
+});
+
+it("enforces declared Preview before Apply for converted generators, including the direct run action", async () => {
+  const converted = { ...entry, manifest: { ...manifest, previewRequired: true as const } };
+  expect(validatePluginManifest(converted.manifest).previewRequired).toBe(true);
+  expect(() => validatePluginManifest({ ...manifest, previewRequired: false })).toThrow(/Preview/);
+  usePluginStore.setState({ entries: [converted], collapsed: false });
+  await usePluginStore.getState().run();
+  expect(useCanvasStore.getState().imports).toHaveLength(0);
+  expect(useCanvasStore.getState().undoStack).toHaveLength(0);
+  expect(usePluginStore.getState().preview).not.toBeNull();
+  const view = render(<PluginPanel />);
+  expect(screen.queryByRole("button", { name: "Add artwork" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Apply artwork" })).toBeEnabled();
+  view.unmount();
+  usePluginStore.getState().applyPreview();
+  expect(useCanvasStore.getState().imports).toHaveLength(1);
+  expect(useCanvasStore.getState().undoStack).toHaveLength(1);
 });
