@@ -22,6 +22,7 @@
     "test:plugin-package": "node --experimental-strip-types scripts/plugin-package-smoke.ts",
     "test:bitmap-package": "node --experimental-strip-types scripts/bitmap-package-smoke.ts",
     "test:processing-package": "node --experimental-strip-types scripts/processing-package-smoke.ts",
+    "test:cmyk-package": "node --experimental-strip-types scripts/cmyk-package-smoke.ts",
     "test:spiral-package": "node --experimental-strip-types scripts/spiral-package-smoke.ts",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",

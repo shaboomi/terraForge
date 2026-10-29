@@ -1,3 +1,4 @@
+import { assertRunnableFilePath } from "../types/gcodeFileNames";
 import { EventEmitter } from "events";
 import { SerialPort, ReadlineParser } from "serialport";
 import type { MachineStatus, RemoteFile } from "../types";
@@ -379,6 +380,7 @@ export class SerialClient extends EventEmitter {
 
   /** Run a file from SD or internal FS. */
   async runFile(remotePath: string, source: "sd" | "fs" = "sd"): Promise<void> {
+    assertRunnableFilePath(remotePath);
     const cmd =
       source === "sd" ? `$SD/Run=${remotePath}` : `$LocalFS/Run=${remotePath}`;
     await this.sendAndReceive(cmd);

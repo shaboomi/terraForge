@@ -243,6 +243,10 @@ export interface VectorObject {
   layer?: string;
   /** Source fill color for color-based G-code batching (e.g. '#FF0000', 'black'). */
   sourceColor?: string;
+  /** Optional ordered plugin pass; optimization must respect this boundary. */
+  plotOrder?: number;
+  /** Stable real pen identity for ordered output. */
+  penId?: string;
   /** Number of times to repeat this path (default 1). */
   passCount?: number;
   /** How to handle multiple passes: repeat, backtrack, or penLift (default 'repeat'). */
@@ -743,7 +747,13 @@ declare global {
 export type PluginCategory = "bitmap-processor" | "generator" | "font-tool";
 export type PluginParameters = Record<string, string | number | boolean>;
 
+export type PluginDetailBudget = "standard" | "extended";
+export interface PluginExecutionLimits { paths: number; points: number; executionMs: number }
+
 export interface PluginProvenance {
+  detailBudget?: PluginDetailBudget;
+  /** Optional execution pass, independent of the global pen list. */
+  plotOrder?: number;
   pluginId: string;
   pluginVersion: string;
   parameters: PluginParameters;
@@ -789,7 +799,8 @@ export type PluginControl =
       default: string;
       multiline?: boolean;
     })
-  | (PluginControlBase & { type: "colour"; default: string });
+  | (PluginControlBase & { type: "colour"; default: string })
+  | (PluginControlBase & { type: "pen"; default: string; suggestedColor?: string });
 
 export interface PluginManifest {
   id: string;
@@ -829,6 +840,7 @@ export type PluginInput =
   | (PluginSelectionInput & { kind: "vector"; paths: PluginPolyline[] });
 
 export interface PluginRunRequest {
+  detailBudget?: PluginDetailBudget;
   runId: string;
   pluginId: string;
   input: PluginInput;
@@ -852,13 +864,15 @@ export interface PluginVectorResult {
 }
 
 export type PluginOutputItem =
-  | { kind: "vector"; width: number; height: number; paths: PluginPolyline[]; name?: string }
+  | { kind: "vector"; width: number; height: number; paths: PluginPolyline[]; name?: string; penId?: string; plotOrder?: number }
   | { kind: "bitmap"; width: number; height: number; widthPx: number; heightPx: number; data: Uint8Array; name?: string };
 
 /** The original single-vector result stays valid for existing API-1 generators. */
 export type PluginResult = PluginVectorResult | { items: PluginOutputItem[]; warnings?: string[] };
 
 export interface PluginContext {
+  /** Host-authorized capacity; absent for older hosts. */
+  limits?: Readonly<PluginExecutionLimits>;
   runId: string;
   signal: AbortSignal;
   progress: (percent: number | null) => void;

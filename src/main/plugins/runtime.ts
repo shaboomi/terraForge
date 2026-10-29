@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import { join } from "node:path";
 import type { PluginManifest, PluginResult, PluginRunRequest } from "../../types";
-import { validatePluginParameters, validatePluginResult, validatePluginRunRequest } from "../../types/pluginValidation";
+import { pluginExecutionLimits, validatePluginParameters, validatePluginResult, validatePluginRunRequest } from "../../types/pluginValidation";
 import type { TaskManager } from "../../tasks/taskManager";
 import type { PluginRegistry } from "./registry";
 import { configurePluginProtocol } from "./protocol";
@@ -16,13 +16,13 @@ interface ActiveRun {
 
 export class PluginRuntime {
   private readonly active = new Map<string, ActiveRun>();
-  private readonly timeoutMs: number;
+  private readonly timeoutMs: number | undefined;
   private readonly pluginSession: Electron.Session;
   private readonly hostProtocol: { createHostUrl: () => string };
 
   constructor(private readonly registry: PluginRegistry, private readonly tasks: TaskManager) {
     const override = !app.isPackaged ? Number(process.env.TERRAFORGE_PLUGIN_TIMEOUT_MS) : NaN;
-    this.timeoutMs = Number.isFinite(override) && override >= 100 && override <= 30_000 ? override : 30_000;
+    this.timeoutMs = Number.isFinite(override) && override >= 100 && override <= 180_000 ? override : undefined;
     this.pluginSession = session.fromPartition("terraforge-plugin-host");
     this.pluginSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     this.pluginSession.setPermissionCheckHandler(() => false);
@@ -84,7 +84,7 @@ export class PluginRuntime {
       this.active.set(request.runId, run);
       this.tasks.registerCancelHandler(request.runId, () => run.finish("Plugin cancelled.", undefined, true));
       ipcMain.on("plugins:host-event", onMessage);
-      deadline = setTimeout(() => run.finish("Plugin exceeded its time limit."), this.timeoutMs);
+      deadline = setTimeout(() => run.finish("Plugin exceeded its time limit."), Math.min(this.timeoutMs ?? Infinity, pluginExecutionLimits(request.detailBudget).executionMs));
       void this.prepare(request, run).catch((error: unknown) => run.finish(String(error)));
     });
   }
@@ -103,6 +103,11 @@ export class PluginRuntime {
     if (manifest.input !== request.input.kind) throw new Error(`This plugin requires ${manifest.input === "none" ? "no selected input" : `one selected ${manifest.input}`}.`);
     run.manifest = manifest;
     const parameters = validatePluginParameters(manifest, request.parameters);
+    for (const control of manifest.controls ?? []) {
+      if (control.type === "pen" && !(request.input.palette ?? []).some(pen => pen.id === parameters[control.key])) {
+        throw new Error(`Choose an available ${control.label} from your configured pens.`);
+      }
+    }
     const task = this.tasks.get(request.runId);
     if (task) task.label = manifest.name;
     const host = new BrowserWindow({

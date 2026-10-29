@@ -15,6 +15,8 @@ export function PluginPanel() {
   const canvas = useCanvasStore();
   const editingArtwork = canvas.imports.find((item) => item.id === editingImportId);
   const parameters = usePluginStore((state) => state.parameters);
+  const detailBudgets = usePluginStore(state => state.detailBudgets);
+  const setDetailBudget = usePluginStore(state => state.setDetailBudget);
   const running = usePluginStore((state) => state.running);
   const error = usePluginStore((state) => state.runError);
   const setCollapsed = usePluginStore((state) => state.setCollapsed);
@@ -62,7 +64,17 @@ export function PluginPanel() {
         {processor && <p className="text-xs text-content-muted">Preview keeps the source artwork unchanged. Apply adds a separate result.</p>}
         {preview && <p role="status" className="text-xs text-content">Preview · {preview.items.length} {preview.items.length === 1 ? "item" : "items"}. Apply to keep this artwork.</p>}
         <form noValidate onSubmit={(event) => { event.preventDefault(); void (processor ? previewRun() : run()); }} className="space-y-3">
-          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+          <div className="space-y-1">
+            <label htmlFor="plugin-detail-budget" className="block text-xs text-content-muted">Artwork capacity</label>
+            <select id="plugin-detail-budget" className="w-full rounded border border-border-ui bg-app px-2 py-1 text-xs text-content"
+              value={detailBudgets[manifest.id] ?? "standard"} disabled={busy || unavailable}
+              onChange={event => setDetailBudget(manifest.id, event.target.value === "extended" ? "extended" : "standard")}>
+              <option value="standard">Standard — 100,000 points / 10,000 paths</option>
+              <option value="extended">Extended 6× — 600,000 points / 60,000 paths</option>
+            </select>
+            <p className="text-[10px] text-content-muted">More capacity for detailed artwork. Your size settings stay unchanged. Calculation can take up to three minutes.</p>
+          </div>
+          {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} palette={canvas.layerGroups} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
           {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
           <div className="flex flex-wrap gap-2">
             {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <>

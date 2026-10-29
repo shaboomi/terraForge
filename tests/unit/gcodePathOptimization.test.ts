@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   nearestNeighbourSort,
+  nearestNeighbourSortCooperative,
   joinSubpaths,
   type Subpath,
 } from "../../src/workers/gcodeEngine/stages/pathOptimization";
@@ -107,4 +108,17 @@ describe("gcode path optimization stage", () => {
     expect(result[0]).toHaveLength(4);
     expect(result[1]).toHaveLength(2);
   });
+  it.each([false,true])("pruned search finds exact nearest endpoints with reversal=%s",async allowReverse=>{
+    let seed=73;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296*1000;};
+    const paths:Subpath[]=Array.from({length:180},()=>[{x:random(),y:random()},{x:random(),y:random()}]);
+    paths.push([{x:10000,y:10000},{x:0.001,y:0.001}]);
+    const remaining=paths.map(path=>path);const expected:Subpath[]=[];let cursor={x:0,y:0};
+    while(remaining.length){let best=0,reverse=false,distance=Infinity;
+      for(let i=0;i<remaining.length;i++){const path=remaining[i];for(const back of allowReverse?[false,true]:[false]){const point=path[back?path.length-1:0];const d=(point.x-cursor.x)**2+(point.y-cursor.y)**2;if(d<distance){distance=d;best=i;reverse=back;}}}
+      const path=remaining.splice(best,1)[0];const next=reverse?[...path].reverse():path;expected.push(next);cursor=next[next.length-1];
+    }
+    expect(nearestNeighbourSort(paths,{allowReverse,pruneSpatialSearch:true})).toEqual(expected);
+    expect(await nearestNeighbourSortCooperative(paths,{allowReverse,pruneSpatialSearch:true})).toEqual(expected);
+  });
+
 });

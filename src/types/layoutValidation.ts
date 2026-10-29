@@ -99,7 +99,7 @@ function base(item: Row): CanvasItemBase {
 
 function pluginProvenance(value: unknown): PluginProvenance {
   const provenance = row(value, "Plugin provenance");
-  fields(provenance, ["pluginId", "pluginVersion", "parameters", "apiVersion", "seed", "sourceId", "sourceRevision", "outputGroupId", "outputGroupName", "outputIndex", "outputKey", "outputWidth", "outputHeight"], "Plugin provenance");
+  fields(provenance, ["pluginId", "pluginVersion", "parameters", "apiVersion", "seed", "sourceId", "sourceRevision", "outputGroupId", "outputGroupName", "outputIndex", "outputKey", "outputWidth", "outputHeight", "plotOrder", "detailBudget"], "Plugin provenance");
   const parameters = row(provenance.parameters, "Plugin parameters");
   if (Object.keys(parameters).length > 32) throw new Error("Too many saved plugin parameters.");
   const safeParameters: Record<string, string | number | boolean> = {};
@@ -111,6 +111,15 @@ function pluginProvenance(value: unknown): PluginProvenance {
     else throw new Error("Saved plugin parameters must be primitive values.");
   }
   const result: PluginProvenance = { pluginId: id(provenance.pluginId, "Plugin ID"), pluginVersion: text(provenance.pluginVersion, "Plugin version", 80), parameters: safeParameters };
+  if (provenance.detailBudget !== undefined) {
+    if (provenance.detailBudget !== "standard" && provenance.detailBudget !== "extended") throw new Error("Unsupported saved artwork capacity.");
+    result.detailBudget = provenance.detailBudget;
+  }
+  if (provenance.plotOrder !== undefined) {
+    const order = number(provenance.plotOrder, "Plot order", 0, 15);
+    if (!Number.isInteger(order)) throw new Error("Plot order must be an integer.");
+    result.plotOrder = order;
+  }
   if (provenance.apiVersion !== undefined) {
     if (provenance.apiVersion !== 1) throw new Error("Unsupported saved plugin API version.");
     result.apiVersion = 1;

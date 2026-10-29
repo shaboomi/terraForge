@@ -482,6 +482,11 @@ describe("SerialClient file operations", () => {
     );
   });
 
+  it("does not transmit an incompatible filename over serial",async()=>{
+    await expect(client.runFile("/CMYK Cyan — Cyan_opt.gcode","sd")).rejects.toThrow(/Rename the file/);
+    expect((client as any).port.write).not.toHaveBeenCalled();
+  });
+
   it("fetchFileText joins response lines with newlines", async () => {
     const p = client.fetchFileText("/test.gcode");
     (client as any).handleLine("G0 X0 Y0");

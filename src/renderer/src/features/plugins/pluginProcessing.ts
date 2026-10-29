@@ -1,12 +1,12 @@
 import { v4 as uuid } from "uuid";
 import type {
-  BitmapAsset, BitmapAssetTable, CanvasItem, MachineConfig, PluginInput,
+  BitmapAsset, BitmapAssetTable, CanvasItem, MachineConfig, PluginInput, PluginDetailBudget,
   PluginManifest, PluginParameters, PluginPen, PluginPolyline, PluginResult,
   SvgImport,
 } from "../../../../types";
 import { isBitmapImport } from "../../../../types";
 import { BITMAP_LIMITS } from "../../../../types/bitmapValidation";
-import { PLUGIN_LIMITS, validatePluginResult } from "../../../../types/pluginValidation";
+import { PLUGIN_LIMITS, pluginExecutionLimits, validatePluginResult } from "../../../../types/pluginValidation";
 import { tokenizePath, toAbsolute } from "../../../../workers/gcodeEngine/stages/pathParsing";
 import { arcToBeziers, cubicBezier, quadBezier } from "../../../../workers/gcodeEngine/stages/geometryFlattening";
 import type { CanvasState } from "../../store/canvasStore/types";
@@ -22,6 +22,7 @@ export interface PreparedPluginArtwork {
   groupName: string;
 }
 export interface ExistingPluginGroup {
+  detailBudget?: PluginDetailBudget;
   groupId?: string;
   groupName?: string;
   palette?: PluginPen[];
@@ -99,20 +100,20 @@ async function bitmapPixels(asset: BitmapAsset, signal?: AbortSignal): Promise<U
 }
 
 /** Reuse the plotter's SVG parser/curve approximation, checking the budget after each segment. */
-function boundedLocalPaths(d: string, source: SvgImport, budget: { points: number; paths: number }) {
+function boundedLocalPaths(d: string, source: SvgImport, budget: { points: number; paths: number }, limits = pluginExecutionLimits()) {
   if (d.length > 2 * 1024 * 1024) throw new Error("The vector is too detailed for a plugin input. Simplify it first.");
   const paths: { x: number; y: number }[][] = [];
   let current: { x: number; y: number }[] = [];
   let x = 0, y = 0, startX = 0, startY = 0, controlX = 0, controlY = 0, previous = "";
   const finish = () => {
     if (current.length > 1) {
-      if (++budget.paths > PLUGIN_LIMITS.paths) throw new Error("The vector exceeds the plugin input path limit. Simplify it first.");
+      if (++budget.paths > limits.paths) throw new Error("The vector exceeds the plugin input path limit. Simplify it first.");
       paths.push(current);
     }
     current = [];
   };
   const push = (rawX: number, rawY: number) => {
-    if (++budget.points > PLUGIN_LIMITS.points) throw new Error("The vector exceeds the plugin input point limit. Simplify it first.");
+    if (++budget.points > limits.points) throw new Error("The vector exceeds the plugin input point limit. Simplify it first.");
     const localX = rawX - source.viewBoxX, localY = rawY - source.viewBoxY, epsilon = 1e-7;
     if (!Number.isFinite(localX) || !Number.isFinite(localY) || localX < -epsilon || localY < -epsilon ||
         localX > source.svgWidth + epsilon || localY > source.svgHeight + epsilon) {
@@ -192,13 +193,13 @@ function boundedLocalPaths(d: string, source: SvgImport, budget: { points: numbe
   return paths;
 }
 
-function vectorPixels(source: SvgImport, canvas: CanvasState): PluginPolyline[] {
+function vectorPixels(source: SvgImport, canvas: CanvasState, detailBudget?: PluginDetailBudget): PluginPolyline[] {
   const pen = canvas.layerGroups.find((group) => group.importIds.includes(source.id));
   const objects = vectorObjectsForImport(source, pen?.color);
   const paths: PluginPolyline[] = [];
   const budget = { paths: 0, points: 0 };
   for (const object of objects) {
-    for (const normalized of boundedLocalPaths(object.path, source, budget)) {
+    for (const normalized of boundedLocalPaths(object.path, source, budget, pluginExecutionLimits(detailBudget))) {
       const color = object.sourceColor && /^#[0-9a-f]{6}$/i.test(object.sourceColor) ? object.sourceColor : "#000000";
       paths.push({ points: normalized, color, ...(pen ? { penId: pen.id } : {}) });
     }
@@ -214,6 +215,7 @@ export async function buildPluginInput(
   page: Page,
   source?: CanvasItem,
   signal?: AbortSignal,
+  detailBudget?: PluginDetailBudget,
 ): Promise<PluginInput> {
   const palette = paletteFor(canvas);
   cancelled(signal);
@@ -231,7 +233,7 @@ export async function buildPluginInput(
     return { ...common, kind: "bitmap", widthPx: asset.widthPx, heightPx: asset.heightPx,
       data: await bitmapPixels(asset, signal) };
   }
-  const paths = vectorPixels(source, canvas);
+  const paths = vectorPixels(source, canvas, detailBudget);
   cancelled(signal);
   return { ...common, kind: "vector", paths };
 }
@@ -289,7 +291,7 @@ export async function preparePluginArtwork(
       scale: source.scale, scaleX: source.scaleX, scaleY: source.scaleY, rotation: source.rotation } }
     : { kind: "none", page, palette };
   const result = validatePluginResult(rawResult, { runId: "prepare", pluginId: manifest.id,
-    input: validationInput, parameters, seed }, manifest);
+    input: validationInput, parameters, seed, detailBudget: existingGroup.detailBudget }, manifest);
   const outputs = "items" in result ? result.items : [{ ...result, kind: "vector" as const }];
   const items: CanvasItem[] = [];
   const assets: Record<string, BitmapAsset> = {};
@@ -307,6 +309,7 @@ export async function preparePluginArtwork(
     } : generatorPlacement(output.width, output.height, machine);
     const provenance = (outputKey: string) => ({ pluginId: manifest.id, pluginVersion: manifest.version,
       parameters: { ...parameters }, apiVersion: 1 as const, seed, outputGroupId: groupId,
+      ...(existingGroup.detailBudget === "extended" ? { detailBudget: "extended" as const } : {}),
       outputGroupName: groupName, outputIndex: items.length, outputKey, outputWidth: output.width, outputHeight: output.height,
       ...(source ? { sourceId: source.id, sourceRevision: revision } : {}) });
     if (output.kind === "bitmap") {
@@ -323,10 +326,12 @@ export async function preparePluginArtwork(
     const partitions = new Map<string | undefined, PluginPolyline[]>();
     for (const path of output.paths) {
       if (path.penId && !palette.some((pen) => pen.id === path.penId)) throw new Error("The plugin returned an unavailable pen assignment.");
-      const paths = partitions.get(path.penId) ?? [];
+      const penId = path.penId ?? output.penId;
+      const paths = partitions.get(penId) ?? [];
       paths.push(path);
-      partitions.set(path.penId, paths);
+      partitions.set(penId, paths);
     }
+    if (!output.paths.length && output.penId) partitions.set(output.penId, []);
     for (const [penId, paths] of partitions) {
       if (items.length >= PLUGIN_LIMITS.outputItems) throw new Error("The plugin result produces too many canvas items after pen separation.");
       const pen = palette.find((entry) => entry.id === penId);
@@ -341,6 +346,7 @@ export async function preparePluginArtwork(
             visible: true, label: `Path ${index + 1}`, strokeColor: color, sourceColor: color,
             sourceOutlineVisible: true, outlineVisible: true, strokeEnabled: true, hasFill: false };
         }) };
+      if (output.plotOrder !== undefined) artwork.pluginSource!.plotOrder = output.plotOrder;
       items.push(artwork);
       if (penId) penAssignments[id] = penId;
     }

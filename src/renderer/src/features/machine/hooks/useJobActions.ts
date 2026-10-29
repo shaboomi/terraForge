@@ -1,3 +1,4 @@
+import { safeGcodeFilenameBase } from "../../../../../types/gcodeFileNames";
 import { useState, useRef } from "react";
 import { v4 as uuid } from "uuid";
 import { useShallow } from "zustand/react/shallow";
@@ -237,6 +238,12 @@ export function useJobActions() {
       return;
     }
 
+    if ((prefs.exportPerLayer || prefs.exportPerColor) && imports.some(item => item.visible && item.pluginSource?.plotOrder !== undefined)) {
+      upsertTask({ id: uuid(), type: "gcode-generate", label: "Choose a pen-preserving export", progress: null, status: "warning",
+        error: "Ordered plugin layers require combined output or Export one file per group. Colour/SVG-layer splitting cannot preserve distinct real pens and the final Black pass." });
+      return;
+    }
+
     if (prefs.exportPerLayer) {
       await handleGenerateGcodePerLayer(prefs, cfg);
       return;
@@ -302,9 +309,7 @@ export function useJobActions() {
           selectedImport?.name ||
           imports[0]?.name ||
           "untitled";
-        const safeName = baseName
-          .replace(/\.[^.]+$/, "")
-          .replace(/[\\/:*?"<>|]/g, "_");
+        const safeName = safeGcodeFilenameBase(baseName.replace(/\.[^.]+$/, ""));
         const defaultFilename = prefs.optimise
           ? `${safeName}_opt.gcode`
           : `${safeName}.gcode`;
@@ -415,13 +420,11 @@ export function useJobActions() {
       ...(ungroupedObjects.length > 0
         ? [{ id: null, name: "ungrouped", objects: ungroupedObjects }]
         : []),
-      ...[...layerGroups]
-        .sort((a, b) => compareColorsLightFirst(a.color, b.color))
-        .map((g) => ({
-          id: g.id,
-          name: g.name,
-          objects: toVectorObjectsForGroup(g.id),
-        }))
+      ...layerGroups.map(g => ({ id: g.id, name: g.name, color: g.color, objects: toVectorObjectsForGroup(g.id) }))
+        .sort((a, b) => {
+          const rank = (objects: VectorObject[]) => objects.reduce((maximum, object) => Math.max(maximum, object.plotOrder ?? -1), -1);
+          return rank(a.objects) - rank(b.objects) || compareColorsLightFirst(a.color, b.color);
+        })
         .filter((e) => e.objects.length > 0),
     ];
     if (allEntries.length === 0) return;
@@ -437,7 +440,8 @@ export function useJobActions() {
     for (const group of allEntries) {
       const objects = group.objects;
       const taskId = uuid();
-      const safeName = group.name.replace(/[\\/:*?"<>|]/g, "_");
+      const rank = objects.reduce((rank, object) => Math.max(rank, object.plotOrder ?? -1), -1);
+      const safeName = `${rank < 0 ? "" : `${rank + 1}-`}${safeGcodeFilenameBase(group.name)}`;
       const defaultFilename = prefs.optimise
         ? `${safeName}_opt.gcode`
         : `${safeName}.gcode`;

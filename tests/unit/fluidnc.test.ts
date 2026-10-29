@@ -197,6 +197,11 @@ describe("FluidNCClient", () => {
     expect(url).toContain("$LocalFS/Run=/job.gcode");
   });
 
+  it("does not transmit a Run command whose Unicode filename would be altered by FluidNC",async()=>{
+    await expect(client.runFile("/CMYK Cyan — Cyan_opt.gcode","sd")).rejects.toThrow(/Rename the file/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   // ── Error handling ──────────────────────────────────────────────────────
 
   it("throws on HTTP error from getStatus", async () => {
