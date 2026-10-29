@@ -18,5 +18,6 @@ export function PluginArtworkAction({ artwork }: { artwork: CanvasItem }) {
     <Button size="sm" className="w-full" disabled={!!editor.error}
       onClick={() => editImport(artwork.id)}>{label}</Button>
     {editor.error && <p className="text-xs text-content-muted">{editor.error}</p>}
+    {editor.notice && <p className="text-xs text-content-muted">{editor.notice}</p>}
   </div>;
 }

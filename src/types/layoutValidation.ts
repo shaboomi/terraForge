@@ -99,7 +99,7 @@ function base(item: Row): CanvasItemBase {
 
 function pluginProvenance(value: unknown): PluginProvenance {
   const provenance = row(value, "Plugin provenance");
-  fields(provenance, ["pluginId", "pluginVersion", "parameters", "apiVersion", "seed", "sourceId", "sourceRevision", "outputGroupId", "outputGroupName", "outputIndex", "outputKey", "outputWidth", "outputHeight", "plotOrder", "detailBudget"], "Plugin provenance");
+  fields(provenance, ["pluginId", "pluginVersion", "parameters", "apiVersion", "seed", "sourceId", "sourceRevision", "outputGroupId", "outputGroupName", "outputIndex", "outputKey", "outputWidth", "outputHeight", "plotOrder", "detailBudget", "sourceFingerprint"], "Plugin provenance");
   const parameters = row(provenance.parameters, "Plugin parameters");
   if (Object.keys(parameters).length > 32) throw new Error("Too many saved plugin parameters.");
   const safeParameters: Record<string, string | number | boolean> = {};
@@ -111,6 +111,10 @@ function pluginProvenance(value: unknown): PluginProvenance {
     else throw new Error("Saved plugin parameters must be primitive values.");
   }
   const result: PluginProvenance = { pluginId: id(provenance.pluginId, "Plugin ID"), pluginVersion: text(provenance.pluginVersion, "Plugin version", 80), parameters: safeParameters };
+  if (provenance.sourceFingerprint !== undefined) {
+    if (typeof provenance.sourceFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(provenance.sourceFingerprint)) throw new Error("Invalid saved plugin source fingerprint.");
+    result.sourceFingerprint = provenance.sourceFingerprint;
+  }
   if (provenance.detailBudget !== undefined) {
     if (provenance.detailBudget !== "standard" && provenance.detailBudget !== "extended") throw new Error("Unsupported saved artwork capacity.");
     result.detailBudget = provenance.detailBudget;

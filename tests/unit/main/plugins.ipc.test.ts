@@ -4,7 +4,7 @@ import type { TaskManager } from "../../../src/tasks/taskManager";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
-  initialise: vi.fn(), list: vi.fn(), installExample: vi.fn(), setEnabled: vi.fn(),
+  initialise: vi.fn(), list: vi.fn(), rescan: vi.fn(), installExample: vi.fn(), setEnabled: vi.fn(),
   run: vi.fn(), cancel: vi.fn(), cancelAll: vi.fn(), openPath: vi.fn(),
 }));
 vi.mock("electron", () => ({
@@ -16,6 +16,7 @@ vi.mock("../../../src/main/plugins/registry", () => ({
   PluginRegistry: class {
     initialise = mocks.initialise;
     list = mocks.list;
+    rescan = mocks.rescan;
     installExample = mocks.installExample;
     setEnabled = mocks.setEnabled;
   },
@@ -44,6 +45,7 @@ describe("plugin IPC lifecycle", () => {
     mocks.initialise.mockReturnValue(new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; }));
     mocks.run.mockResolvedValue(result);
     mocks.list.mockReturnValue([]);
+    mocks.rescan.mockResolvedValue(undefined);
     mocks.openPath.mockResolvedValue("");
     main = { webContents: { mainFrame: {} }, isDestroyed: () => false };
     event = { sender: main.webContents, senderFrame: main.webContents.mainFrame };
@@ -122,5 +124,40 @@ describe("plugin IPC lifecycle", () => {
     await expect(open).rejects.toThrow(/denied/);
     expect(mocks.installExample).not.toHaveBeenCalled();
     expect(mocks.openPath).not.toHaveBeenCalled();
+  });
+
+  it("rescanning cancels pending startup work and returns metadata without running code", async () => {
+    const run = invoke("plugins:run", event, request);
+    const entries = [{ filename: "new.tf-plugin.js", enabled: true }];
+    mocks.list.mockReturnValue(entries);
+    const scan = invoke("plugins:rescan", event);
+    resolveReady();
+    await expect(run).rejects.toThrow(/cancelled before/);
+    await expect(scan).resolves.toEqual(entries);
+    expect(mocks.rescan).toHaveBeenCalledOnce();
+    expect(mocks.run).not.toHaveBeenCalled();
+  });
+
+  it("rescanning cancels active runtime work and refuses runs until the scan finishes", async () => {
+    resolveReady();
+    await invoke("plugins:run", event, request);
+    let finishScan: () => void;
+    mocks.rescan.mockReturnValue(new Promise<void>(resolve => { finishScan = resolve; }));
+    const scan = invoke("plugins:rescan", event);
+    expect(mocks.cancelAll).toHaveBeenCalledOnce();
+    await expect(invoke("plugins:run", event, { ...request, runId: "during-scan" })).rejects.toThrow(/rescan is in progress/);
+    await vi.waitFor(() => expect(mocks.rescan).toHaveBeenCalledOnce());
+    finishScan!();
+    await scan;
+    await expect(invoke("plugins:run", event, { ...request, runId: "after-scan" })).resolves.toEqual(result);
+  });
+
+  it("rejects rescan from child frames and releases the scan gate after failures", async () => {
+    resolveReady();
+    await expect(invoke("plugins:rescan", { sender: event.sender, senderFrame: {} })).rejects.toThrow(/denied/);
+    expect(mocks.rescan).not.toHaveBeenCalled();
+    mocks.rescan.mockRejectedValue(new Error("Plugin folder unavailable"));
+    await expect(invoke("plugins:rescan", event)).rejects.toThrow(/unavailable/);
+    await expect(invoke("plugins:run", event, request)).resolves.toEqual(result);
   });
 });

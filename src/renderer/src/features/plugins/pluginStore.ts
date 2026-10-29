@@ -37,6 +37,7 @@ interface PluginState {
   applyPreview: () => void;
   discardPreview: () => void;
   refresh: () => Promise<void>;
+  rescan: () => Promise<void>;
   select: (entry: PluginEntry) => void;
   setParameter: (pluginId: string, key: string, value: string | number | boolean) => void;
   resetParameters: (pluginId: string) => void;
@@ -61,6 +62,7 @@ function message(error: unknown): string {
 }
 
 let panelGeneration = 0;
+let registryGeneration = 0;
 let pendingAbort: AbortController | undefined;
 let releasePreview: (() => void) | undefined;
 let applyPrepared: (() => void) | undefined;
@@ -100,9 +102,11 @@ export const usePluginStore = create<PluginState>((set, get) => ({
 
   refresh: async () => {
     if (!api()) return;
+    const generation = ++registryGeneration;
     set({ loading: true, error: null });
     try {
       const entries = await api().list();
+      if (generation !== registryGeneration) return;
       set((state) => ({
         entries: entries.map((entry) => state.saving.includes(entry.manifest?.id ?? "") ? { ...entry, enabled: state.entries.find((current) => current.filename === entry.filename)?.enabled ?? entry.enabled } : entry),
         parameters: Object.fromEntries(entries.flatMap((entry) =>
@@ -112,9 +116,27 @@ export const usePluginStore = create<PluginState>((set, get) => ({
         )),
       }));
     } catch (error) {
-      set({ error: message(error) });
+      if (generation === registryGeneration) set({ error: message(error) });
     } finally {
-      set({ loading: false });
+      if (generation === registryGeneration) set({ loading: false });
+    }
+  },
+
+  rescan: async () => {
+    const bridge = api();
+    if (!bridge?.rescan || get().loading || get().saving.length) return;
+    const generation = ++registryGeneration;
+    get().cancel(); clearPreview(); panelGeneration++;
+    set({ loading: true, error: null, runError: "Plugins rescanned. Preview or run again before applying artwork." });
+    try {
+      const entries = await bridge.rescan();
+      if (generation !== registryGeneration) return;
+      set(state => ({ entries, parameters: Object.fromEntries(entries.flatMap(entry => entry.manifest
+        ? [[entry.manifest.id, state.parameters[entry.manifest.id] ?? defaultParameters(entry.manifest)]] : [])) }));
+    } catch (error) {
+      if (generation === registryGeneration) set({ error: message(error) });
+    } finally {
+      if (generation === registryGeneration) set({ loading: false });
     }
   },
 
@@ -217,6 +239,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
   },
   installExample: async () => {
     if (!api()) return;
+    get().cancel(); clearPreview(); panelGeneration++;
     try {
       const before = new Set(get().entries.map((entry) => entry.filename));
       await api().installExample();
@@ -265,7 +288,7 @@ async function runActivePlugin(previewOnly: boolean) {
   const set = usePluginStore.setState;
     const state = get();
     const entry = state.entries.find((item) => item.filename === state.activeFilename);
-    if (!entry?.manifest || !entry.enabled || entry.error || state.running || !api()) return;
+    if (!entry?.manifest || !entry.enabled || entry.error || state.running || state.loading || !api()) return;
     const manifest = entry.manifest;
     const { target, error: editingError } = resolvePluginTarget(
       state.editingImportId, manifest.id, useCanvasStore.getState().imports, state.entries,
@@ -321,6 +344,7 @@ async function runActivePlugin(previewOnly: boolean) {
     const unsubscribePlugins = usePluginStore.subscribe((next) => {
       const current = next.entries.find((item) => item.filename === entry.filename);
       if (!current?.enabled || current.error || current.manifest?.version !== manifest.version ||
+          current.sourceFingerprint !== entry.sourceFingerprint ||
           next.activeFilename !== entry.filename || next.parameters[manifest.id] !== state.parameters[manifest.id] ||
           next.detailBudgets[manifest.id] !== state.detailBudgets[manifest.id]) invalidate();
     });
@@ -331,7 +355,7 @@ async function runActivePlugin(previewOnly: boolean) {
         throw new Error("The document or page changed while this plugin was running. Preview or run it again to add artwork.");
       }
       const current = get().entries.find((item) => item.filename === entry.filename);
-      if (!current?.enabled || current.error || current.manifest?.version !== manifest.version) {
+      if (!current?.enabled || current.error || current.manifest?.version !== manifest.version || current.sourceFingerprint !== entry.sourceFingerprint) {
         throw new Error("The plugin changed or was disabled. No artwork was added.");
       }
     };
@@ -352,7 +376,7 @@ async function runActivePlugin(previewOnly: boolean) {
         : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget);
       assertCurrent();
       const seed = target?.pluginSource?.seed ?? 1;
-      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
+      const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
       const returned = await api().run(request);
       if (get().running?.runId !== runId) return;
       assertCurrent();
@@ -362,10 +386,11 @@ async function runActivePlugin(previewOnly: boolean) {
       let commit: () => void;
       if (legacy && !previewOnly) {
         const artwork = importPluginResult(result, manifest, parameters, page, machine);
-        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(detailBudget === "extended" ? { detailBudget } : {}) };
+        artwork.pluginSource = { ...artwork.pluginSource!, apiVersion: 1, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
         commit = () => commitPluginArtwork(artwork, target && isVectorImport(target) ? target : undefined);
       } else {
         const prepared = await preparePluginArtwork(result, manifest, parameters, page, machine, source, seed, {
+          sourceFingerprint: entry.sourceFingerprint,
           groupId: target?.pluginSource?.outputGroupId,
           groupName: target?.pluginSource?.outputGroupName,
           palette: input.palette,

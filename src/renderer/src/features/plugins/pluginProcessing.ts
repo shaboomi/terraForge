@@ -22,6 +22,7 @@ export interface PreparedPluginArtwork {
   groupName: string;
 }
 export interface ExistingPluginGroup {
+  sourceFingerprint?: string;
   detailBudget?: PluginDetailBudget;
   groupId?: string;
   groupName?: string;
@@ -308,6 +309,7 @@ export async function preparePluginArtwork(
       rotation: source.rotation,
     } : generatorPlacement(output.width, output.height, machine);
     const provenance = (outputKey: string) => ({ pluginId: manifest.id, pluginVersion: manifest.version,
+      ...(existingGroup.sourceFingerprint ? { sourceFingerprint: existingGroup.sourceFingerprint } : {}),
       parameters: { ...parameters }, apiVersion: 1 as const, seed, outputGroupId: groupId,
       ...(existingGroup.detailBudget === "extended" ? { detailBudget: "extended" as const } : {}),
       outputGroupName: groupName, outputIndex: items.length, outputKey, outputWidth: output.width, outputHeight: output.height,

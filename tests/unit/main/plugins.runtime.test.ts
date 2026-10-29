@@ -69,6 +69,33 @@ describe("plugin processor runtime boundary", () => {
     expect(mocks.hosts).toHaveLength(0);
   });
 
+  it("rejects a same-version source mismatch before starting a host", async () => {
+    mocks.getExecutable.mockResolvedValue({ manifest, source: "", sourceFingerprint: "b".repeat(64) });
+    await expect(runtime.run({ ...request(), sourceFingerprint: "a".repeat(64) })).rejects.toThrow(/source changed/);
+    expect(mocks.hosts).toHaveLength(0);
+    expect(tasks.complete).not.toHaveBeenCalled();
+  });
+
+  it("allows an explicitly pinned current source fingerprint", async () => {
+    const fingerprint = "a".repeat(64);
+    mocks.getExecutable.mockResolvedValue({ manifest, source: "", sourceFingerprint: fingerprint });
+    const running = runtime.run({ ...request(), sourceFingerprint: fingerprint });
+    const host = await ready();
+    emit(host, { type: "result", result: { items: [vector] } });
+    await expect(running).resolves.toEqual({ items: [vector] });
+  });
+
+  it("does not launch a host when cancelled while the executable is being read", async () => {
+    let finishRead: (value: unknown) => void;
+    mocks.getExecutable.mockReturnValue(new Promise(resolve => { finishRead = resolve; }));
+    const running = runtime.run(request());
+    runtime.cancelAll();
+    await expect(running).rejects.toThrow(/cancelled/);
+    finishRead!({ manifest, source: "" });
+    await Promise.resolve();
+    expect(mocks.hosts).toHaveLength(0);
+  });
+
   it.each([
     { items: [{ ...vector, width: 2 }] },
     { items: [{ ...vector, paths: [{ ...vector.paths[0], penId: "missing" }] }] },

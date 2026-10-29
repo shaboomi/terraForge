@@ -288,7 +288,7 @@ test("the example installer adds one usable grid without overwriting its file", 
     .filter({ hasText: "Example Grid" })).toHaveCount(1);
 });
 
-test("changed executable source is rejected until restart", async () => {
+test("changed executable source is rejected until an explicit rescan", async () => {
   const filename = path.join(pluginDir, "rectangle.tf-plugin.js");
   writeFileSync(filename, pluginSource());
   await launchPlugins();
@@ -296,12 +296,11 @@ test("changed executable source is rejected until restart", async () => {
   const rejected = await window.evaluate(async (request) => {
     try { await window.terraForge.plugins.run(request); return "unexpected success"; }
     catch (error) { return String(error); }
-  }, runRequest("edited-before-restart"));
-  expect(rejected).toMatch(/changed.*startup|restart/i);
-  await stopApp();
-  await launchPlugins();
+  }, runRequest("edited-before-rescan"));
+  expect(rejected).toMatch(/changed.*startup|rescan/i);
+  await window.evaluate(() => window.terraForge.plugins.rescan!());
   const result = await window.evaluate((request) =>
-    window.terraForge.plugins.run(request), runRequest("edited-after-restart"));
+    window.terraForge.plugins.run(request), runRequest("edited-after-rescan"));
   expect(result).toMatchObject({ width: 40, height: 12 });
 });
 

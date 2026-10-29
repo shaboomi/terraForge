@@ -23,7 +23,7 @@ function digest(source: string): string {
   return createHash("sha256").update(source).digest("hex");
 }
 
-/** Metadata discovery never evaluates a plugin. Executable source is pinned until restart. */
+/** Metadata discovery never evaluates a plugin. Executable source is pinned until an explicit scan. */
 export class PluginRegistry {
   readonly directory: string;
   private canonicalDirectory = "";
@@ -53,6 +53,14 @@ export class PluginRegistry {
     return structuredClone(this.entries.map(({ entry }) => entry));
   }
 
+  /** Replace the complete discovery snapshot only after a successful, metadata-only scan. */
+  rescan(): Promise<void> {
+    return this.enqueue(async () => {
+      this.assertReady();
+      await this.scan();
+    });
+  }
+
   setEnabled(pluginId: string, enabled: boolean): Promise<void> {
     return this.enqueue(async () => {
       this.assertReady();
@@ -67,7 +75,7 @@ export class PluginRegistry {
     });
   }
 
-  async getExecutable(pluginId: string): Promise<{ manifest: PluginManifest; source: string }> {
+  async getExecutable(pluginId: string): Promise<{ manifest: PluginManifest; source: string; sourceFingerprint: string }> {
     this.assertReady();
     const matches = this.entries.filter(({ entry }) => entry.manifest?.id === pluginId);
     if (matches.length !== 1) throw new Error("Plugin is missing or its ID is duplicated.");
@@ -75,8 +83,9 @@ export class PluginRegistry {
     if (!entry.manifest || entry.error) throw new Error(entry.error ?? "Plugin is invalid.");
     if (!entry.enabled) throw new Error("Plugin is disabled.");
     const source = await this.readBounded(entry.filename, PLUGIN_LIMITS.sourceBytes);
-    if (digest(source) !== hash) throw new Error("Plugin file changed since startup. Restart TerraForge to load it.");
-    return { manifest: structuredClone(entry.manifest), source };
+    const sourceFingerprint = digest(source);
+    if (sourceFingerprint !== hash) throw new Error("Plugin file changed since startup or the last scan. Choose Rescan plugins to load it.");
+    return { manifest: structuredClone(entry.manifest), source, sourceFingerprint };
   }
 
   installExample(): Promise<void> {
@@ -88,7 +97,7 @@ export class PluginRegistry {
       } catch (error) {
         if (!hasCode(error, "EEXIST")) throw error;
       }
-      // Explicit installation refreshes the list; ordinary file changes await restart.
+      // Explicit installation refreshes the list without evaluating executable code.
       await this.scan();
     });
   }
@@ -118,7 +127,8 @@ export class PluginRegistry {
       try {
         const source = await this.readBounded(filename, PLUGIN_LIMITS.sourceBytes);
         const manifest = parsePluginSource(source);
-        found.push({ entry: { filename, manifest, enabled: !this.disabled.has(manifest.id) }, hash: digest(source) });
+        const sourceFingerprint = digest(source);
+        found.push({ entry: { filename, manifest, enabled: !this.disabled.has(manifest.id), sourceFingerprint }, hash: sourceFingerprint });
       } catch (error) {
         found.push({ entry: { filename, enabled: false, error: message(error) } });
       }
@@ -128,7 +138,7 @@ export class PluginRegistry {
     for (const { entry } of found) {
       if (entry.manifest && counts.get(entry.manifest.id)! > 1) {
         entry.enabled = false;
-        entry.error = `Duplicate plugin ID '${entry.manifest.id}'. Give each plugin a unique ID, then restart.`;
+        entry.error = `Duplicate plugin ID '${entry.manifest.id}'. Give each plugin a unique ID, then rescan.`;
       }
     }
     this.entries = found;
@@ -170,15 +180,19 @@ export class PluginRegistry {
     catch (error) { if (hasCode(error, "ENOENT")) { this.disabled.clear(); return; } throw error; }
     let settings: unknown;
     try { settings = JSON.parse(source); } catch { throw new Error("Plugin settings contain invalid JSON."); }
-    if (typeof settings !== "object" || settings === null || !("version" in settings) || settings.version !== 1 || !("disabled" in settings) || !Array.isArray(settings.disabled) || settings.disabled.length > PLUGIN_LIMITS.files || !settings.disabled.every((id: unknown) => typeof id === "string" && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 100)) throw new Error("Plugin settings are invalid; restore .plugin-state.json or remove it to reset plugin preferences.");
+    // Removed plugins retain their choices too, so this count may exceed the installed-file limit.
+    // readBounded already enforces the total settings byte budget.
+    if (typeof settings !== "object" || settings === null || !("version" in settings) || settings.version !== 1 || !("disabled" in settings) || !Array.isArray(settings.disabled) || !settings.disabled.every((id: unknown) => typeof id === "string" && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) && id.length <= 100)) throw new Error("Plugin settings are invalid; restore .plugin-state.json or remove it to reset plugin preferences.");
     this.disabled = new Set(settings.disabled as string[]);
   }
 
   private async saveSettings(disabled: Set<string>): Promise<void> {
     await this.verifyDirectory();
+    const contents = JSON.stringify({ version: 1, disabled: [...disabled].sort() }, null, 2) + "\n";
+    if (Buffer.byteLength(contents, "utf8") > PLUGIN_LIMITS.metadataBytes) throw new Error("Too many remembered disabled plugins. Restore and enable removed plugins to free preference space.");
     const temporary = join(this.directory, `.plugin-state-${randomUUID()}.tmp`);
     try {
-      await writeFile(temporary, JSON.stringify({ version: 1, disabled: [...disabled].sort() }, null, 2) + "\n", { encoding: "utf8", flag: "wx", mode: 0o600 });
+      await writeFile(temporary, contents, { encoding: "utf8", flag: "wx", mode: 0o600 });
       await rename(temporary, join(this.directory, ".plugin-state.json"));
     } finally {
       await rm(temporary, { force: true });
