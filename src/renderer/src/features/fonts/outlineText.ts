@@ -10,10 +10,23 @@ export interface OutlineTemplate {
 }
 const coordinate = (value: number) => value.toFixed(6);
 
+/** The same rounded coordinates are stored as metadata and emitted in SVG. */
+export function transformOutlineCommands(commands: FontOutlineCommand[], scale: number, x: number, baseline: number): FontOutlineCommand[] {
+  const px = (value: number) => Number(coordinate(x + value * scale));
+  const py = (value: number) => Number(coordinate(baseline - value * scale));
+  return commands.map((command): FontOutlineCommand => {
+    if (command.type === "Z") return { type: "Z" };
+    const end = { x: px(command.x), y: py(command.y) };
+    if (command.type === "Q") return { type: "Q", x1: px(command.x1), y1: py(command.y1), ...end };
+    if (command.type === "C") return { type: "C", x1: px(command.x1), y1: py(command.y1), x2: px(command.x2), y2: py(command.y2), ...end };
+    return { type: command.type, ...end };
+  });
+}
+
 /** Keep native curves in the plotted outline while changing font Y-up units to SVG millimetres. */
 export function outlinePathData(commands: FontOutlineCommand[], scale: number, x: number, baseline: number): string {
-  const point = (px: number, py: number) => `${coordinate(x + px * scale)} ${coordinate(baseline - py * scale)}`;
-  return commands.map((command) => {
+  const point = (px: number, py: number) => `${coordinate(px)} ${coordinate(py)}`;
+  return transformOutlineCommands(commands, scale, x, baseline).map((command) => {
     if (command.type === "Z") return "Z";
     const end = point(command.x, command.y);
     if (command.type === "Q") return `Q${point(command.x1, command.y1)} ${end}`;

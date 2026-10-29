@@ -102,7 +102,7 @@ describe("font IPC and worker boundaries",() => {
   });
   it("reuses a linked derived centreline font instead of processing it again",async () => {
     const source = {...font,id:"source-font",mode:"outline"};
-    const derived = {...font,id:"derived-font",mode:"centerline",sourceFontId:source.id};
+    const derived = {...font,id:"derived-font",mode:"centerline",processingVersion:2,sourceFontId:source.id};
     mocks.list.mockResolvedValue([source,derived]);
     await expect(invoke("fonts:convertToCenterline",event,source.id)).resolves.toEqual(derived);
     expect(mocks.workers).toHaveLength(0);
@@ -142,5 +142,40 @@ describe("font IPC and worker boundaries",() => {
     mocks.workers[0].emit("message",{font:{...font,id:workerData.identity.id,mode:"centerline",sourceFontId:"different-source"}});
     await expect(conversion).rejects.toThrow(/invalid centreline version/);
     expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("regenerates a cached legacy conversion under its existing identity", async () => {
+    const source = { ...font, id: "outline", mode: "outline" };
+    const legacy = { ...font, id: "legacy-derived", mode: "centerline", sourceFontId: source.id };
+    mocks.list.mockResolvedValue([source, legacy]);
+    const result = invoke("fonts:convertToCenterline", event, source.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    expect(mocks.workers[0].workerData).toMatchObject({ font: source, identity: { id: legacy.id } });
+    const updated = { ...legacy, processingVersion: 2 };
+    mocks.workers[0].emit("message", { font: updated });
+    await expect(result).resolves.toEqual(updated);
+    expect(mocks.save).toHaveBeenCalledWith(updated);
+  });
+  it("smooths a saved centreline font without reopening its original file", async () => {
+    mocks.list.mockResolvedValue([font]);
+    const result = invoke("fonts:smoothCentrelines", event, font.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    expect(mocks.workers[0].workerData).toMatchObject({ font, smooth: true, identity: { id: font.id } });
+    const updated = { ...font, mode: "centerline", processingVersion: 2 };
+    mocks.workers[0].emit("message", { font: updated });
+    await expect(result).resolves.toEqual(updated);
+    expect(mocks.save).toHaveBeenCalledWith(updated);
+    expect(mocks.dialog).not.toHaveBeenCalled();
+    expect(mocks.read).not.toHaveBeenCalled();
+  });
+  it("regenerates smooth curves from the linked native outline when it is available", async () => {
+    const source = { ...font, id: "outline", mode: "outline" };
+    const selected = { ...font, sourceFontId: source.id };
+    mocks.list.mockResolvedValue([selected, source]);
+    const result = invoke("fonts:smoothCentrelines", event, selected.id);
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    expect(mocks.workers[0].workerData).toMatchObject({ font: source, smooth: false, identity: { id: selected.id } });
+    const updated = { ...selected, mode: "centerline", processingVersion: 2 };
+    mocks.workers[0].emit("message", { font: updated });
+    await expect(result).resolves.toEqual(updated);
   });
 });

@@ -73,11 +73,22 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
     if (!font || font.mode !== "outline") return;
     setBusy("Generating long continuous centrelines…"); setError(null); setNotice(null);
     try {
-      const saved = fonts.find((item) => (item.mode ?? "centerline") === "centerline" && item.sourceFontId === font.id);
+      const saved = fonts.find((item) => (item.mode ?? "centerline") === "centerline" && item.sourceFontId === font.id && (item.processingVersion ?? 0) >= 2);
       const converted = saved ?? await window.terraForge.fonts.convertToCenterline(font.id);
       setFonts((items) => [...items.filter((item) => item.id !== converted.id), converted]);
       setFontId(converted.id); setMode("centerline");
       setNotice("Centrelines are ready. Review the preview, then update the selected text or add it to the canvas.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(null); }
+  };
+  const smoothCentrelines = async () => {
+    if (!font || font.mode === "outline") return;
+    setBusy("Smoothing continuous centrelines…"); setError(null); setNotice(null);
+    try {
+      const smoothed = await window.terraForge.fonts.smoothCentrelines(font.id);
+      setFonts((items) => [...items.filter((item) => item.id !== smoothed.id), smoothed]);
+      setFontId(smoothed.id);
+      setNotice("Smooth centrelines are ready. Review the preview, then update the selected text or add it to the canvas.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(null); }
   };
@@ -144,6 +155,10 @@ export function TextGeneratorDialog({ open, onOpenChange }: { open: boolean; onO
             {font?.mode === "outline" && <div className="space-y-2 rounded border border-border-ui p-3">
               <Button variant="primary" className="w-full" disabled={!!busy} onClick={() => void generateCentrelines()}><WandSparkles size={14} />Generate centrelines</Button>
               <p className="text-xs text-content-muted">Generate long continuous strokes and measured widths, or use the saved centreline version if one exists. Its original outlines stay in your library; the source file is not needed.</p>
+            </div>}
+            {font && font.mode !== "outline" && <div className="space-y-2 rounded border border-border-ui p-3">
+              <Button variant="primary" className="w-full" disabled={!!busy} onClick={() => void smoothCentrelines()}><WandSparkles size={14} />Smooth centrelines</Button>
+              <p className="text-xs text-content-muted">{(font.processingVersion ?? 0) < 2 ? "Update this font to replace jagged line segments with smooth curves." : "Fit smooth Bézier curves while keeping connected strokes continuous and retaining their measured widths."} The source file is not needed.</p>
             </div>}
             <p className="text-xs text-content-muted">Type your text before importing to prioritise its characters. Large fonts process up to 768 characters.</p>
             {font && <div className="flex items-center justify-between gap-2 text-xs text-content-muted">

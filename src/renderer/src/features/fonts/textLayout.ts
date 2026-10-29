@@ -1,6 +1,6 @@
 import type { SvgImport, SvgPath } from "../../../../types";
-import type { CenterlineGlyph, ProcessedFont } from "../../../../types/fonts";
-import { createOutlineTemplate, outlinePathData, type OutlineTemplate, type TextInfill } from "./outlineText";
+import type { CenterlineGlyph, FontOutlineCommand, ProcessedFont } from "../../../../types/fonts";
+import { createOutlineTemplate, outlinePathData, transformOutlineCommands, type OutlineTemplate, type TextInfill } from "./outlineText";
 
 export interface TextSettings {
   text: string;
@@ -80,6 +80,7 @@ export function layoutText(font: ProcessedFont, settings: TextSettings): TextLay
   const outlined: { template: OutlineTemplate; x: number; baseline: number; character: string }[] = [];
   const templates = new Map<CenterlineGlyph, OutlineTemplate>();
   const paths: SvgPath[] = [];
+  const curvePlacements = new Map<SvgPath, { commands: FontOutlineCommand[]; x: number; baseline: number }>();
   measured.forEach(({ glyphs, advance }, lineIndex) => {
     const offset = alignment === "center" ? (maxAdvance - advance) / 2 : alignment === "right" ? maxAdvance - advance : 0;
     const baseline = font.ascender * scale + lineIndex * baselineStep;
@@ -100,7 +101,7 @@ export function layoutText(font: ProcessedFont, settings: TextSettings): TextLay
         continue;
       }
       for (const stroke of glyph?.paths ?? []) {
-        pointCount += stroke.points.length;
+        pointCount += stroke.points.length + (stroke.commands?.length ?? 0);
         if (pointCount > MAX_TEXT_POINTS) throw new Error("This text is too detailed. Shorten it or use a simpler font.");
         if (stroke.points.length < 2) continue;
         const points = stroke.points.map((point) => {
@@ -114,15 +115,21 @@ export function layoutText(font: ProcessedFont, settings: TextSettings): TextLay
           maxStrokeWidth = Math.max(maxStrokeWidth, placed.width);
           return placed;
         });
-        paths.push({ id: `text-stroke-${paths.length}`, d: "", svgSource: "", visible: true,
+        const path: SvgPath = { id: `text-stroke-${paths.length}`, d: "", svgSource: "", visible: true,
           label: character, sourceOutlineVisible: true, outlineVisible: true, strokeEnabled: true,
-          sourceColor: "#000000", strokeColor: "#000000", hasFill: false, centerline: { points } });
+          sourceColor: "#000000", strokeColor: "#000000", hasFill: false, centerline: { points } };
+        if (stroke.commands?.length) curvePlacements.set(path, { commands: stroke.commands, x: offset + x, baseline });
+        paths.push(path);
       }
     }
   });
   for (const path of paths) {
     for (const point of path.centerline!.points) { point.x -= minX; point.y -= minY; }
-    path.d = path.centerline!.points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(6)} ${point.y.toFixed(6)}`).join(" ");
+    const curve = curvePlacements.get(path);
+    if (curve) {
+      path.d = outlinePathData(curve.commands, scale, curve.x - minX, curve.baseline - minY);
+      path.centerline!.commands = transformOutlineCommands(curve.commands, scale, curve.x - minX, curve.baseline - minY);
+    } else path.d = path.centerline!.points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(6)} ${point.y.toFixed(6)}`).join(" ");
     path.svgSource = `<path d="${path.d}" fill="none" stroke="#000000"/>`;
   }
   const addOutlinePath = (d: string, label: string) => {

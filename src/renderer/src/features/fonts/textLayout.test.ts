@@ -82,4 +82,28 @@ describe("centre-line text layout", () => {
     const { useStrokeWidths: _omitted, ...legacy } = settings;
     expect(createTextImport(font, legacy, geometry, "legacy").useStrokeWidths).toBe(true);
   });
+
+  it("retains smooth cubic geometry, shared tangents and pressure samples in the same source frame", () => {
+    const fitted: ProcessedFont = { ...font, processingVersion: 2, glyphs: { A: { advanceWidth: 600, paths: [{
+      commands: [{ type: "M", x: 100, y: 0 },
+        { type: "C", x1: 100, y1: 100, x2: 200, y2: 200, x: 300, y: 300 },
+        { type: "C", x1: 400, y1: 400, x2: 500, y2: 500, x: 500, y: 700 }],
+      points: [{ x: 100, y: 0, width: 100 }, { x: 300, y: 300, width: 150 }, { x: 500, y: 700, width: 200 }],
+    }] } } };
+    const result = layoutText(fitted, { ...settings, text: "A" });
+    expect(result.paths).toHaveLength(1);
+    const path = result.paths[0];
+    expect(path.d).toBe("M1.000000 8.000000 C1.000000 7.000000 2.000000 6.000000 3.000000 5.000000 C4.000000 4.000000 5.000000 3.000000 5.000000 1.000000");
+    expect(path.svgSource).toContain(`d="${path.d}"`);
+    expect(path.centerline?.commands).toEqual([{ type: "M", x: 1, y: 8 },
+      { type: "C", x1: 1, y1: 7, x2: 2, y2: 6, x: 3, y: 5 },
+      { type: "C", x1: 4, y1: 4, x2: 5, y2: 3, x: 5, y: 1 }]);
+    expect(path.centerline?.points).toEqual([{ x: 1, y: 8, width: 1 }, { x: 3, y: 5, width: 1.5 }, { x: 5, y: 1, width: 2 }]);
+    const first = path.centerline!.commands![1], second = path.centerline!.commands![2];
+    if (first.type !== "C" || second.type !== "C") throw new Error("Missing fitted curves.");
+    expect([first.x - first.x2, first.y - first.y2]).toEqual([second.x1 - first.x, second.y1 - first.y]);
+    const item = createTextImport(fitted, { ...settings, text: "A", useStrokeWidths: true }, result, "smooth-text");
+    expect(item.paths[0].centerline).toEqual(path.centerline);
+    expect(item.useStrokeWidths).toBe(true);
+  });
 });

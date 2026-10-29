@@ -16,6 +16,8 @@ The generator automatically selects the centreline version and displays its text
 
 Review the preview, then choose **Add text to canvas** or **Update selected text** to apply it. Conversion itself does not change canvas artwork. Connected branches and loops are joined to keep strokes long and minimise pen lifts; separate marks still require separate strokes.
 
+Previously imported centreline fonts can be upgraded with **Smooth centrelines**. This replaces jagged sampled line segments with fitted Bézier curves and rejoins compatible strokes while retaining their measured widths. Terra Forge uses the saved outline font when available; otherwise it smooths the saved centreline strokes. The original source file is not required. The updated font keeps its library identity and refreshes the preview, while canvas artwork changes only when you choose **Update selected text** or add new text.
+
 ![Imported font converted to visible centreline text](images/fonts/converted-centrelines.png)
 
 ## Standard outlines and infill
@@ -42,9 +44,15 @@ With width control enabled, **Brush lead-in** sets a moving approach before each
 
 ## How centre lines are calculated
 
-TrueType quadratic outlines and OpenType/CFF cubic outlines are flattened, filled using the nonzero winding rule, and sampled at 192 pixels per em. A distance field measures local stroke thickness; thinning produces the centre-line graph. Its edges are joined into continuous trails, including loops through junctions, using the minimum number of trails possible for each connected graph without retracing edges. Disconnected marks, such as the dot on an `i`, still need separate pen strokes.
+TrueType quadratic outlines and OpenType/CFF cubic outlines are filled using the nonzero winding rule and sampled at 384 pixels per em. A distance field measures local stroke thickness; thinning produces a centre-line graph. At crossings, matching directions are paired so the main stem remains one stroke and a second stroke crosses it independently. Tiny shared junction corridors inside thick ink are reconstructed as a common crossing point. Counter boundaries and disconnected marks, such as the dot on an `i`, are preserved.
 
-Tracing favours the longest physical strokes first. Branch-only components use the longest remaining path, so a long stem is kept whole instead of being split into shorter balanced strokes. Components containing loops compare up to sixteen deterministic trail arrangements and keep the longest-first result. This bounded search aims for long continuous strokes while retaining complete coverage and minimum pen lifts; complex branching loops are not guaranteed a globally longest arrangement. Previously processed centreline fonts retain their saved geometry; reimport those fonts to apply the improved tracing.
+The joined strokes are dequantized and fitted with genuine cubic Bézier curves. Smooth spans retain continuous tangents, while straight stems and intentional corners remain distinct. The preview and saved vector paths contain these curves, with measured width samples in the same coordinate frame. For machine motion, G-code generation samples the curves to a 0.01 mm physical tolerance after scaling and rotation; width changes along straight sections are also retained for brush-height control.
+
+![Smooth Dancing Script centreline strokes](images/fonts/dancing-script-curves.png)
+
+Each colour above is one continuous pen-down stroke. The F has a full stem, a separate crossing bar and a separate top flourish.
+
+Tracing gives smooth continuation through junctions priority over choosing the longest turn or forcing the fewest possible pen lifts. Long stems therefore remain whole even when turning into a crossbar would produce a longer combined route. Strokes are ordered by physical length after their connections are resolved. Use **Smooth centrelines** to apply the new fitting and junction repair to an existing library font, then **Update selected text** to replace old canvas geometry.
 
 The result is an approximation of the font's medial lines, rather than the original designer's handwriting or an exact reconstruction of the filled outline. Very fine features and complex junctions can change during sampling and simplification. Inspect the preview at the intended plotting size before generating a job. Width samples scale with the text size and canvas transforms.
 
@@ -63,6 +71,14 @@ Choose and calibrate the pen before generating G-code. The generated text retain
 ![Reusable pen library and brush calibration](images/fonts/pen-library.png)
 
 ## Verification
+
+Bézier fitting and straight-through crossing repair verified on Windows on 30 October 2026:
+
+- Build and type checks passed; all **2,474 unit/component tests** passed.
+- All **six selected desktop checks** passed across `font-smooth-curves`, `font-centreline-conversion`, `font-library` and `font-brush-lead-in`.
+- Tests use the actual Dancing Script font and saved legacy F/a/c/s data. Both fresh imports and existing-font upgrades produce cubic curves, with a full F stem and independent crossbar.
+- Curve tests cover closed seams, sharp corners, source-shape containment, crossing anchors, width interpolation, saved geometry and 0.01 mm curve-to-motion accuracy after enlargement. A straight fitted line retains pressure changes in its middle.
+- The full Dancing Script library saves and reloads within the bounded library file size. Existing imports with no drawable geometry return an instruction to reimport the original font.
 
 Centreline mode selection and longest-first tracing verified on Windows on 30 October 2026:
 

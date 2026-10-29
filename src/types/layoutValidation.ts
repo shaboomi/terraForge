@@ -1,5 +1,6 @@
 import type { BitmapAsset, CanvasItem, CanvasLayout, CanvasItemBase, LayerGroup, PageTemplate, PluginProvenance, SvgImport, SvgPath } from "./index";
 import { validateBitmapPreparationSettings } from "./pluginBitmapPreparation";
+import { validateCenterlineCommands } from "./centerlineGeometry";
 import { isBitmapImport } from "./index";
 import { assertBitmapAssetBudget, BITMAP_LIMITS, validateBitmapAsset } from "./bitmapValidation";
 import { parsePenProfile } from "./pens";
@@ -170,13 +171,14 @@ function path(value: unknown): SvgPath {
     result.pointTap = { x: number(point.x, "Point X"), y: number(point.y, "Point Y") };
   }
   if (item.centerline !== undefined) {
-    const data = row(item.centerline, "Centreline"); fields(data, ["points"], "Centreline");
+    const data = row(item.centerline, "Centreline"); fields(data, ["points", "commands"], "Centreline");
     const points = array(data.points, "Centreline samples", 500000).map(value => {
       const point = row(value, "Centreline sample"); fields(point, ["x", "y", "width"], "Centreline sample");
       return { x: number(point.x, "Centreline X"), y: number(point.y, "Centreline Y"), width: number(point.width, "Stroke width", Number.MIN_VALUE, 1e6) };
     });
     if (points.length < 2) throw new Error("Centreline needs at least two samples.");
     result.centerline = { points };
+    if (data.commands !== undefined) result.centerline.commands = validateCenterlineCommands(data.commands);
   }
   if (item.passCount !== undefined) {
     const count = number(item.passCount, "Pass count", 1, 1000);

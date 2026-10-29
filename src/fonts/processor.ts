@@ -1,10 +1,13 @@
 import { parse, type PathCommand } from "opentype.js";
-import type { CenterlineGlyph, FontMode, FontOutlineCommand, ProcessedFont } from "../types/fonts";
-import { distanceField, simplifyStroke, thinMask, traceSkeleton } from "./skeleton";
+import type { CenterlineGlyph,CenterlineStroke, FontMode, FontOutlineCommand, ProcessedFont } from "../types/fonts";
+import { distanceField,reconnectCenterlineStrokes,thinMask,traceSkeleton } from "./skeleton";
+import { fitCenterline } from "./curveFit";
 
 interface Point { x: number; y: number }
 export const FONT_PROCESSING_LIMITS = { fileBytes: 20 * 1024 * 1024, glyphs: 768, rasterDimension: 768, points: 600_000 } as const;
-const PIXELS_PER_EM = 192;
+export const FONT_PROCESSING_VERSION = 2;
+const PIXELS_PER_EM = 384;
+const CURVE_WARNING = "Centreline geometry uses fitted cubic Bezier curves from a 384-pixel-per-em raster. Stroke widths remain approximations; inspect fine details before plotting.";
 
 function flattenOutline(commands: PathCommand[], step: number): Point[][] {
   const contours: Point[][] = [];
@@ -71,14 +74,46 @@ export function centerlineFromOutline(commands: PathCommand[], unitsPerEm: numbe
   const { mask,width,height,minX,minY,unit } = raster;
   const distances = distanceField(mask,width,height);
   const skeleton = thinMask(mask,width,height);
-  return traceSkeleton(skeleton,width,height,(index) => ({
+  const traced=traceSkeleton(skeleton,width,height,(index) => ({
     x: minX+(index%width+0.5)*unit,
     y: minY+(Math.floor(index/width)+0.5)*unit,
     width: Math.max(unit,2*(Math.sqrt(distances[index])-0.5)*unit),
-  })).map((path) => ({ points: simplifyStroke(path.points,unit*0.6).map((p) => ({ x:round(p.x),y:round(p.y),width:round(p.width) })) }));
+  }));
+  return smoothStrokes(traced,unit,(x,y)=> {
+    const px=Math.round((x-minX)/unit-0.5),py=Math.round((y-minY)/unit-0.5);
+    return px>=0&&px<width&&py>=0&&py<height&&mask[py*width+px]===1;
+  });
 }
 
-function round(value: number): number { return Math.round(value*1000)/1000; }
+function smoothStrokes(paths:CenterlineStroke[],pixelSize:number,contains?:(x:number,y:number)=>boolean):CenterlineStroke[] {
+  const occurrences=new Map<string,number>(),key=(p:{x:number;y:number})=>`${p.x},${p.y}`;
+  for(const path of paths)for(const point of path.points)occurrences.set(key(point),(occurrences.get(key(point))??0)+1);
+  return paths.map(path=> {
+    const closed=path.points.length>3&&key(path.points[0])===key(path.points.at(-1)!);
+    return fitCenterline(path.points,{pixelSize,contains,anchors:path.points.flatMap((p,index)=> {
+      const count=occurrences.get(key(p))??0;
+      return count>(closed&&(index===0||index===path.points.length-1)?2:1)?[index]:[];
+    })});
+  });
+}
+
+/** Upgrade a saved centreline library even when its source file is no longer available. */
+export function smoothProcessedFont(font:ProcessedFont):ProcessedFont {
+  if(font.mode==="outline")throw new Error("Select a centreline font to smooth its stored strokes.");
+  const drawable=Object.values(font.glyphs).some(glyph=>glyph.paths.some(path=>path.points.length>1&&path.points.some(p=>p.x!==path.points[0].x||p.y!==path.points[0].y)));
+  if(!drawable)throw new Error("No centreline geometry is available in this saved font. Import the original font again.");
+  if(font.processingVersion===FONT_PROCESSING_VERSION&&Object.values(font.glyphs).every(glyph=>glyph.paths.every(path=>!!path.commands?.length)))return {...structuredClone(font),mode:"centerline"};
+  const pixelSize=font.unitsPerEm/192,glyphs:ProcessedFont["glyphs"]={};
+  let totalPoints=0;
+  for(const [character,glyph]of Object.entries(font.glyphs)) {
+    const paths=smoothStrokes(reconnectCenterlineStrokes(glyph.paths,pixelSize*0.05),pixelSize);
+    totalPoints+=paths.reduce((sum,path)=>sum+path.points.length,0);
+    if(totalPoints>FONT_PROCESSING_LIMITS.points)throw new Error("Smoothed font exceeds the geometry limit. Choose a less detailed font.");
+    glyphs[character]={advanceWidth:glyph.advanceWidth,paths};
+  }
+  return {...structuredClone(font),mode:"centerline",processingVersion:FONT_PROCESSING_VERSION,glyphs,warnings:[...font.warnings,
+    "Cubic Bezier curves were fitted to the saved centreline traces. Width data retains its original raster approximation."]};
+}
 function supportedCodepoint(code: number): boolean {
   return code >= 0x20 && code <= 0x24f || code >= 0x2000 && code <= 0x206f || code >= 0x20a0 && code <= 0x20cf;
 }
@@ -98,11 +133,11 @@ export function convertOutlineFont(font: ProcessedFont, identity: { id: string; 
     glyphs[character] = { advanceWidth: glyph.advanceWidth, paths };
   }
   return {
-    version: 1, id: identity.id, mode: "centerline", sourceFontId: font.id,
+    version: 1,processingVersion:FONT_PROCESSING_VERSION,id: identity.id, mode: "centerline", sourceFontId: font.id,
     name: font.name, sourceName: font.sourceName, createdAt: identity.createdAt ?? new Date().toISOString(),
     unitsPerEm: font.unitsPerEm, ascender: font.ascender, descender: font.descender, lineGap: font.lineGap,
     glyphs, kerning: { ...font.kerning }, warnings: [...new Set([...font.warnings,
-      "Centreline and stroke widths are raster approximations at 192 pixels per em. Inspect fine details before plotting.",
+      CURVE_WARNING,
     ])],
   };
 }
@@ -141,7 +176,7 @@ export function processFont(bytes: ArrayBuffer, identity: FontIdentity): Process
   if (!codes.length) throw new Error("This font has no mapped printable glyphs.");
   const glyphs: ProcessedFont["glyphs"] = {}, kerning: Record<string,number> = {}, warnings: string[] = [];
   if (codes.length < available.length) warnings.push(`Processed ${codes.length} of ${available.length} mapped characters (768-character limit). Text entered before import takes priority, followed by Latin and punctuation. Reimport with the required text to include other characters.`);
-  if (mode === "centerline") warnings.push("Centreline and stroke widths are raster approximations at 192 pixels per em. Inspect fine details before plotting.");
+  if (mode === "centerline") warnings.push(CURVE_WARNING);
   warnings.push("Complex-script shaping, ligatures and variable-font axes are not applied.");
   const cache = new Map<number,CenterlineGlyph>();
   let totalPoints = 0;
@@ -165,7 +200,7 @@ export function processFont(bytes: ArrayBuffer, identity: FontIdentity): Process
   // The parser resolves the platform-specific OpenType name tables for us.
   const name = font.getEnglishName("fullName") || font.getEnglishName("fontFamily") || identity.sourceName;
   return {
-    version:1,mode,id:identity.id,name:name.slice(0,200),sourceName:identity.sourceName.slice(0,255),createdAt:identity.createdAt ?? new Date().toISOString(),
+    version:1,...(mode==="centerline"?{processingVersion:FONT_PROCESSING_VERSION}:{}),mode,id:identity.id,name:name.slice(0,200),sourceName:identity.sourceName.slice(0,255),createdAt:identity.createdAt ?? new Date().toISOString(),
     unitsPerEm:font.unitsPerEm,ascender:font.ascender,descender:font.descender,lineGap:font.tables.hhea?.lineGap ?? 0,glyphs,kerning,warnings,
   };
 }

@@ -1,10 +1,14 @@
 import type { PluginBitmapPreparationSettings, PreparedPluginBitmap } from "./pluginBitmapPreparation";
 import type { PenProfile } from "./pens";
-import type { FontsApi } from "./fonts";
+import type { FontsApi, FontOutlineCommand } from "./fonts";
 export type { PenProfile } from "./pens";
 
 /** Source-local centreline samples; each sample retains the original stroke diameter. */
-export interface CenterlineData { points: { x: number; y: number; width: number }[] }
+export interface CenterlineData {
+  points: { x: number; y: number; width: number }[];
+  /** Actual smooth source-local geometry; samples carry widths along the same curve. */
+  commands?: FontOutlineCommand[];
+}
 
 // ─── Machine Configuration ────────────────────────────────────────────────────
 

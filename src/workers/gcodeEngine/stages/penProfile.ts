@@ -3,6 +3,8 @@ import type { PenProfile } from "../../../types/pens";
 import { parsePenProfile } from "../../../types/pens";
 import { transformPt, type Pt } from "./geometryFlattening";
 import { resolvePageClipRect } from "./clipping";
+import { validateCenterlineCommands } from "../../../types/centerlineGeometry";
+import { flattenCenterlineCurves } from "./centerlineCurves";
 
 /** Approach along the entry tangent, so contact happens during a continuous XYZ move. */
 export function brushLeadInStart(points: Pt[], config: MachineConfig, distanceMM = 1,
@@ -66,7 +68,7 @@ export function transformCenterline(obj: VectorObject, config: MachineConfig): P
   if (points.length < 2 || points.length > 500000) throw new Error("Invalid centreline sample count.");
   const sx = obj.scaleX ?? obj.scale, sy = obj.scaleY ?? obj.scale;
   const closed = points.length > 3 && Math.hypot(points[0].x - points.at(-1)!.x, points[0].y - points.at(-1)!.y) < 1e-8;
-  return points.map((point, index) => {
+  const samples = points.map((point, index) => {
     if (![point.x, point.y, point.width].every(Number.isFinite) || point.width <= 0) throw new Error("Invalid centreline width or coordinate.");
     const before = points[closed && (index === 0 || index === points.length - 1) ? points.length - 2 : Math.max(0, index - 1)];
     const after = points[closed && (index === 0 || index === points.length - 1) ? 1 : Math.min(points.length - 1, index + 1)];
@@ -78,4 +80,37 @@ export function transformCenterline(obj: VectorObject, config: MachineConfig): P
     if (![transformed.x, transformed.y, width].every(Number.isFinite) || width <= 0) throw new Error("Invalid centreline transform.");
     return { ...transformed, width };
   });
+  if (!obj.centerline?.commands) return samples;
+  const commands = validateCenterlineCommands(obj.centerline.commands);
+  const curve = flattenCenterlineCurves(commands, obj, config);
+  if (curve.length < 2) throw new Error("Invalid continuous centreline curve.");
+  const cumulative = (path: Pt[]) => {
+    const lengths = [0];
+    for (let i = 1; i < path.length; i++) lengths.push(lengths[i - 1] + Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y));
+    return lengths;
+  };
+  const sampleLengths = cumulative(samples), curveLengths = cumulative(curve);
+  const total = curveLengths.at(-1)!, sampledTotal = sampleLengths.at(-1)!;
+  if (total <= 1e-9 || sampledTotal <= 1e-9) throw new Error("Invalid centreline curve length.");
+  // Retain pressure landmarks even on a geometrically straight Bézier: reducing
+  // that line to two XY points must not discard a wider/thinner middle sample.
+  const targets = obj.useStrokeWidths === false ? curveLengths
+    : [...curveLengths, ...sampleLengths.map(length => length / sampledTotal * total)].sort((a, b) => a - b);
+  let cursor = 1, geometryCursor = 1, previousTarget = -Infinity;
+  const output: Pt[] = [];
+  for (const distance of targets) {
+    if (distance - previousTarget < 1e-9) continue;
+    previousTarget = distance;
+    while (geometryCursor < curve.length - 1 && curveLengths[geometryCursor] < distance) geometryCursor++;
+    const geometrySpan = curveLengths[geometryCursor] - curveLengths[geometryCursor - 1];
+    const geometryRatio = geometrySpan > 1e-12 ? (distance - curveLengths[geometryCursor - 1]) / geometrySpan : 0;
+    const a = curve[geometryCursor - 1], b = curve[geometryCursor];
+    const point = { x: a.x + (b.x - a.x) * geometryRatio, y: a.y + (b.y - a.y) * geometryRatio };
+    const target = distance / total * sampledTotal;
+    while (cursor < samples.length - 1 && sampleLengths[cursor] < target) cursor++;
+    const span = sampleLengths[cursor] - sampleLengths[cursor - 1];
+    const ratio = span > 1e-12 ? Math.max(0, Math.min(1, (target - sampleLengths[cursor - 1]) / span)) : 0;
+    output.push({ ...point, width: samples[cursor - 1].width + (samples[cursor].width - samples[cursor - 1].width) * ratio });
+  }
+  return output;
 }

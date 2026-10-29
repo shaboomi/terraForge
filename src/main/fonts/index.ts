@@ -11,7 +11,7 @@ export function runFontWorker(bytes: Uint8Array, identity: FontIdentity): Promis
   return runFontTask({ bytes, identity });
 }
 
-function runFontTask(data: { bytes: Uint8Array; identity: FontIdentity } | { font: ProcessedFont; identity: FontIdentity }): Promise<ProcessedFont> {
+function runFontTask(data: { bytes: Uint8Array; identity: FontIdentity } | { font: ProcessedFont; identity: FontIdentity; smooth?: boolean }): Promise<ProcessedFont> {
   return new Promise((resolve,reject) => {
     let finished = false;
     const worker = new Worker(join(__dirname,"font-worker.js"),{ workerData:data,resourceLimits:{ maxOldGenerationSizeMb:256 } });
@@ -50,9 +50,26 @@ export function registerFontHandlers(getMainWindow: () => BrowserWindow | null):
       if (!source) throw new Error("The selected font is no longer in the library. Choose another font.");
       if (source.mode !== "outline") throw new Error("Select a standard outline font to generate centrelines.");
       const existing = fonts.find(font => font.mode === "centerline" && font.sourceFontId === id);
-      if (existing) return existing;
-      const font = await runFontTask({ font: source, identity: { id: randomUUID(), sourceName: source.sourceName } });
+      if (existing && (existing.processingVersion ?? 0) >= 2) return existing;
+      const font = await runFontTask({ font: source, identity: { id: existing?.id ?? randomUUID(), sourceName: source.sourceName, createdAt: existing?.createdAt } });
       if (font.mode !== "centerline" || font.sourceFontId !== id) throw new Error("Font conversion returned an invalid centreline version.");
+      await library.save(font);
+      return font;
+    } finally { importing = false; }
+  });
+  ipcMain.handle("fonts:smoothCentrelines", async (event, id: unknown) => {
+    assertSender(event);
+    if (typeof id !== "string" || !/^[a-z0-9-]{1,80}$/i.test(id)) throw new Error("Invalid font library identifier.");
+    if (importing) throw new Error("A font is already being processed.");
+    importing = true;
+    try {
+      const fonts = await library.list();
+      const selected = fonts.find(font => font.id === id);
+      if (!selected || selected.mode === "outline") throw new Error("Select a centreline font to smooth.");
+      const source = fonts.find(font => font.id === selected.sourceFontId && font.mode === "outline");
+      const font = await runFontTask({ font: source ?? selected, smooth: !source,
+        identity: { id: selected.id, sourceName: selected.sourceName, createdAt: selected.createdAt } });
+      if (font.id !== selected.id || font.mode !== "centerline" || (font.processingVersion ?? 0) < 2) throw new Error("Font smoothing returned an invalid centreline version.");
       await library.save(font);
       return font;
     } finally { importing = false; }

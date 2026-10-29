@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ProcessedFont } from "../../types/fonts";
 import { readBoundedFile } from "../files/boundedFile";
+import { validateCenterlineCommands } from "../../types/centerlineGeometry";
 
 const MAX_STORED_BYTES = 20 * 1024 * 1024;
 const MAX_FONTS = 50;
@@ -40,6 +41,7 @@ export function validateProcessedFont(value: unknown): ProcessedFont {
   }
   if (font.version !== 1 || typeof font.name !== "string" || !font.name || font.name.length > 200 || typeof font.sourceName !== "string" || typeof font.createdAt !== "string") throw new Error("Invalid font metadata.");
   if (font.mode !== undefined && font.mode !== "centerline" && font.mode !== "outline") throw new Error("Invalid font mode.");
+  if (font.processingVersion !== undefined && (!Number.isInteger(font.processingVersion) || font.processingVersion < 1 || font.processingVersion > 100)) throw new Error("Invalid font processing version.");
   if (!Number.isFinite(font.unitsPerEm) || font.unitsPerEm < 16 || font.unitsPerEm > 16384 || !Number.isFinite(font.ascender) || !Number.isFinite(font.descender) || !Number.isFinite(font.lineGap)) throw new Error("Invalid font metrics.");
   if (!font.glyphs || typeof font.glyphs !== "object" || Array.isArray(font.glyphs) || Object.keys(font.glyphs).length > 768) throw new Error("Invalid font glyph library.");
   let count = 0;
@@ -53,6 +55,7 @@ export function validateProcessedFont(value: unknown): ProcessedFont {
     for (const path of glyph.paths) {
       if (!Array.isArray(path.points) || path.points.length < 2) throw new Error("Invalid font stroke.");
       count += path.points.length;
+      if (path.commands !== undefined) count += validateCenterlineCommands(path.commands).length;
       if (count > 600_000) throw new Error("Font geometry exceeds library limits.");
       for (const p of path.points) if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.width) || p.width <= 0 || Math.abs(p.x) > 1e7 || Math.abs(p.y) > 1e7 || p.width > 1e7) throw new Error("Invalid font width or coordinate.");
     }

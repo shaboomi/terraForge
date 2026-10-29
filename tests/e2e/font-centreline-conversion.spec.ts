@@ -33,7 +33,8 @@ test("choosing Centreline converts the selected imported font and keeps the text
     const preview = dialog.getByRole("img", { name: "Text centre-line preview", exact: true });
     await expect(preview).toBeVisible();
     expect(await preview.locator("path").count()).toBeGreaterThan(4);
-    for (const d of await preview.locator("path").evaluateAll(paths => paths.map(path => path.getAttribute("d") ?? ""))) expect(d).not.toMatch(/[QC]/);
+    const curvePaths = await preview.locator("path").evaluateAll(paths => paths.map(path => path.getAttribute("d") ?? ""));
+    expect(curvePaths.some(d => d.includes("C"))).toBe(true);
     await expect(dialog.getByLabel("Text to generate", { exact: true })).toHaveValue("AVO B");
     await expect(dialog.getByLabel("Font size (mm)", { exact: true })).toHaveValue("20");
     const derivedId = await dialog.getByLabel("Text font", { exact: true }).inputValue();

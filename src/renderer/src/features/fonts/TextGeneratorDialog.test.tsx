@@ -14,7 +14,7 @@ const outlineFont: ProcessedFont = { ...font, id: "outline", name: "Outline font
 } };
 
 beforeEach(() => {
-  window.terraForge.fonts = { list: vi.fn().mockResolvedValue([font]), importFont: vi.fn().mockResolvedValue(null), remove: vi.fn().mockResolvedValue(undefined), convertToCenterline: vi.fn() };
+  window.terraForge.fonts = { list: vi.fn().mockResolvedValue([font]), importFont: vi.fn().mockResolvedValue(null), remove: vi.fn().mockResolvedValue(undefined), convertToCenterline: vi.fn(), smoothCentrelines: vi.fn() };
   useCanvasStore.setState({ imports: [], layerGroups: [], activePenId: null, selectedImportId: null, selectedPathId: null,
     selectedGroupId: null, allImportsSelected: false, undoStack: [], redoStack: [] });
 });
@@ -147,7 +147,7 @@ describe("built-in text generator", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Generating long continuous centrelines");
     expect(screen.getByRole("button", { name: "Add text to canvas" })).toBeDisabled();
     expect(screen.getByRole("img", { name: "Text outline preview" })).toBeInTheDocument();
-    const converted: ProcessedFont = { ...font, id: "converted", mode: "centerline", sourceFontId: outlineFont.id };
+    const converted: ProcessedFont = { ...font, id: "converted", mode: "centerline", sourceFontId: outlineFont.id, processingVersion: 2 };
     await act(async () => { finish(converted); });
     expect(window.terraForge.fonts.convertToCenterline).toHaveBeenCalledWith(outlineFont.id);
     expect(window.terraForge.fonts.importFont).not.toHaveBeenCalled();
@@ -206,5 +206,47 @@ describe("built-in text generator", () => {
     expect(screen.getByLabelText("Font mode")).toHaveValue("outline");
     expect(screen.getByRole("img", { name: "Text outline preview" })).toBeInTheDocument();
     expect(window.terraForge.fonts.remove).toHaveBeenCalledWith(converted.id);
+  });
+
+  it("updates a legacy library font to smooth curves without changing canvas text until committed", async () => {
+    const settings = { ...DEFAULT_TEXT_SETTINGS, text: "A", fontSizeMM: 18, useStrokeWidths: true, brushLeadInMM: 2 };
+    const original = { ...createTextImport(font, settings, layoutText(font, settings), "legacy-text"), x: 42, y: 24 };
+    useCanvasStore.getState().addImport(original); useCanvasStore.getState().selectImport(original.id);
+    const storedOriginal = structuredClone(useCanvasStore.getState().imports[0]);
+    const smoothed: ProcessedFont = { ...font, processingVersion: 2, glyphs: { A: { advanceWidth: 600, paths: [{
+      points: [{ x: 0, y: 0, width: 100 }, { x: 250, y: 350, width: 150 }, { x: 500, y: 700, width: 200 }],
+      commands: [{ type: "M", x: 0, y: 0 }, { type: "C", x1: 0, y1: 300, x2: 500, y2: 400, x: 500, y: 700 }],
+    }] } } };
+    vi.mocked(window.terraForge.fonts.smoothCentrelines).mockResolvedValue(smoothed);
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Test font" });
+    expect(screen.getByText(/Update this font to replace jagged line segments/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Smooth centrelines" }));
+    await waitFor(() => expect(screen.getByRole("img", { name: "Text centre-line preview" }).querySelector("path")!.getAttribute("d")).toContain("C"));
+    expect(window.terraForge.fonts.smoothCentrelines).toHaveBeenCalledWith(font.id);
+    expect(window.terraForge.fonts.importFont).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Text font")).toHaveValue(font.id);
+    expect(screen.getByLabelText("Font size (mm)")).toHaveValue(18);
+    expect(screen.getByRole("checkbox", { name: "Use stroke width information" })).toBeChecked();
+    expect(screen.getByLabelText("Brush lead-in (mm)")).toHaveValue(2);
+    expect(useCanvasStore.getState().imports[0]).toEqual(storedOriginal);
+    fireEvent.click(screen.getByRole("button", { name: "Update selected text" }));
+    const item = useCanvasStore.getState().imports[0];
+    expect(item).toMatchObject({ id: original.id, x: 42, y: 24, textSource: { fontId: font.id, fontSizeMM: 18, useStrokeWidths: true, brushLeadInMM: 2 } });
+    if (item.kind === "bitmap") throw new Error("Text should remain vector artwork.");
+    expect(item.paths[0].d).toContain("C");
+    expect(item.paths[0].centerline?.commands?.some((command) => command.type === "C")).toBe(true);
+  });
+
+  it("retains the existing preview when smoothing fails", async () => {
+    vi.mocked(window.terraForge.fonts.smoothCentrelines).mockRejectedValue(new Error("Could not fit smooth curves"));
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Test font" });
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "A" } });
+    const originalD = screen.getByRole("img", { name: "Text centre-line preview" }).querySelector("path")!.getAttribute("d");
+    fireEvent.click(screen.getByRole("button", { name: "Smooth centrelines" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not fit smooth curves"));
+    expect(screen.getByRole("img", { name: "Text centre-line preview" }).querySelector("path")!.getAttribute("d")).toBe(originalD);
+    expect(screen.getByRole("button", { name: "Add text to canvas" })).toBeEnabled();
   });
 });

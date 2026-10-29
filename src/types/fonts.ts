@@ -6,7 +6,12 @@ export type FontOutlineCommand =
   | { type: "C"; x1: number; y1: number; x2: number; y2: number; x: number; y: number }
   | { type: "Z" };
 export interface CenterlinePoint { x: number; y: number; width: number }
-export interface CenterlineStroke { points: CenterlinePoint[] }
+export interface CenterlineStroke {
+  /** Width samples lie on the same fitted geometry, in drawing order. */
+  points: CenterlinePoint[];
+  /** Actual fitted vector geometry. Older libraries contain only sampled polylines. */
+  commands?: FontOutlineCommand[];
+}
 export interface CenterlineGlyph {
   advanceWidth: number;
   paths: CenterlineStroke[];
@@ -15,6 +20,8 @@ export interface CenterlineGlyph {
 }
 export interface ProcessedFont {
   version: 1;
+  /** Curve-fitting revision; absent on legacy raster polylines. */
+  processingVersion?: number;
   /** Absent in older saved libraries, which contain centreline geometry. */
   mode?: FontMode;
   id: string;
@@ -37,5 +44,6 @@ export interface FontsApi {
   /** Prioritize characters from the text being composed when processing large fonts. */
   importFont: (characters?: string, mode?: FontMode) => Promise<ProcessedFont | null>;
   convertToCenterline: (fontId: string) => Promise<ProcessedFont>;
+  smoothCentrelines: (fontId: string) => Promise<ProcessedFont>;
   remove: (id: string) => Promise<void>;
 }
