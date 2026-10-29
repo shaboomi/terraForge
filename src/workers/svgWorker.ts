@@ -39,6 +39,8 @@ import {
 } from "./gcodeEngine/stages/pathOptimization";
 import { applyVinylCompensation } from "./gcodeEngine/stages/vinylCompensation";
 import { applyVinylWeedBorder } from "./gcodeEngine/stages/vinylWeedBorder";
+import { brushZ, penFeedrate, transformCenterline, validatePlotPen } from "./gcodeEngine/stages/penProfile";
+import type { PenProfile } from "../types/pens";
 
 interface GenerateMessage {
   type: "generate";
@@ -70,6 +72,7 @@ function fmtSeconds(n: number): string {
 }
 
 interface TravelSubpath {
+  penProfile?: PenProfile;
   plotOrder?: number;
   penId?: string;
   points: Subpath;
@@ -78,6 +81,7 @@ interface TravelSubpath {
 }
 
 interface TravelPoint {
+  penProfile?: PenProfile;
   point: { x: number; y: number };
   layer?: string;
   color?: string;
@@ -655,7 +659,10 @@ async function generate(msg: GenerateMessage): Promise<void> {
   const pathDirectionMode = options?.pathDirectionMode ?? "minimize-travel";
   const allowPathReversal = pathDirectionMode === "minimize-travel";
   const orderedOutput = objects.some(object => object.visible && object.plotOrder !== undefined);
-  const doJoin = (options?.joinPaths ?? false) && !orderedOutput;
+  // Never bridge letters or merge different physical pen profiles. The font
+  // processor already chooses continuous trails within each glyph.
+  const hasPenProfiles = objects.some(object => object.visible && (object.penProfile || object.centerline));
+  const doJoin = (options?.joinPaths ?? false) && !orderedOutput && !hasPenProfiles;
   const joinTol = options?.joinTolerance ?? 0.2;
   const liftPenAtEnd = options?.liftPenAtEnd ?? true;
   const returnToHome = options?.returnToHome ?? false;
@@ -748,6 +755,10 @@ async function generate(msg: GenerateMessage): Promise<void> {
   }
 
   const visibleObjects = objects.filter((o) => o.visible);
+  for (const object of visibleObjects) validatePlotPen(object.penProfile, config);
+  if (options?.vinylCutting && visibleObjects.some(object => object.penProfile?.type === "brush")) {
+    throw new Error("Brush height control requires pen plotting mode. Disable vinyl cutting before exporting.");
+  }
   if (orderedOutput && visibleObjects.some(object => object.pointTap)) {
     throw new Error("Export point-tap artwork separately from ordered CMYK layers so Black remains the final plotted pass.");
   }
@@ -828,6 +839,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
           layer: pointTapObj.layer,
           color: pointTapObj.sourceColor,
           repeats: Math.max(1, pointTapObj.passCount ?? 1),
+          penProfile: obj.penProfile,
         });
         break;
       }
@@ -848,8 +860,9 @@ async function generate(msg: GenerateMessage): Promise<void> {
     ): { clipped: Subpath[]; validGeometry: boolean } => {
       let raw: Subpath[];
       try {
-        raw = flattenToSubpaths(candidate, config);
+        raw = candidate.centerline ? [transformCenterline(candidate, config)] : flattenToSubpaths(candidate, config);
       } catch {
+        if (candidate.centerline) throw new Error("Invalid centreline data. Regenerate the text before exporting.");
         // Fallback to coarse endpoint-only approximation for malformed paths.
         raw = approximateObjectSubpaths(candidate, config);
         if (raw.length === 0) {
@@ -906,6 +919,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
           color: obj.sourceColor,
           plotOrder: obj.plotOrder,
           penId: obj.penId,
+          penProfile: obj.penProfile,
         });
       }
     }
@@ -945,7 +959,9 @@ async function generate(msg: GenerateMessage): Promise<void> {
       emitPhase3Progress(phase3Progress, true);
       const batches = new Map<string, TravelSubpath[]>();
       for (const path of allSubpaths) {
-        const key = path.plotOrder === undefined ? "legacy" : `${path.plotOrder}:${path.penId ?? path.color}`;
+        const key = path.plotOrder === undefined
+          ? (path.penProfile ? `pen:${path.penId}:${JSON.stringify(path.penProfile)}` : "legacy")
+          : `${path.plotOrder}:${path.penId ?? path.color}`;
         const batch = batches.get(key) ?? []; batch.push(path); batches.set(key, batch);
       }
       orderedSubpaths = [];
@@ -1064,14 +1080,22 @@ async function generate(msg: GenerateMessage): Promise<void> {
     !!inkService &&
     inkTriggerBase > 0 &&
     inkService.stations.some(isEnabledStation);
+  if (canEmitInkService && visibleObjects.some(object => object.penProfile?.type === "brush")) {
+    throw new Error("Export brush height-controlled artwork with ink service disabled. Brush service requires a separately calibrated station height.");
+  }
   const totalOperations = orderedSubpaths.length + allPoints.length;
   const phase4StartProgress = hasPreEmitProcessing ? 95 : 40;
+  // Service patterns also make drawing moves. Use the most restrictive pen
+  // limit in a mixed job so a temporary service feed cannot exceed a tip limit.
+  const serviceConfig = hasPenProfiles ? { ...config, drawSpeed: visibleObjects.reduce(
+    (speed, object) => penFeedrate(speed, object.penProfile), options?.drawSpeedOverride ?? config.drawSpeed,
+  ) } : config;
 
   const emitTriggeredInkService = (preferredDipStationId?: string): void => {
     if (!canEmitInkService || !inkService) return;
     const inserted = emitInkServiceMove(
       lines,
-      config,
+      serviceConfig,
       inkService,
       dipCursorRef,
       dipsSinceWashRef,
@@ -1157,21 +1181,25 @@ async function generate(msg: GenerateMessage): Promise<void> {
 
     const first = subpath[0];
 
+    if (orderedSubpaths[i].penProfile?.type === "brush") lines.push("G90 ; Absolute brush coordinates");
     lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)} ; Rapid travel`);
-    const drawSpeed =
+    const drawSpeed = penFeedrate(
       typeof options?.drawSpeedOverride === "number"
         ? options.drawSpeedOverride
-        : config.drawSpeed;
+        : config.drawSpeed, orderedSubpaths[i].penProfile);
     lines.push(`F${drawSpeed}`);
-    lines.push(config.penDownCommand + " ; Pen down");
+    const profile = orderedSubpaths[i].penProfile;
+    const startZ = brushZ(profile, first.width);
+    lines.push(startZ === undefined ? config.penDownCommand + " ; Pen down" : `G1 Z${fmt(startZ)} ; Brush contact`);
     if (penDownDelayMs > 0) {
       lines.push(`G4 P${fmtSeconds(penDownDelayMs / 1000)} ; Pen settle delay`);
     }
     let currentPoint = first;
     for (let s = 1; s < subpath.length; s++) {
       const targetPoint = subpath[s];
+      const targetZ = brushZ(profile, targetPoint.width);
       if (!canEmitInkService || !inkService) {
-        lines.push(`G1 X${fmt(targetPoint.x)} Y${fmt(targetPoint.y)}`);
+        lines.push(`G1 X${fmt(targetPoint.x)} Y${fmt(targetPoint.y)}${targetZ === undefined ? "" : ` Z${fmt(targetZ)}`}`);
         currentPoint = targetPoint;
         continue;
       }
@@ -1264,15 +1292,16 @@ async function generate(msg: GenerateMessage): Promise<void> {
       emitTriggeredInkService(preferredDipStationId);
     }
 
-    const drawSpeed =
+    const drawSpeed = penFeedrate(
       typeof options?.drawSpeedOverride === "number"
         ? options.drawSpeedOverride
-        : config.drawSpeed;
+        : config.drawSpeed, tap.penProfile);
 
     for (let rep = 0; rep < tap.repeats; rep++) {
       lines.push(`G0 X${fmt(tap.point.x)} Y${fmt(tap.point.y)} ; Point rapid`);
       lines.push(`F${drawSpeed}`);
-      lines.push(config.penDownCommand + " ; Point tap");
+      const tapZ = brushZ(tap.penProfile);
+      lines.push(tapZ === undefined ? config.penDownCommand + " ; Point tap" : `G1 Z${fmt(tapZ)} ; Brush contact`);
       if (penDownDelayMs > 0) {
         lines.push(
           `G4 P${fmtSeconds(penDownDelayMs / 1000)} ; Pen settle delay`,

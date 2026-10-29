@@ -137,7 +137,7 @@ export interface LayerGroupSlice {
   removeLayerGroup: (id: string) => void;
   updateLayerGroup: (
     id: string,
-    patch: Partial<Pick<LayerGroup, "name" | "color">>,
+    patch: Partial<Pick<LayerGroup, "name" | "color" | "penProfile">>,
   ) => void;
   assignImportToGroup: (importId: string, groupId: string | null) => void;
   toVectorObjectsForGroup: (groupId: string) => VectorObject[];

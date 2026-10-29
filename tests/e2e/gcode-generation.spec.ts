@@ -53,7 +53,8 @@ test("no split-button dropdown — single Generate G-code button only", async ()
   const generateButtons = window.locator("button:has-text('Generate G-code')");
   await expect(generateButtons).toHaveCount(1);
 
-  const menuTriggers = window.locator("button[aria-haspopup='menu']");
+  await expect(generateButtons).not.toHaveAttribute("aria-haspopup", "menu");
+  const menuTriggers = generateButtons.locator("..").locator("button[aria-haspopup='menu']");
   await expect(menuTriggers).toHaveCount(0);
 });
 

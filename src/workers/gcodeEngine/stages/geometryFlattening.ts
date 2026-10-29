@@ -3,6 +3,8 @@ import type { VectorObject, MachineConfig } from "../../../types";
 export interface Pt {
   x: number;
   y: number;
+  /** Stroke diameter in machine millimetres, retained through reorder/clip/reversal. */
+  width?: number;
 }
 
 const MAX_CUBIC_SUBDIV_DEPTH = 18;

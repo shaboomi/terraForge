@@ -89,7 +89,9 @@ test("a white pen chosen before SVG import stays white through G-code generation
     await window.getByRole("button", { name: "Import", exact: true }).click();
     await expect(window.getByText("sample", { exact: true })).toHaveCount(2);
     await pushRendererEvent(electronApp, "menu:saveLayout", undefined);
-    await expect.poll(() => (JSON.parse(readFileSync(layoutPath, "utf8")) as CanvasLayout).imports.length).toBe(2);
+    await expect(async () => {
+      expect((JSON.parse(readFileSync(layoutPath, "utf8")) as CanvasLayout).imports).toHaveLength(2);
+    }).toPass();
     const reopened = JSON.parse(readFileSync(layoutPath, "utf8")) as CanvasLayout;
     expect(reopened.activePenId).toBe(activePenId);
     expect(reopened.layerGroups!.find((group) => group.id === activePenId)!.importIds)

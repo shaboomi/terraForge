@@ -552,8 +552,9 @@ export function useJobActions() {
         );
 
         return Array.from(layerIds).map((layerId) => {
-          const penColor = layerGroups.find((group) => group.importIds.includes(imp.id))?.color;
-          const objects = vectorObjectsForImportLayer(imp, layerId, penColor);
+          const pen = layerGroups.find((group) => group.importIds.includes(imp.id));
+          const objects = vectorObjectsForImportLayer(imp, layerId, pen?.color)
+            .map(object => ({ ...object, penId: pen?.id, penProfile: pen?.penProfile }));
           return {
             importName: imp.name,
             layerId,

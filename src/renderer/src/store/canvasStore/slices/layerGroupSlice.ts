@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { isVectorImport } from "../../../../../types";
 import { compareColorsLightFirst, normalizeHexColor } from "../../../../../types/colorUtils";
+import { parsePenProfile } from "../../../../../types/pens";
 import { vectorObjectsForGroup, vectorObjectsUngrouped } from "../services/vectorObjects";
 import { pushCanvasUndo } from "../services/history";
 import type { CanvasStateCreator, LayerGroupSlice } from "../types";
@@ -61,12 +62,19 @@ export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (set, 
   },
   updateLayerGroup: (id, patch) => {
     const group = get().layerGroups.find((item) => item.id === id);
-    if (!group || ((patch.name === undefined || patch.name === group.name) && (patch.color === undefined || patch.color === group.color))) return;
+    if (!group) return;
+    const nextName = patch.name?.trim() || group.name;
+    const nextColor = patch.color === undefined ? group.color : normalizeHexColor(patch.color);
+    if (!nextColor) throw new Error("Choose a valid pen colour.");
+    const profileInput = patch.penProfile ?? group.penProfile;
+    const nextProfile = profileInput ? parsePenProfile({ ...profileInput, name: nextName, color: nextColor }) : undefined;
+    if (nextName === group.name && nextColor === group.color && JSON.stringify(nextProfile) === JSON.stringify(group.penProfile)) return;
     pushCanvasUndo(set, get);
     set((state) => {
       const target = state.layerGroups.find((item) => item.id === id)!;
-      if (patch.name !== undefined) target.name = patch.name;
-      if (patch.color !== undefined) target.color = patch.color;
+      target.name = nextName;
+      target.color = nextColor;
+      if (nextProfile) target.penProfile = nextProfile;
       state.layerGroups.sort((a, b) => compareColorsLightFirst(a.color, b.color));
     });
   },

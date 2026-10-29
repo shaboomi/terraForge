@@ -40,6 +40,7 @@ function projectPathToVectorObjects(
     ...(imp.pluginSource?.plotOrder === undefined ? {} : { plotOrder: imp.pluginSource.plotOrder }),
     passCount: path.passCount ?? 1,
     passMode: path.passMode ?? "repeat",
+    centerline: path.centerline,
   };
   const importStrokeEnabled = imp.strokeEnabled ?? true;
   const pathStrokeEnabled = path.strokeEnabled ?? true;
@@ -76,6 +77,7 @@ function projectPathToVectorObjects(
       id: `${path.id}-h${index}`,
       svgSource: "",
       path: hatchLine,
+      centerline: undefined,
       sourceColor: path.fillColor
         ? normalizeSvgColor(path.fillColor)
         : undefined,
@@ -89,6 +91,7 @@ function projectPathToVectorObjects(
             id: `${path.id}-pt`,
             path: "",
             pointTap: path.pointTap,
+            centerline: undefined,
             sourceColor: path.sourceColor
               ? normalizeSvgColor(path.sourceColor)
               : undefined,
@@ -139,7 +142,7 @@ export function vectorObjectsForImportLayer(
 export function vectorObjectsForImports(imports: CanvasItem[], layerGroups: LayerGroup[] = []): VectorObject[] {
   const pens = new Map(layerGroups.flatMap((group) => group.importIds.map((id) => [id, group] as const)));
   return imports.flatMap((imp) => vectorObjectsForImport(imp, pens.get(imp.id)?.color)
-    .map((object) => object.plotOrder === undefined ? object : { ...object, penId: pens.get(imp.id)?.id }));
+    .map((object) => ({ ...object, penId: pens.get(imp.id)?.id, penProfile: pens.get(imp.id)?.penProfile })));
 }
 
 export function vectorObjectsForGroup(
@@ -153,7 +156,7 @@ export function vectorObjectsForGroup(
   return imports
     .filter((imp) => groupImportIds.has(imp.id))
     .flatMap((imp) => vectorObjectsForImport(imp, group.color).map((object) =>
-      object.plotOrder === undefined ? object : { ...object, penId: group.id }));
+      ({ ...object, penId: group.id, penProfile: group.penProfile })));
 }
 
 export function vectorObjectsUngrouped(

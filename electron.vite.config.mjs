@@ -14,7 +14,16 @@ const pluginWorker = ts.transpileModule(
 ).outputText;
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve("src/main/index.ts"),
+          "font-worker": resolve("src/main/fonts/worker.ts"),
+        },
+      },
+    },
+  },
   preload: {
     define: { __TERRAFORGE_PLUGIN_WORKER__: JSON.stringify(pluginWorker) },
     build: {

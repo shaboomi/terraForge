@@ -32,7 +32,7 @@ export interface AppHandle {
  *
  * Callers should run `npm run build` (or `electron-vite build`) first.
  */
-export async function launchApp(): Promise<AppHandle> {
+export async function launchApp(existingUserDataDir?: string): Promise<AppHandle> {
   const mainEntry = path.join(ROOT, "out", "main", "index.js");
   if (!fs.existsSync(mainEntry)) {
     throw new Error(
@@ -42,7 +42,7 @@ export async function launchApp(): Promise<AppHandle> {
 
   // Create a throw-away user-data directory so the app never reads or
   // writes the real user's machine-configs.json or any other persisted state.
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "terraforge-e2e-"));
+  const userDataDir = existingUserDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "terraforge-e2e-"));
 
   // On Linux CI runners the SUID sandbox helper is not configured, so we must
   // disable the sandbox.  --no-sandbox is safe in ephemeral CI environments.

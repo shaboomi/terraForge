@@ -1,4 +1,10 @@
 import type { PluginBitmapPreparationSettings, PreparedPluginBitmap } from "./pluginBitmapPreparation";
+import type { PenProfile } from "./pens";
+import type { FontsApi } from "./fonts";
+export type { PenProfile } from "./pens";
+
+/** Source-local centreline samples; each sample retains the original stroke diameter. */
+export interface CenterlineData { points: { x: number; y: number; width: number }[] }
 
 // ─── Machine Configuration ────────────────────────────────────────────────────
 
@@ -214,6 +220,8 @@ export interface PassConfig {
 // ─── Vector / Canvas Objects ─────────────────────────────────────────────────
 
 export interface VectorObject {
+  centerline?: CenterlineData;
+  penProfile?: PenProfile;
   id: string;
   /** Original SVG source markup for this object */
   svgSource: string;
@@ -259,6 +267,7 @@ export interface VectorObject {
 
 /** A single path element extracted from an imported SVG file */
 export interface SvgPath {
+  centerline?: CenterlineData;
   id: string;
   /** Path d-string in the SVG's user-unit coordinate space */
   d: string;
@@ -342,6 +351,7 @@ export interface CanvasItemBase {
 
 /** One vector import. An absent kind remains valid for legacy layouts. */
 export interface SvgImport extends CanvasItemBase {
+  textSource?: { fontId: string; fontName: string; text: string; fontSizeMM: number; letterSpacingMM: number; lineSpacing: number; alignment: "left" | "center" | "right" };
   kind?: "vector";
   paths: SvgPath[];
   /** Per-import hatch fill settings (override the global GcodePrefs defaults).
@@ -458,6 +468,7 @@ export interface CanvasLayout {
  * Each group can be exported as a separate G-code file via "Export per group".
  */
 export interface LayerGroup {
+  penProfile?: PenProfile;
   id: string;
   /** User-visible name — used as the G-code filename base */
   name: string;
@@ -720,6 +731,7 @@ export interface EditApi {
 }
 
 export interface TerraForgeAPI {
+  fonts: FontsApi;
   fluidnc: FluidNCApi;
   serial: SerialApi;
   fs: FsApi;

@@ -56,7 +56,7 @@ describe("cascading Plugins menu", () => {
     expect(plugins.run).not.toHaveBeenCalled();
   });
 
-  it("keeps categories visible, replaces submenus on click and explains an empty category", async () => {
+  it("keeps categories visible, replaces submenus on click and includes the built-in font tool", async () => {
     render(<PluginsMenu />);
     const user = await openMenu();
     const filters = screen.getByRole("menuitem", { name: "Bitmap Filters", exact: true });
@@ -68,8 +68,8 @@ describe("cascading Plugins menu", () => {
     expect(await screen.findByRole("menuitem", { name: "Spiral Sawtooth" })).toBeVisible();
     expect(screen.queryByRole("menuitem", { name: "Bitmap Tones" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Font Tools", exact: true }));
-    const empty = await screen.findByRole("menu", { name: "Font Tools", exact: true });
-    expect(empty).toHaveTextContent(/No .*installed|None installed/i);
+    const fontTools = await screen.findByRole("menu", { name: "Font Tools", exact: true });
+    expect(within(fontTools).getByRole("menuitem", { name: "Text generator" })).toHaveTextContent("Built in");
   });
 
   it("labels vector processors and opens current Properties controls without running", async () => {

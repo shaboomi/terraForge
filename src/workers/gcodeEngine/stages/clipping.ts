@@ -109,6 +109,7 @@ export function clipSubpathsToRect(
     const interp = (p0: Pt, p1: Pt, t: number): Pt => ({
       x: p0.x + t * (p1.x - p0.x),
       y: p0.y + t * (p1.y - p0.y),
+      ...(p0.width === undefined || p1.width === undefined ? {} : { width: p0.width + t * (p1.width - p0.width) }),
     });
 
     for (let i = 0; i + 1 < subpath.length; i++) {

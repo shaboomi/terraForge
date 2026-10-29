@@ -7,6 +7,8 @@ import { compareColorsLightFirst } from "../../../../types/colorUtils";
 import { useCanvasStore } from "../../store/canvasStore";
 import { ColourPicker } from "./ColourPicker";
 import { Button } from "../ui";
+import { PenSpecificationsEditor } from "./PenSpecificationsEditor";
+import { PenLibraryPicker } from "./PenLibraryPicker";
 
 function PenEditor({ pen }: { pen: LayerGroup }) {
   const updatePen = useCanvasStore((state) => state.updateLayerGroup);
@@ -102,6 +104,7 @@ export function PenColourControls() {
           {activePen ? (
             <div className="space-y-3">
               <PenEditor key={activePen.id} pen={activePen} />
+              <PenSpecificationsEditor key={`specs-${activePen.id}`} pen={activePen} />
               <div className="flex items-center justify-between gap-2">
                 <Button size="sm" variant="primary" disabled={selectionCount === 0} onClick={() => applyPenToSelection(activePen.id)}>
                   Apply pen to selection
@@ -131,7 +134,8 @@ export function PenColourControls() {
               }}><Plus size={14} />Add pen</Button>
             </div>
           </div>
-          <p className="text-xs text-content-muted mt-4">Save your layout to keep its page colour, pens and artwork.</p>
+          <PenLibraryPicker />
+          <p className="text-xs text-content-muted mt-4">Save your layout to keep its page colour, pen assignments and artwork. Save pens to the library to reuse them in other layouts.</p>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

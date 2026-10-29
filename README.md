@@ -59,7 +59,7 @@ See [Stage 2](docs/plugin-stage-2.md) for instructions and supported limits.
 - Minimise or close plugin controls without deleting artwork; select a generated item and use **Edit with [plugin name]** to restore saved settings and **Update artwork** in place. Updates preserve placement and support Undo.
 - Isolated execution with progress, cancellation and a default 30-second deadline. Validated polyline results become ordinary vector artwork in one undoable edit and remain usable in saved layouts without the plugin.
 
-Stage 1 generators remain compatible. Font Tools supplies a category for plugins that generate their own vector geometry; font loading and shaping remain future work. See [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
+Stage 1 generators remain compatible. **Plugins → Font Tools → Text generator** imports TTF/OTF fonts into a reusable centreline library and places editable text on the canvas. Pens supports a reusable library with tip specifications, calibrated speed limits and variable brush height. See [Fonts, text and pen libraries](docs/font-processing.md), [Stage 1](docs/plugin-stage-1.md) and [the author guide](docs/plugin-author-guide.md).
 
 ### Plugin Processing — Stage 3
 

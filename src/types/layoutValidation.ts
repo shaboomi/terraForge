@@ -2,6 +2,7 @@ import type { BitmapAsset, CanvasItem, CanvasLayout, CanvasItemBase, LayerGroup,
 import { validateBitmapPreparationSettings } from "./pluginBitmapPreparation";
 import { isBitmapImport } from "./index";
 import { assertBitmapAssetBudget, BITMAP_LIMITS, validateBitmapAsset } from "./bitmapValidation";
+import { parsePenProfile } from "./pens";
 
 type Row = Record<string, unknown>;
 const BAD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -157,7 +158,7 @@ function pluginProvenance(value: unknown): PluginProvenance {
 
 function path(value: unknown): SvgPath {
   const item = row(value, "Path");
-  fields(item, ["id", "d", "svgSource", "visible", "label", "layer", ...PATH_FLAGS, ...COLOURS, "hatchLines", "pointTap", "passCount", "passMode"], "Path");
+  fields(item, ["id", "d", "svgSource", "visible", "label", "layer", ...PATH_FLAGS, ...COLOURS, "hatchLines", "pointTap", "passCount", "passMode", "centerline"], "Path");
   const result: SvgPath = { id: id(item.id, "Path ID"), d: geometry(item.d), svgSource: text(item.svgSource ?? "", "Source SVG", 2 * 1024 * 1024), visible: bool(item.visible, "Path visibility") };
   if (item.label !== undefined) result.label = text(item.label, "Path label");
   if (item.layer !== undefined) result.layer = id(item.layer, "Layer reference");
@@ -167,6 +168,15 @@ function path(value: unknown): SvgPath {
   if (item.pointTap !== undefined) {
     const point = row(item.pointTap, "Point tap"); fields(point, ["x", "y"], "Point tap");
     result.pointTap = { x: number(point.x, "Point X"), y: number(point.y, "Point Y") };
+  }
+  if (item.centerline !== undefined) {
+    const data = row(item.centerline, "Centreline"); fields(data, ["points"], "Centreline");
+    const points = array(data.points, "Centreline samples", 500000).map(value => {
+      const point = row(value, "Centreline sample"); fields(point, ["x", "y", "width"], "Centreline sample");
+      return { x: number(point.x, "Centreline X"), y: number(point.y, "Centreline Y"), width: number(point.width, "Stroke width", Number.MIN_VALUE, 1e6) };
+    });
+    if (points.length < 2) throw new Error("Centreline needs at least two samples.");
+    result.centerline = { points };
   }
   if (item.passCount !== undefined) {
     const count = number(item.passCount, "Pass count", 1, 1000);
@@ -181,8 +191,18 @@ function path(value: unknown): SvgPath {
 }
 
 function vector(item: Row): SvgImport {
-  fields(item, [...BASE_FIELDS, "paths", "layers", ...VECTOR_FLAGS, "hatchSpacingMM", "hatchAngleDeg", "strokeWidthMM", "pluginSource"], "Vector item");
+  fields(item, [...BASE_FIELDS, "paths", "layers", ...VECTOR_FLAGS, "hatchSpacingMM", "hatchAngleDeg", "strokeWidthMM", "pluginSource", "textSource"], "Vector item");
   const result: SvgImport = { ...base(item), kind: "vector", paths: Array.from(array(item.paths, "Paths", 100000), path) };
+  if (item.textSource !== undefined) {
+    const source = row(item.textSource, "Text source");
+    fields(source, ["fontId", "fontName", "text", "fontSizeMM", "letterSpacingMM", "lineSpacing", "alignment"], "Text source");
+    if (!["left", "center", "right"].includes(String(source.alignment))) throw new Error("Invalid text alignment.");
+    result.textSource = {
+      fontId: id(source.fontId), fontName: text(source.fontName, "Font name"), text: text(source.text, "Text", 4096),
+      fontSizeMM: number(source.fontSizeMM, "Font size", 1, 1000), letterSpacingMM: number(source.letterSpacingMM, "Letter spacing", -500, 1000),
+      lineSpacing: number(source.lineSpacing, "Line spacing", 0.1, 10), alignment: source.alignment as "left" | "center" | "right",
+    };
+  }
   unique(result.paths.map((entry) => entry.id), "Path IDs within an item");
   if (item.layers !== undefined) {
     result.layers = Array.from(array(item.layers, "Layers", 10000), (value) => {
@@ -251,7 +271,7 @@ export function parseCanvasLayout(raw: string): CanvasLayout {
   const itemIds = new Set(imports.map((item) => item.id));
   const memberships = new Set<string>();
   const layerGroups: LayerGroup[] = Array.from(array(layout.layerGroups ?? [], "Layer groups", 10000), (value) => {
-    const group = row(value, "Layer group"); fields(group, ["id", "name", "color", "importIds"], "Layer group");
+    const group = row(value, "Layer group"); fields(group, ["id", "name", "color", "importIds", "penProfile"], "Layer group");
     const declaredIds = Array.from(array(group.importIds, "Group members", 10000), (value) => id(value, "Group member"));
     const importIds = layout.tfVersion === 1 ? declaredIds.filter((member) => itemIds.has(member)) : declaredIds;
     unique(importIds, "Group members");
@@ -260,7 +280,8 @@ export function parseCanvasLayout(raw: string): CanvasLayout {
       if (memberships.has(member)) throw new Error("Artwork cannot belong to multiple layer groups.");
       memberships.add(member);
     }
-    return { id: id(group.id, "Group ID"), name: text(group.name, "Group name"), color: color(group.color), importIds };
+    return { id: id(group.id, "Group ID"), name: text(group.name, "Group name"), color: color(group.color), importIds,
+      ...(group.penProfile === undefined ? {} : { penProfile: parsePenProfile(group.penProfile) }) };
   });
   unique(layerGroups.map((group) => group.id), "Group IDs");
   const activePenId = layout.activePenId === undefined || layout.activePenId === null ? null : id(layout.activePenId, "Active pen");

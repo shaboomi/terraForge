@@ -233,6 +233,11 @@ const plugins: TerraForgeAPI["plugins"] = {
   cancel: (runId) => invoke("plugins:cancel", runId),
 };
 const api: TerraForgeAPI = {
+  fonts: {
+    list: () => invoke("fonts:list"),
+    importFont: (characters) => invoke("fonts:import", characters),
+    remove: (id) => invoke("fonts:remove", id),
+  },
   plugins,
   fluidnc,
   serial,

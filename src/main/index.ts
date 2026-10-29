@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { registerFontHandlers } from "./fonts";
 import { registerPluginHandlers } from "./plugins";
 import { registerAppLifecycleHandlers } from "./bootstrap/lifecycle";
 import { createMainWindow, getMainWindow, safeSend } from "./bootstrap/window";
@@ -45,6 +46,7 @@ const serial = new SerialClient();
 const taskManager = new TaskManager();
 const pluginHandlers = registerPluginHandlers({ getMainWindow, taskManager });
 const persistence = createPersistence(app.getPath("userData"));
+registerFontHandlers(getMainWindow);
 
 // Tracks which transport is currently active so IPC handlers can route correctly.
 const connectionState = { type: null as "wifi" | "serial" | null };

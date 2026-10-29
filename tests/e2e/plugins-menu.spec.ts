@@ -82,7 +82,7 @@ test("mouse opens adjacent categories, crosses into submenu, selects Properties 
   await page.mouse.click(500, 400);
   await expect(page.getByRole("menu")).toHaveCount(0);
   await trigger().click(); await category("Font Tools").hover();
-  await expect(submenu("Font Tools").getByText(/no .*installed|none installed/i)).toBeVisible();
+  await expect(submenu("Font Tools").getByRole("menuitem", { name: "Text generator", exact: true })).toBeVisible();
 });
 
 test("keyboard traverses categories and plugins, returns Left, selects Enter and closes Escape", async () => {

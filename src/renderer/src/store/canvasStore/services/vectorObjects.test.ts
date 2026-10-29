@@ -79,7 +79,8 @@ describe("canvasStore vectorObjects service", () => {
     expect(combined).toHaveLength(3);
     expect(combined.every((object) => object.sourceColor === "#ffff00")).toBe(true);
     expect(vectorObjectsForGroup([imp], groups, "pen")).toEqual(combined);
-    expect(vectorObjectsForImportLayer(imp, "source-layer", "#ffff00")).toEqual(combined);
+    expect(vectorObjectsForImportLayer(imp, "source-layer", "#ffff00").map(object => ({ ...object, penId: "pen" }))).toEqual(combined);
+    expect(combined.every(object => object.penId === "pen")).toBe(true);
     expect(imp.paths[0]).toMatchObject({ strokeColor: "red", fillColor: "blue", sourceColor: "red" });
     expect(vectorObjectsForImports([imp])[0].sourceColor).toBe("#ff0000");
   });
