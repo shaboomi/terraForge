@@ -1,0 +1,401 @@
+[
+  {
+    "name": "portrait-clean",
+    "parameters": {
+      "preset": "clean",
+      "paletteSize": 5,
+      "paletteMode": "auto",
+      "simplification": 45,
+      "resolution": 160,
+      "outline": 1,
+      "shadow": 58,
+      "density": 50,
+      "hatchSpacing": 4,
+      "direction": "directional",
+      "angle": 45,
+      "crosshatch": false,
+      "minFeature": 6,
+      "pathTolerance": 0.25,
+      "background": "skip-white",
+      "output": "colour",
+      "fillSpacing": 0.85,
+      "blackSpacing": 0.45,
+      "inkPen": ""
+    },
+    "ms": 1788,
+    "paths": 7973,
+    "points": 16078,
+    "separations": [
+      {
+        "file": "portrait-clean-separation-1.png",
+        "name": "Colour 1 #0c0709",
+        "paths": 25,
+        "points": 50
+      },
+      {
+        "file": "portrait-clean-separation-2.png",
+        "name": "Colour 2 #c8bdb8",
+        "paths": 655,
+        "points": 1310
+      },
+      {
+        "file": "portrait-clean-separation-3.png",
+        "name": "Colour 3 #d4633f",
+        "paths": 300,
+        "points": 600
+      },
+      {
+        "file": "portrait-clean-separation-4.png",
+        "name": "Colour 4 #642a25",
+        "paths": 397,
+        "points": 794
+      },
+      {
+        "file": "portrait-clean-separation-5.png",
+        "name": "Colour 5 #8a7971",
+        "paths": 457,
+        "points": 914
+      },
+      {
+        "file": "portrait-clean-separation-6.png",
+        "name": "Black outlines",
+        "paths": 4424,
+        "points": 8848
+      },
+      {
+        "file": "portrait-clean-separation-7.png",
+        "name": "Black shadows",
+        "paths": 1484,
+        "points": 2968
+      },
+      {
+        "file": "portrait-clean-separation-8.png",
+        "name": "Black hatching",
+        "paths": 231,
+        "points": 594
+      }
+    ],
+    "warnings": [
+      "Working grid 160 × 160. Coverage uses drawable strokes; physical pen width and artwork scale determine how solid it looks. Assign colour separations to real pens before plotting.",
+      "Directional hatching approximates image flow, not true surface geometry or a professional illustrator's interpretation. Empty separations are omitted."
+    ]
+  },
+  {
+    "name": "portrait-heavy",
+    "parameters": {
+      "preset": "heavy",
+      "paletteSize": 5,
+      "paletteMode": "auto",
+      "simplification": 45,
+      "resolution": 160,
+      "outline": 1,
+      "shadow": 58,
+      "density": 50,
+      "hatchSpacing": 4,
+      "direction": "directional",
+      "angle": 45,
+      "crosshatch": true,
+      "minFeature": 6,
+      "pathTolerance": 0.25,
+      "background": "skip-white",
+      "output": "colour",
+      "fillSpacing": 0.85,
+      "blackSpacing": 0.45,
+      "inkPen": ""
+    },
+    "ms": 2484,
+    "paths": 5224,
+    "points": 10622,
+    "separations": [
+      {
+        "file": "portrait-heavy-separation-1.png",
+        "name": "Colour 1 #0c0709",
+        "paths": 2,
+        "points": 4
+      },
+      {
+        "file": "portrait-heavy-separation-2.png",
+        "name": "Colour 2 #c8bdb8",
+        "paths": 428,
+        "points": 856
+      },
+      {
+        "file": "portrait-heavy-separation-3.png",
+        "name": "Colour 3 #d4633f",
+        "paths": 252,
+        "points": 504
+      },
+      {
+        "file": "portrait-heavy-separation-4.png",
+        "name": "Colour 4 #642a25",
+        "paths": 24,
+        "points": 48
+      },
+      {
+        "file": "portrait-heavy-separation-5.png",
+        "name": "Colour 5 #8a7971",
+        "paths": 158,
+        "points": 316
+      },
+      {
+        "file": "portrait-heavy-separation-6.png",
+        "name": "Black outlines",
+        "paths": 2966,
+        "points": 5932
+      },
+      {
+        "file": "portrait-heavy-separation-7.png",
+        "name": "Black shadows",
+        "paths": 1083,
+        "points": 2166
+      },
+      {
+        "file": "portrait-heavy-separation-8.png",
+        "name": "Black hatching",
+        "paths": 311,
+        "points": 796
+      }
+    ],
+    "warnings": [
+      "Working grid 160 × 160. Coverage uses drawable strokes; physical pen width and artwork scale determine how solid it looks. Assign colour separations to real pens before plotting.",
+      "Directional hatching approximates image flow, not true surface geometry or a professional illustrator's interpretation. Empty separations are omitted."
+    ]
+  },
+  {
+    "name": "detail-fine",
+    "parameters": {
+      "preset": "fine",
+      "paletteSize": 5,
+      "paletteMode": "auto",
+      "simplification": 45,
+      "resolution": 160,
+      "outline": 1,
+      "shadow": 58,
+      "density": 50,
+      "hatchSpacing": 5,
+      "direction": "directional",
+      "angle": 45,
+      "crosshatch": true,
+      "minFeature": 6,
+      "pathTolerance": 0.25,
+      "background": "skip-white",
+      "output": "colour",
+      "fillSpacing": 0.85,
+      "blackSpacing": 0.45,
+      "inkPen": ""
+    },
+    "ms": 2440,
+    "paths": 4652,
+    "points": 9472,
+    "separations": [
+      {
+        "file": "detail-fine-separation-1.png",
+        "name": "Colour 1 #0c0805",
+        "paths": 5,
+        "points": 10
+      },
+      {
+        "file": "detail-fine-separation-2.png",
+        "name": "Colour 2 #d0c4be",
+        "paths": 511,
+        "points": 1022
+      },
+      {
+        "file": "detail-fine-separation-3.png",
+        "name": "Colour 3 #846c54",
+        "paths": 469,
+        "points": 938
+      },
+      {
+        "file": "detail-fine-separation-4.png",
+        "name": "Colour 4 #b89c86",
+        "paths": 583,
+        "points": 1166
+      },
+      {
+        "file": "detail-fine-separation-5.png",
+        "name": "Colour 5 #4c3720",
+        "paths": 386,
+        "points": 772
+      },
+      {
+        "file": "detail-fine-separation-6.png",
+        "name": "Black outlines",
+        "paths": 1569,
+        "points": 3138
+      },
+      {
+        "file": "detail-fine-separation-7.png",
+        "name": "Black shadows",
+        "paths": 747,
+        "points": 1494
+      },
+      {
+        "file": "detail-fine-separation-8.png",
+        "name": "Black hatching",
+        "paths": 382,
+        "points": 932
+      }
+    ],
+    "warnings": [
+      "Working grid 160 × 140. Coverage uses drawable strokes; physical pen width and artwork scale determine how solid it looks. Assign colour separations to real pens before plotting.",
+      "Directional hatching approximates image flow, not true surface geometry or a professional illustrator's interpretation. Empty separations are omitted."
+    ]
+  },
+  {
+    "name": "coffee-clean",
+    "parameters": {
+      "preset": "clean",
+      "paletteSize": 5,
+      "paletteMode": "auto",
+      "simplification": 45,
+      "resolution": 160,
+      "outline": 1,
+      "shadow": 58,
+      "density": 50,
+      "hatchSpacing": 4,
+      "direction": "directional",
+      "angle": 45,
+      "crosshatch": false,
+      "minFeature": 6,
+      "pathTolerance": 0.25,
+      "background": "skip-white",
+      "output": "colour",
+      "fillSpacing": 0.85,
+      "blackSpacing": 0.45,
+      "inkPen": ""
+    },
+    "ms": 1319,
+    "paths": 4260,
+    "points": 8769,
+    "separations": [
+      {
+        "file": "coffee-clean-separation-1.png",
+        "name": "Colour 1 #350e07",
+        "paths": 22,
+        "points": 44
+      },
+      {
+        "file": "coffee-clean-separation-2.png",
+        "name": "Colour 2 #edd3ba",
+        "paths": 143,
+        "points": 286
+      },
+      {
+        "file": "coffee-clean-separation-3.png",
+        "name": "Colour 3 #b76535",
+        "paths": 448,
+        "points": 896
+      },
+      {
+        "file": "coffee-clean-separation-4.png",
+        "name": "Colour 4 #9e3416",
+        "paths": 492,
+        "points": 984
+      },
+      {
+        "file": "coffee-clean-separation-5.png",
+        "name": "Colour 5 #d3945e",
+        "paths": 275,
+        "points": 550
+      },
+      {
+        "file": "coffee-clean-separation-6.png",
+        "name": "Black outlines",
+        "paths": 1716,
+        "points": 3432
+      },
+      {
+        "file": "coffee-clean-separation-7.png",
+        "name": "Black shadows",
+        "paths": 790,
+        "points": 1580
+      },
+      {
+        "file": "coffee-clean-separation-8.png",
+        "name": "Black hatching",
+        "paths": 374,
+        "points": 997
+      }
+    ],
+    "warnings": [
+      "Working grid 160 × 107. Coverage uses drawable strokes; physical pen width and artwork scale determine how solid it looks. Assign colour separations to real pens before plotting.",
+      "Directional hatching approximates image flow, not true surface geometry or a professional illustrator's interpretation. Empty separations are omitted."
+    ]
+  },
+  {
+    "name": "fixture-clean",
+    "parameters": {
+      "preset": "clean",
+      "paletteSize": 5,
+      "paletteMode": "auto",
+      "simplification": 45,
+      "resolution": 160,
+      "outline": 1,
+      "shadow": 58,
+      "density": 50,
+      "hatchSpacing": 4,
+      "direction": "directional",
+      "angle": 45,
+      "crosshatch": false,
+      "minFeature": 2,
+      "pathTolerance": 0.25,
+      "background": "skip-white",
+      "output": "colour",
+      "fillSpacing": 0.85,
+      "blackSpacing": 0.45,
+      "inkPen": ""
+    },
+    "ms": 1373,
+    "paths": 1760,
+    "points": 3595,
+    "separations": [
+      {
+        "file": "fixture-clean-separation-1.png",
+        "name": "Colour 1 #bd694f",
+        "paths": 171,
+        "points": 342
+      },
+      {
+        "file": "fixture-clean-separation-2.png",
+        "name": "Colour 3 #698ba0",
+        "paths": 49,
+        "points": 98
+      },
+      {
+        "file": "fixture-clean-separation-3.png",
+        "name": "Colour 4 #888888",
+        "paths": 26,
+        "points": 52
+      },
+      {
+        "file": "fixture-clean-separation-4.png",
+        "name": "Colour 5 #92827d",
+        "paths": 27,
+        "points": 54
+      },
+      {
+        "file": "fixture-clean-separation-5.png",
+        "name": "Black outlines",
+        "paths": 1066,
+        "points": 2132
+      },
+      {
+        "file": "fixture-clean-separation-6.png",
+        "name": "Black shadows",
+        "paths": 142,
+        "points": 284
+      },
+      {
+        "file": "fixture-clean-separation-7.png",
+        "name": "Black hatching",
+        "paths": 279,
+        "points": 633
+      }
+    ],
+    "warnings": [
+      "Working grid 160 × 112. Coverage uses drawable strokes; physical pen width and artwork scale determine how solid it looks. Assign colour separations to real pens before plotting.",
+      "Directional hatching approximates image flow, not true surface geometry or a professional illustrator's interpretation. Empty separations are omitted."
+    ]
+  }
+]
