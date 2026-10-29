@@ -23,7 +23,7 @@ Choose a plugin to close the menu and open its existing **Properties** controls.
 
 ## Utilities and management
 
-A separated section beneath the categories retains **Open Plugin Folder**, **Add Example Generator** and **Manage Plugins**. Add Example Generator installs the existing grid example and opens its Properties controls. Manage Plugins contains enable/disable controls and per-file errors. New or edited plugin files are discovered after restarting TerraForge; enable only plugins you trust.
+A separated section beneath the categories retains **Open Plugin Folder**, **Rescan Plugins**, **Add Example Generator** and **Manage Plugins**. Add Example Generator installs the existing grid example and opens its Properties controls. Manage Plugins contains enable/disable controls and per-file errors. Use **Rescan Plugins** to discover new or edited files without restarting; enable only plugins you trust.
 
 ## Keyboard and dismissal
 

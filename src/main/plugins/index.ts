@@ -18,7 +18,13 @@ export function registerPluginHandlers(options: {
   void ready.catch(() => {});
   let runtime: PluginRuntime | undefined;
   let documentGeneration = 0;
+  let scansInProgress = 0;
   const pendingRuns = new Map<string, { cancelled: boolean; generation: number }>();
+  const cancelAll = () => {
+    documentGeneration++;
+    for (const pending of pendingRuns.values()) pending.cancelled = true;
+    runtime?.cancelAll();
+  };
   const assertSender = (event: Electron.IpcMainInvokeEvent) => {
     const main = options.getMainWindow();
     if (!main || main.isDestroyed() || event.sender !== main.webContents ||
@@ -37,11 +43,32 @@ export function registerPluginHandlers(options: {
     const error = await shell.openPath(directory);
     if (error) throw new Error(error);
   });
+  ipcMain.handle("plugins:rescan", async (event) => {
+    assertSender(event);
+    // Invalidate even runs waiting for startup discovery, before yielding to IO.
+    cancelAll();
+    scansInProgress++;
+    try {
+      await ready;
+      assertSender(event);
+      await registry.rescan();
+      assertSender(event);
+      return registry.list();
+    } finally {
+      scansInProgress--;
+    }
+  });
   ipcMain.handle("plugins:installExample", async (event) => {
     assertSender(event);
-    await ready;
-    assertSender(event);
-    await registry.installExample();
+    cancelAll();
+    scansInProgress++;
+    try {
+      await ready;
+      assertSender(event);
+      await registry.installExample();
+    } finally {
+      scansInProgress--;
+    }
   });
   ipcMain.handle("plugins:setEnabled", async (event, pluginId: unknown, enabled: unknown) => {
     assertSender(event);
@@ -52,6 +79,7 @@ export function registerPluginHandlers(options: {
   });
   ipcMain.handle("plugins:run", async (event, value: unknown) => {
     assertSender(event);
+    if (scansInProgress > 0) throw new Error("Plugin rescan is in progress. Try Preview again when it finishes.");
     const request = validatePluginRunRequest(value);
     if (pendingRuns.has(request.runId)) throw new Error("This plugin run ID is already pending.");
     const pending = { cancelled: false, generation: documentGeneration };
@@ -59,7 +87,7 @@ export function registerPluginHandlers(options: {
     try {
       await ready;
       assertSender(event);
-      if (pending.cancelled || pending.generation !== documentGeneration) throw new Error("Plugin cancelled before it started.");
+      if (pending.cancelled || pending.generation !== documentGeneration || scansInProgress > 0) throw new Error("Plugin cancelled before it started.");
       runtime ??= new PluginRuntime(registry, options.taskManager);
       // Runtime.run synchronously claims ownership before this pending entry is removed.
       return runtime.run(request);
@@ -74,11 +102,5 @@ export function registerPluginHandlers(options: {
     if (pending) pending.cancelled = true;
     runtime?.cancel(runId);
   });
-  return {
-    cancelAll: () => {
-      documentGeneration++;
-      for (const pending of pendingRuns.values()) pending.cancelled = true;
-      runtime?.cancelAll();
-    },
-  };
+  return { cancelAll };
 }

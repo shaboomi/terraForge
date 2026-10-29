@@ -240,7 +240,8 @@ export function validatePluginParameters(manifest: PluginManifest, value: unknow
 
 export function validatePluginRunRequest(value: unknown): PluginRunRequest {
   const item = object(value, "Plugin request");
-  fields(item, ["runId", "pluginId", "input", "parameters", "seed", "detailBudget"], "Plugin request");
+  fields(item, ["runId", "pluginId", "input", "parameters", "seed", "detailBudget", "sourceFingerprint"], "Plugin request");
+  if (item.sourceFingerprint !== undefined && (typeof item.sourceFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(item.sourceFingerprint))) throw new Error("Invalid plugin source fingerprint.");
   const runId = nonempty(item.runId, "Run ID", 128);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(runId)) throw new Error("Invalid run ID.");
   const detailBudget = item.detailBudget as PluginDetailBudget | undefined;
@@ -272,7 +273,7 @@ export function validatePluginRunRequest(value: unknown): PluginRunRequest {
     validatePenReferences(input.kind === "vector" ? input.paths : [], common.palette ?? []);
   }
   const seed = item.seed === undefined ? undefined : uint32(item.seed, "Seed");
-  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }), ...(detailBudget === undefined ? {} : { detailBudget }) };
+  return { runId, pluginId: identifier(item.pluginId), input, parameters: parametersObject(item.parameters), ...(seed === undefined ? {} : { seed }), ...(detailBudget === undefined ? {} : { detailBudget }), ...(item.sourceFingerprint === undefined ? {} : { sourceFingerprint: item.sourceFingerprint as string }) };
 }
 
 function reference(value: unknown, label: string): string {

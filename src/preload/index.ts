@@ -225,6 +225,7 @@ const editApi: TerraForgeAPI["edit"] = {
 
 const plugins: TerraForgeAPI["plugins"] = {
   list: () => invoke("plugins:list"),
+  rescan: () => invoke("plugins:rescan"),
   openFolder: () => invoke("plugins:openFolder"),
   installExample: () => invoke("plugins:installExample"),
   setEnabled: (pluginId, enabled) => invoke("plugins:setEnabled", pluginId, enabled),

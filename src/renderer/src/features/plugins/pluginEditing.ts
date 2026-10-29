@@ -1,7 +1,7 @@
 import { isBitmapImport, type CanvasItem, type PluginEntry } from "../../../../types";
 import { validatePluginParameters } from "../../../../types/pluginValidation";
 
-/** Reopen only with the exact available plugin that created this artwork. */
+/** Code differences are disclosed; only explicit Preview/Update can regenerate saved geometry. */
 export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEntry[], imports?: CanvasItem[]) {
   if (!artwork?.pluginSource) return { error: "Select artwork created by a plugin." };
   const source = artwork.pluginSource;
@@ -19,7 +19,12 @@ export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEnt
   }
   try {
     const parameters = validatePluginParameters(entry.manifest, source.parameters);
-    return { entry: { ...entry, manifest: entry.manifest }, parameters };
+    const notice = !source.sourceFingerprint
+      ? "This older result has no saved code fingerprint. Its original plugin code cannot be verified. Update artwork explicitly regenerates it with the installed code."
+      : source.sourceFingerprint !== entry.sourceFingerprint
+        ? "This result was created by different plugin code, even if the version is unchanged. Update artwork explicitly regenerates it with the installed code."
+        : undefined;
+    return { entry: { ...entry, manifest: entry.manifest }, parameters, notice };
   } catch {
     return { error: "The saved settings are incompatible with this plugin. The saved artwork is still available." };
   }

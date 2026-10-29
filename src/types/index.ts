@@ -751,6 +751,8 @@ export type PluginDetailBudget = "standard" | "extended";
 export interface PluginExecutionLimits { paths: number; points: number; executionMs: number }
 
 export interface PluginProvenance {
+  /** SHA-256 of the discovered executable source; absent on older layouts. */
+  sourceFingerprint?: string;
   detailBudget?: PluginDetailBudget;
   /** Optional execution pass, independent of the global pen list. */
   plotOrder?: number;
@@ -816,6 +818,7 @@ export interface PluginManifest {
 
 export interface PluginEntry {
   filename: string;
+  sourceFingerprint?: string;
   manifest?: PluginManifest;
   enabled: boolean;
   error?: string;
@@ -840,6 +843,7 @@ export type PluginInput =
   | (PluginSelectionInput & { kind: "vector"; paths: PluginPolyline[] });
 
 export interface PluginRunRequest {
+  sourceFingerprint?: string;
   detailBudget?: PluginDetailBudget;
   runId: string;
   pluginId: string;
@@ -881,6 +885,8 @@ export interface PluginContext {
 
 export interface PluginsApi {
   list: () => Promise<PluginEntry[]>;
+  /** Optional only for older preload/test bridges; current desktop always provides it. */
+  rescan?: () => Promise<PluginEntry[]>;
   openFolder: () => Promise<void>;
   installExample: () => Promise<void>;
   setEnabled: (pluginId: string, enabled: boolean) => Promise<void>;

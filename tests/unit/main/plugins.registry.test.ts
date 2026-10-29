@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "path";
 import { PluginRegistry } from "../../../src/main/plugins/registry";
 import { EXAMPLE_PLUGIN_FILENAME, EXAMPLE_PLUGIN_SOURCE } from "../../../src/main/plugins/sample";
 import { PLUGIN_LIMITS } from "../../../src/types/pluginValidation";
+import { createHash } from "crypto";
 
 function source(id = "test.generator", body = "throw new Error('Never evaluate during discovery');"): string {
   return `/* terraforge-plugin\n${JSON.stringify({ id, name: "Test tool", version: "1.0.0", apiVersion: 1, description: "Test generator", category: "generator", input: "none", outputs: ["vector"] })}\n*/\n${body}\n`;
@@ -102,6 +103,74 @@ describe("plugin registry", () => {
     await restarted.initialise();
     expect(restarted.list()).toHaveLength(2);
     expect((await restarted.getExecutable("test.generator")).source).toContain("// edited");
+  });
+
+  it("rescans additions, same-version edits, removals and invalid files without evaluating code", async () => {
+    const file = join(folder, "tool.tf-plugin.js");
+    const original = source();
+    await writeFile(file, original);
+    const registry = new PluginRegistry(folder);
+    await registry.initialise();
+    const first = registry.list()[0].sourceFingerprint;
+    expect(first).toBe(createHash("sha256").update(original).digest("hex"));
+    await writeFile(file, original + "// different executable source, same version\n");
+    await writeFile(join(folder, "added.tf-plugin.js"), source("test.added"));
+    await writeFile(join(folder, "invalid.tf-plugin.js"), "throw new Error('not metadata')");
+    await registry.rescan();
+    const edited = registry.list().find(entry => entry.manifest?.id === "test.generator")!;
+    expect(edited.manifest?.version).toBe("1.0.0");
+    expect(edited.sourceFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(edited.sourceFingerprint).not.toBe(first);
+    expect((await registry.getExecutable("test.generator")).sourceFingerprint).toBe(edited.sourceFingerprint);
+    expect(registry.list().find(entry => entry.filename === "invalid.tf-plugin.js")?.error).toBeTruthy();
+    await rm(file);
+    await registry.rescan();
+    expect(registry.list().map(entry => entry.filename)).toEqual(["added.tf-plugin.js", "invalid.tf-plugin.js"]);
+    await expect(registry.getExecutable("test.generator")).rejects.toThrow(/missing/);
+  });
+
+  it("retains disabled choices through removal, duplicate IDs and subsequent re-addition", async () => {
+    const file = join(folder, "tool.tf-plugin.js");
+    await writeFile(file, source());
+    const registry = new PluginRegistry(folder);
+    await registry.initialise();
+    await registry.setEnabled("test.generator", false);
+    await rm(file);
+    await registry.rescan();
+    expect(registry.list()).toEqual([]);
+    await writeFile(file, source());
+    await writeFile(join(folder, "duplicate.tf-plugin.js"), source());
+    await registry.rescan();
+    expect(registry.list().every(entry => !entry.enabled && entry.error?.includes("Duplicate"))).toBe(true);
+    await rm(join(folder, "duplicate.tf-plugin.js"));
+    await registry.rescan();
+    expect(registry.list()[0]).toMatchObject({ enabled: false, manifest: { id: "test.generator" } });
+    expect(registry.list()[0].error).toBeUndefined();
+    const restarted = new PluginRegistry(folder);
+    await restarted.initialise();
+    expect(restarted.list()[0].enabled).toBe(false);
+  });
+
+  it("retains more historical disabled choices than the installed-plugin limit", async () => {
+    const disabled = Array.from({ length: PLUGIN_LIMITS.files + 1 }, (_, index) => `test.p${index}`);
+    await writeFile(join(folder, ".plugin-state.json"), JSON.stringify({ version: 1, disabled }));
+    await writeFile(join(folder, "tool.tf-plugin.js"), source(disabled.at(-1)));
+    const registry = new PluginRegistry(folder);
+    await registry.initialise();
+    expect(registry.list()[0].enabled).toBe(false);
+    await registry.setEnabled(disabled.at(-1)!, true);
+    expect(JSON.parse(await readFile(join(folder, ".plugin-state.json"), "utf8")).disabled).toEqual(disabled.slice(0, -1).sort());
+  });
+
+  it("keeps the preceding complete snapshot if a rescan exceeds the folder bound", async () => {
+    await writeFile(join(folder, "tool.tf-plugin.js"), source());
+    const registry = new PluginRegistry(folder);
+    await registry.initialise();
+    const previous = registry.list();
+    await Promise.all(Array.from({ length: PLUGIN_LIMITS.files }, (_, index) =>
+      writeFile(join(folder, `${index}.tf-plugin.js`), source(`test.p${index}`))));
+    await expect(registry.rescan()).rejects.toThrow(/more than/);
+    expect(registry.list()).toEqual(previous);
   });
 
   it("installs the example explicitly, refreshes the list and never overwrites it", async () => {

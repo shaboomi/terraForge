@@ -49,7 +49,7 @@ describe("cascading Plugins menu", () => {
     const menu = screen.getByRole("menu", { name: "Plugins", exact: true });
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "Bitmap Filters", "Bitmap to Vector", "Generators", "Font Tools",
-      "Open Plugin Folder", "Add Example Generator", "Manage Plugins",
+      "Open Plugin Folder", "Rescan Plugins", "Add Example Generator", "Manage Plugins",
     ]);
     expect(within(menu).getByRole("separator")).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Spiral Sawtooth" })).not.toBeInTheDocument();

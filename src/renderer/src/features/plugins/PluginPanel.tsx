@@ -5,6 +5,7 @@ import { usePluginStore } from "./pluginStore";
 import { PluginControlField } from "./PluginControlField";
 import { useCanvasStore } from "../../store/canvasStore";
 import { selectedPluginSource } from "./pluginProcessing";
+import { pluginEditor } from "./pluginEditing";
 
 export function PluginPanel() {
   const bodyId = useId();
@@ -56,6 +57,7 @@ export function PluginPanel() {
         <div>
           <p className="text-[10px] text-content-faint">Plugin · v{manifest.version}</p>
           {editingArtwork && <p className="text-xs text-content-muted">Editing {editingArtwork.name}</p>}
+          {editingArtwork && pluginEditor(editingArtwork, entries, canvas.imports).notice && <p role="status" className="text-xs text-content-muted">{pluginEditor(editingArtwork, entries, canvas.imports).notice}</p>}
           {editingImportId && !editingArtwork && <p className="text-xs text-content-muted">This artwork no longer exists. Open a plugin from Plugins to create new artwork.</p>}
           <p className="mt-1 text-xs text-content-muted">{manifest.description}</p>
         </div>

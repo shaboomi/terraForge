@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { ChevronRight, FolderOpen, Plus, Puzzle, Settings } from "lucide-react";
+import { ChevronRight, FolderOpen, Plus, Puzzle, Settings, RefreshCw } from "lucide-react";
 import { Button } from "../../components/ui";
 import { PLUGIN_MENU_CATEGORIES, pluginsInCategory, type PluginMenuCategory } from "./pluginMenuGroups";
 import { PluginManagement } from "./PluginManagement";
@@ -18,6 +18,8 @@ export function PluginsMenu() {
   const loading = usePluginStore((state) => state.loading);
   const error = usePluginStore((state) => state.error);
   const refresh = usePluginStore((state) => state.refresh);
+  const rescan = usePluginStore((state) => state.rescan);
+  const saving = usePluginStore((state) => state.saving);
   const select = usePluginStore((state) => state.select);
   const openFolder = usePluginStore((state) => state.openFolder);
   const installExample = usePluginStore((state) => state.installExample);
@@ -67,6 +69,7 @@ export function PluginsMenu() {
           })}
           <Menu.Separator className="my-1 h-px bg-border-ui" />
           <Menu.Item className={itemStyle} onSelect={() => void openFolder()}><FolderOpen size={14} aria-hidden="true" />Open Plugin Folder</Menu.Item>
+          <Menu.Item className={itemStyle} disabled={loading || !!saving.length} onSelect={() => void rescan()}><RefreshCw size={14} aria-hidden="true" />Rescan Plugins</Menu.Item>
           <Menu.Item className={itemStyle} disabled={loading} onSelect={() => void installExample()}><Plus size={14} aria-hidden="true" />Add Example Generator</Menu.Item>
           <Menu.Item className={itemStyle} onSelect={() => setManaging(true)}><Settings size={14} aria-hidden="true" />Manage Plugins</Menu.Item>
           {loading && <p role="status" className="px-2 py-1 text-content-muted">Loading plugins…</p>}
