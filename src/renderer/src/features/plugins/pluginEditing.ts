@@ -9,6 +9,7 @@ export function pluginEditor(artwork: CanvasItem | undefined, entries: PluginEnt
   if (!entry?.manifest) return { error: "This artwork's plugin is not installed. The saved artwork is still available." };
   if (!entry.enabled || entry.error) return { error: "Enable this plugin in Plugins to edit its settings." };
   if (entry.manifest.version !== source.pluginVersion) return { error: `This artwork requires plugin version ${source.pluginVersion} to edit its settings.` };
+  if (source.bitmapPreparation && !entry.manifest.bitmapPreparation) return { error: "The installed plugin no longer supports this result's saved bitmap preparation. The saved artwork remains usable." };
   if (entry.manifest.input !== "none") {
     if (!source.sourceId) return { error: "This result has no saved source reference. Select source artwork and open the plugin from Plugins to create a new result." };
     if (imports) {

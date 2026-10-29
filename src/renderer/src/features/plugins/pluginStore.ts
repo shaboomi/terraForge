@@ -4,8 +4,9 @@ import { pluginEditor, resolvePluginTarget } from "./pluginEditing";
 import { v4 as uuid } from "uuid";
 import { isVectorImport, type CanvasItem, type PluginEntry, type PluginInput, type PluginParameters, type PluginRunRequest, type PluginDetailBudget, type SvgImport } from "../../../../types";
 import { validatePluginResult } from "../../../../types/pluginValidation";
+import { DEFAULT_BITMAP_PREPARATION, validateBitmapPreparationSettings, type PluginBitmapPreparationSettings } from "../../../../types/pluginBitmapPreparation";
 import { normalizeSvgColor } from "../imports/services/svgImportHelpers";
-import { buildPluginInput, preparePluginArtwork, selectedPluginSource } from "./pluginProcessing";
+import { buildPluginInput, clearPluginBitmapCaches, preparePluginArtwork, selectedPluginSource } from "./pluginProcessing";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useMachineStore } from "../../store/machineStore";
 import { useTaskStore } from "../../store/taskStore";
@@ -17,6 +18,8 @@ import {
 } from "./pluginHelpers";
 
 interface PluginState {
+  bitmapPreparation: Record<string, PluginBitmapPreparationSettings>;
+  setBitmapPreparation: (pluginId: string, value: PluginBitmapPreparationSettings) => void;
   entries: PluginEntry[];
   activeFilename: string | null;
   collapsed: boolean;
@@ -75,6 +78,11 @@ function clearPreview() {
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
+  bitmapPreparation: {},
+  setBitmapPreparation: (pluginId, value) => {
+    get().cancel(); clearPreview(); panelGeneration++;
+    set(state => ({ bitmapPreparation: { ...state.bitmapPreparation, [pluginId]: structuredClone(value) }, runError: null }));
+  },
   entries: [],
   activeFilename: null,
   collapsed: false,
@@ -127,6 +135,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
     if (!bridge?.rescan || get().loading || get().saving.length) return;
     const generation = ++registryGeneration;
     get().cancel(); clearPreview(); panelGeneration++;
+    clearPluginBitmapCaches();
     set({ loading: true, error: null, runError: "Plugins rescanned. Preview or run again before applying artwork." });
     try {
       const entries = await bridge.rescan();
@@ -167,6 +176,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       runError: null,
       parameters: { ...state.parameters, [manifest.id]: editor.parameters },
       detailBudgets: { ...state.detailBudgets, [manifest.id]: artwork?.pluginSource?.detailBudget ?? "standard" },
+      bitmapPreparation: { ...state.bitmapPreparation, [manifest.id]: structuredClone(artwork?.pluginSource?.bitmapPreparation ?? DEFAULT_BITMAP_PREPARATION) },
     }));
   },
   setCollapsed: (collapsed) => set({ collapsed }),
@@ -199,6 +209,7 @@ export const usePluginStore = create<PluginState>((set, get) => ({
       set((state) => ({
         parameters: { ...state.parameters, [pluginId]: defaultParameters(manifest) },
         detailBudgets: { ...state.detailBudgets, [pluginId]: "standard" },
+        bitmapPreparation: { ...state.bitmapPreparation, [pluginId]: structuredClone(DEFAULT_BITMAP_PREPARATION) },
         runError: null,
       }));
     }
@@ -299,6 +310,9 @@ async function runActivePlugin(previewOnly: boolean) {
     }
     const parameters = { ...defaultParameters(manifest), ...state.parameters[manifest.id] };
     const detailBudget = state.detailBudgets[manifest.id] ?? "standard";
+    let preparation: PluginBitmapPreparationSettings | undefined;
+    try { if (manifest.bitmapPreparation) preparation = validateBitmapPreparationSettings(state.bitmapPreparation[manifest.id] ?? DEFAULT_BITMAP_PREPARATION); }
+    catch (error) { set({ runError: message(error) }); return; }
     const error = (manifest.controls ?? [])
       .map((control) => parameterError(control, parameters[control.key]))
       .find(Boolean);
@@ -347,6 +361,7 @@ async function runActivePlugin(previewOnly: boolean) {
           current.sourceFingerprint !== entry.sourceFingerprint ||
           next.activeFilename !== entry.filename || next.parameters[manifest.id] !== state.parameters[manifest.id] ||
           next.detailBudgets[manifest.id] !== state.detailBudgets[manifest.id]) invalidate();
+      if (next.bitmapPreparation[manifest.id] !== state.bitmapPreparation[manifest.id]) invalidate();
     });
     let retainedPreview = false;
     const release = () => { unsubscribe(); unsubscribeMachine(); unsubscribePlugins(); };
@@ -373,7 +388,7 @@ async function runActivePlugin(previewOnly: boolean) {
       }
       const input: PluginInput = manifest.input === "none"
         ? { kind: "none", page, ...(palette.length ? { palette } : {}) }
-        : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget);
+        : await buildPluginInput(manifest, canvas, page, source, abort.signal, detailBudget, preparation);
       assertCurrent();
       const seed = target?.pluginSource?.seed ?? 1;
       const request: PluginRunRequest = { runId, pluginId: manifest.id, input, parameters, seed, ...(entry.sourceFingerprint ? { sourceFingerprint: entry.sourceFingerprint } : {}), ...(detailBudget === "extended" ? { detailBudget } : {}) };
@@ -391,6 +406,7 @@ async function runActivePlugin(previewOnly: boolean) {
       } else {
         const prepared = await preparePluginArtwork(result, manifest, parameters, page, machine, source, seed, {
           sourceFingerprint: entry.sourceFingerprint,
+          bitmapPreparation: preparation,
           groupId: target?.pluginSource?.outputGroupId,
           groupName: target?.pluginSource?.outputGroupName,
           palette: input.palette,

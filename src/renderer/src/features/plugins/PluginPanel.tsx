@@ -6,6 +6,7 @@ import { PluginControlField } from "./PluginControlField";
 import { useCanvasStore } from "../../store/canvasStore";
 import { selectedPluginSource } from "./pluginProcessing";
 import { pluginEditor } from "./pluginEditing";
+import { PluginBitmapPreparationControls } from "./PluginBitmapPreparationControls";
 
 export function PluginPanel() {
   const bodyId = useId();
@@ -19,6 +20,7 @@ export function PluginPanel() {
   const detailBudgets = usePluginStore(state => state.detailBudgets);
   const setDetailBudget = usePluginStore(state => state.setDetailBudget);
   const running = usePluginStore((state) => state.running);
+  const loading = usePluginStore((state) => state.loading);
   const error = usePluginStore((state) => state.runError);
   const setCollapsed = usePluginStore((state) => state.setCollapsed);
   const closePanel = usePluginStore((state) => state.closePanel);
@@ -34,7 +36,7 @@ export function PluginPanel() {
   const manifest = entry?.manifest;
   if (!manifest) return null;
   const pluginUnavailable = !entry.enabled || !!entry.error;
-  const unavailable = pluginUnavailable || (!!editingImportId && !editingArtwork);
+  const unavailable = pluginUnavailable || loading || (!!editingImportId && !editingArtwork);
   const processor = manifest.input !== "none";
   let selectionError: string | undefined;
   try { selectedPluginSource(manifest, canvas, editingImportId ?? undefined); }
@@ -77,6 +79,7 @@ export function PluginPanel() {
             <p className="text-[10px] text-content-muted">More capacity for detailed artwork. Your size settings stay unchanged. Calculation can take up to three minutes.</p>
           </div>
           {(manifest.controls ?? []).map((control) => <PluginControlField key={control.key} control={control} palette={canvas.layerGroups} value={parameters[manifest.id]?.[control.key] ?? control.default} disabled={busy || unavailable} onChange={(value) => setParameter(manifest.id, control.key, value)} />)}
+          {manifest.bitmapPreparation && <PluginBitmapPreparationControls pluginId={manifest.id} disabled={busy || unavailable} />}
           {error && <p role="alert" className="text-xs text-accent break-words">{error}</p>}
           <div className="flex flex-wrap gap-2">
             {busy ? <Button size="sm" type="button" onClick={cancel}>Cancel plugin</Button> : <>

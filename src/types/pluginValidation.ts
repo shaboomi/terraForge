@@ -11,6 +11,7 @@ import type {
   PluginPolyline,
   PluginDetailBudget,
 } from "./index";
+import { validatePreparedPluginBitmap } from "./pluginBitmapPreparation";
 
 export const PLUGIN_LIMITS = Object.freeze({
   sourceBytes: 1024 * 1024,
@@ -158,7 +159,8 @@ function control(value: unknown): PluginControl {
 
 export function validatePluginManifest(value: unknown): PluginManifest {
   const item = object(value, "Plugin metadata");
-  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls"], "Plugin metadata");
+  fields(item, ["id", "name", "version", "apiVersion", "description", "category", "input", "outputs", "controls", "bitmapPreparation"], "Plugin metadata");
+  if (item.bitmapPreparation !== undefined && (item.bitmapPreparation !== true || item.input !== "bitmap")) throw new Error("Shared bitmap preparation requires bitmap input and explicit true opt-in.");
   const id = identifier(item.id);
   const name = nonempty(item.name, "Plugin name");
   const version = nonempty(item.version, "Plugin version", 80);
@@ -176,7 +178,7 @@ export function validatePluginManifest(value: unknown): PluginManifest {
     controls = Array.from(item.controls, control);
     if (new Set(controls.map((entry) => entry.key)).size !== controls.length) throw new Error("Control keys must be unique.");
   }
-  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }) };
+  return { id, name, version, apiVersion: 1, description, category: item.category, input: item.input, outputs: [...item.outputs] as PluginManifest["outputs"], ...(controls === undefined ? {} : { controls }), ...(item.bitmapPreparation === true ? { bitmapPreparation: true as const } : {}) };
 }
 
 export function parsePluginSource(source: string): PluginManifest {
@@ -262,10 +264,10 @@ export function validatePluginRunRequest(value: unknown): PluginRunRequest {
     const frame = { width: sourceDimension(supplied.width, "Source width"), height: sourceDimension(supplied.height, "Source height") };
     const selection = { ...common, ...frame, sourceId: reference(supplied.sourceId, "Source ID"), placement: placement(supplied.placement) };
     if (supplied.kind === "bitmap") {
-      fields(supplied, [...allowed, "widthPx", "heightPx", "data"], "Bitmap input");
+      fields(supplied, [...allowed, "widthPx", "heightPx", "data", "prepared"], "Bitmap input");
       const pixels = rgba(supplied, { pixels: 0 });
       if (frame.width !== pixels.widthPx || frame.height !== pixels.heightPx) throw new Error("Bitmap source frame must match its pixel dimensions.");
-      input = { ...selection, kind: "bitmap", ...pixels };
+      input = { ...selection, kind: "bitmap", ...pixels, ...(supplied.prepared === undefined ? {} : { prepared: validatePreparedPluginBitmap(supplied.prepared, pixels.widthPx, pixels.heightPx) }) };
     } else if (supplied.kind === "vector") {
       fields(supplied, [...allowed, "paths"], "Vector input");
       input = { ...selection, kind: "vector", paths: polylines(supplied.paths, frame.width, frame.height, { paths: 0, points: 0 }, false, limits) };
