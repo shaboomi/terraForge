@@ -86,10 +86,44 @@ describe("built-in text generator", () => {
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Import TTF / OTF" }));
     await screen.findByRole("option", { name: "Test font" });
-    expect(window.terraForge.fonts.importFont).toHaveBeenCalledWith(DEFAULT_TEXT_SETTINGS.text);
+    expect(window.terraForge.fonts.importFont).toHaveBeenCalledWith(DEFAULT_TEXT_SETTINGS.text, "centerline");
     fireEvent.click(screen.getByRole("button", { name: "Delete selected font" }));
     await waitFor(() => expect(screen.queryByRole("option", { name: "Test font" })).not.toBeInTheDocument());
     expect(window.terraForge.fonts.remove).toHaveBeenCalledWith("test");
     expect(useCanvasStore.getState().imports).toHaveLength(0);
+  });
+
+  it("filters font versions by import mode and previews real Solid/Sketch strokes", async () => {
+    const outlineFont: ProcessedFont = { ...font, id: "outline", name: "Outline font", mode: "outline", glyphs: {
+      A: { advanceWidth: 600, paths: [], outline: [{ type: "M", x: 0, y: 0 }, { type: "L", x: 500, y: 0 }, { type: "L", x: 500, y: 700 }, { type: "L", x: 0, y: 700 }, { type: "Z" }] },
+    } };
+    vi.mocked(window.terraForge.fonts.list).mockResolvedValue([font, outlineFont]);
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Test font" });
+    expect(screen.queryByRole("option", { name: "Outline font" })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "A" } });
+    fireEvent.change(screen.getByLabelText("Font mode"), { target: { value: "outline" } });
+    expect(screen.getByRole("option", { name: "Outline font" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Use stroke width information" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Text outline preview" }).querySelectorAll("path")).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Text infill"), { target: { value: "solid" } });
+    expect(screen.getByRole("img", { name: "Text outline preview" }).querySelectorAll("path").length).toBeGreaterThan(2);
+    fireEvent.change(screen.getByLabelText("Text infill"), { target: { value: "sketch" } });
+    fireEvent.change(screen.getByLabelText("Fill spacing (mm)"), { target: { value: "0.6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add text to canvas" }));
+    expect(useCanvasStore.getState().imports[0]).toMatchObject({ useStrokeWidths: false,
+      textSource: { mode: "outline", infill: "sketch", fillSpacingMM: 0.6 }, paths: expect.any(Array) });
+  });
+
+  it("enables width control and saves the moving brush lead-in without discarding width data", async () => {
+    render(<TextGeneratorDialog open onOpenChange={vi.fn()} />);
+    await screen.findByRole("option", { name: "Test font" });
+    fireEvent.change(screen.getByLabelText("Text to generate"), { target: { value: "A" } });
+    expect(screen.getByRole("checkbox", { name: "Use stroke width information" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use stroke width information" }));
+    fireEvent.change(screen.getByLabelText("Brush lead-in (mm)"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add text to canvas" }));
+    expect(useCanvasStore.getState().imports[0]).toMatchObject({ useStrokeWidths: true, brushLeadInMM: 2,
+      textSource: { useStrokeWidths: true, brushLeadInMM: 2 }, paths: [{ centerline: { points: expect.any(Array) } }] });
   });
 });

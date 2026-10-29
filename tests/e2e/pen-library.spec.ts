@@ -45,6 +45,12 @@ test("brush specifications, calibrated speed and reusable pen library survive la
     await mockOpenDialog(electronApp, fixturePath("sample.svg"));
     await window.getByRole("button", { name: "Import", exact: true }).click();
     await expect(window.getByText("sample", { exact: true }).first()).toBeVisible();
+    await window.getByText("sample", { exact: true }).first().click();
+    // Leave room for the physical moving brush approach around every stroke.
+    await window.getByLabel("X (mm)", { exact: true }).fill("5");
+    await window.getByLabel("X (mm)", { exact: true }).blur();
+    await window.getByLabel("Y (mm)", { exact: true }).fill("5");
+    await window.getByLabel("Y (mm)", { exact: true }).blur();
     await mockIpcInvoke(electronApp, "fs:saveLayoutDialog", layoutPath);
     await pushRendererEvent(electronApp, "menu:saveLayout", undefined);
     await expect.poll(() => existsSync(layoutPath)).toBe(true);
@@ -64,7 +70,8 @@ test("brush specifications, calibrated speed and reusable pen library survive la
     await expect.poll(() => existsSync(gcodePath), { timeout: 30000 }).toBe(true);
     const gcode = readFileSync(gcodePath, "utf8");
     expect(gcode).toMatch(/^F900\s*$/m);
-    expect(gcode).toMatch(/^G1\s+Z-0\.161/m);
+    expect(gcode).toMatch(/^G1\s+X[-\d.]+\s+Y[-\d.]+\s+Z-0\.161 ; Brush moving lead-in/m);
+    expect(gcode).not.toMatch(/^G1\s+Z[-\d.]+ ; Brush contact/m);
 
     await pushRendererEvent(electronApp, "menu:closeLayout", undefined);
     await window.getByRole("button", { name: "Exit without Saving", exact: true }).click();

@@ -41,6 +41,8 @@ function projectPathToVectorObjects(
     passCount: path.passCount ?? 1,
     passMode: path.passMode ?? "repeat",
     centerline: path.centerline,
+    useStrokeWidths: imp.useStrokeWidths ?? imp.textSource?.useStrokeWidths,
+    brushLeadInMM: imp.brushLeadInMM ?? imp.textSource?.brushLeadInMM,
   };
   const importStrokeEnabled = imp.strokeEnabled ?? true;
   const pathStrokeEnabled = path.strokeEnabled ?? true;

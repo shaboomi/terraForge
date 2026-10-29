@@ -3,13 +3,14 @@ import type { BrowserWindow } from "electron";
 
 const mocks = vi.hoisted(() => ({
   handlers:new Map<string,(event:unknown,...args:unknown[]) => unknown>(),
-  dialog:vi.fn(),list:vi.fn(),save:vi.fn(),remove:vi.fn(),read:vi.fn(),workers:[] as { emit:(name:string,value:unknown) => void; terminate:ReturnType<typeof vi.fn> }[],
+  dialog:vi.fn(),list:vi.fn(),save:vi.fn(),remove:vi.fn(),read:vi.fn(),workers:[] as { emit:(name:string,value:unknown) => void; terminate:ReturnType<typeof vi.fn>; workerData:unknown }[],
 }));
 vi.mock("electron",() => ({app:{getPath:() => "font-test-library"},dialog:{showOpenDialog:mocks.dialog},ipcMain:{handle:(name:string,handler:(event:unknown,...args:unknown[]) => unknown) => mocks.handlers.set(name,handler)}}));
 vi.mock("node:worker_threads",() => { const Worker = class {
   callbacks = new Map<string,(value:unknown) => void>();
   terminate = vi.fn().mockResolvedValue(0);
-  constructor() { mocks.workers.push(this); }
+  workerData:unknown;
+  constructor(_path:unknown,options:{workerData:unknown}) { this.workerData=options.workerData; mocks.workers.push(this); }
   once(name:string,callback:(value:unknown) => void) { this.callbacks.set(name,callback); return this; }
   emit(name:string,value:unknown) { this.callbacks.get(name)?.(value); }
 };return {Worker,default:{Worker}};});
@@ -52,6 +53,18 @@ describe("font IPC and worker boundaries",() => {
     await expect(invoke("fonts:import",event)).rejects.toThrow(/already/);
     finish({canceled:true,filePaths:[]});
     await expect(first).resolves.toBeNull();
+  });
+  it("checks the mode before opening the picker and passes outline imports to the worker",async () => {
+    await expect(invoke("fonts:import",event,"O","bad-mode")).rejects.toThrow(/font mode/);
+    expect(mocks.dialog).not.toHaveBeenCalled();
+    mocks.dialog.mockResolvedValue({canceled:false,filePaths:["C:/font-test/Test.otf"]});
+    const result = invoke("fonts:import",event,"O","outline");
+    await vi.waitFor(() => expect(mocks.workers).toHaveLength(1));
+    expect(mocks.workers[0].workerData).toMatchObject({identity:{characters:"O",mode:"outline"}});
+    expect(mocks.dialog.mock.calls[0][1].title).toBe("Import standard outline font");
+    const outline = {...font,mode:"outline"}; mocks.workers[0].emit("message",{font:outline});
+    await expect(result).resolves.toEqual(outline);
+    expect(mocks.save).toHaveBeenCalledWith(outline);
   });
   it("validates worker results and terminates the processor after success",async () => {
     const result = runFontWorker(new Uint8Array(100),{id:"font-test",sourceName:"Test.ttf"});

@@ -7,7 +7,7 @@ import { parsePenProfile } from "./pens";
 type Row = Record<string, unknown>;
 const BAD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const BASE_FIELDS = ["kind", "id", "name", "x", "y", "scale", "scaleX", "scaleY", "rotation", "visible", "svgWidth", "svgHeight", "viewBoxX", "viewBoxY", "pluginSource"];
-const VECTOR_FLAGS = ["hatchEnabled", "strokeEnabled", "plotPointsEnabled", "generatedStrokeForNoStroke"];
+const VECTOR_FLAGS = ["hatchEnabled", "strokeEnabled", "plotPointsEnabled", "generatedStrokeForNoStroke", "useStrokeWidths"];
 const PATH_FLAGS = ["hasFill", "sourceOutlineVisible", "outlineVisible", "strokeEnabled", "fillEnabled", "generatedStrokeEnabled"];
 const COLOURS = ["fillColor", "strokeColor", "sourceColor"];
 
@@ -191,17 +191,29 @@ function path(value: unknown): SvgPath {
 }
 
 function vector(item: Row): SvgImport {
-  fields(item, [...BASE_FIELDS, "paths", "layers", ...VECTOR_FLAGS, "hatchSpacingMM", "hatchAngleDeg", "strokeWidthMM", "pluginSource", "textSource"], "Vector item");
+  fields(item, [...BASE_FIELDS, "paths", "layers", ...VECTOR_FLAGS, "hatchSpacingMM", "hatchAngleDeg", "strokeWidthMM", "pluginSource", "textSource", "brushLeadInMM"], "Vector item");
   const result: SvgImport = { ...base(item), kind: "vector", paths: Array.from(array(item.paths, "Paths", 100000), path) };
   if (item.textSource !== undefined) {
     const source = row(item.textSource, "Text source");
-    fields(source, ["fontId", "fontName", "text", "fontSizeMM", "letterSpacingMM", "lineSpacing", "alignment"], "Text source");
+    fields(source, ["fontId", "fontName", "text", "fontSizeMM", "letterSpacingMM", "lineSpacing", "alignment", "mode", "useStrokeWidths", "brushLeadInMM", "infill", "fillSpacingMM", "fillAngleDeg"], "Text source");
     if (!["left", "center", "right"].includes(String(source.alignment))) throw new Error("Invalid text alignment.");
     result.textSource = {
       fontId: id(source.fontId), fontName: text(source.fontName, "Font name"), text: text(source.text, "Text", 4096),
       fontSizeMM: number(source.fontSizeMM, "Font size", 1, 1000), letterSpacingMM: number(source.letterSpacingMM, "Letter spacing", -500, 1000),
       lineSpacing: number(source.lineSpacing, "Line spacing", 0.1, 10), alignment: source.alignment as "left" | "center" | "right",
     };
+    if (source.mode !== undefined) {
+      if (source.mode !== "centerline" && source.mode !== "outline") throw new Error("Invalid text font mode.");
+      result.textSource.mode = source.mode;
+    }
+    if (source.useStrokeWidths !== undefined) result.textSource.useStrokeWidths = bool(source.useStrokeWidths, "Use stroke width information");
+    if (source.brushLeadInMM !== undefined) result.textSource.brushLeadInMM = number(source.brushLeadInMM, "Brush lead-in", 0.1, 20);
+    if (source.infill !== undefined) {
+      if (source.infill !== "outline" && source.infill !== "solid" && source.infill !== "sketch") throw new Error("Invalid font infill pattern.");
+      result.textSource.infill = source.infill;
+    }
+    if (source.fillSpacingMM !== undefined) result.textSource.fillSpacingMM = number(source.fillSpacingMM, "Font infill spacing", 0.05, 20);
+    if (source.fillAngleDeg !== undefined) result.textSource.fillAngleDeg = number(source.fillAngleDeg, "Font infill angle", -360, 360);
   }
   unique(result.paths.map((entry) => entry.id), "Path IDs within an item");
   if (item.layers !== undefined) {
@@ -216,6 +228,7 @@ function vector(item: Row): SvgImport {
   for (const key of VECTOR_FLAGS) if (item[key] !== undefined) Object.assign(result, { [key]: bool(item[key], key) });
   for (const key of ["hatchSpacingMM", "strokeWidthMM"]) if (item[key] !== undefined) Object.assign(result, { [key]: number(item[key], key, Number.MIN_VALUE, 1e6) });
   if (item.hatchAngleDeg !== undefined) result.hatchAngleDeg = number(item.hatchAngleDeg, "Hatch angle", -1e6, 1e6);
+  if (item.brushLeadInMM !== undefined) result.brushLeadInMM = number(item.brushLeadInMM, "Brush lead-in", 0.1, 20);
   return result;
 }
 

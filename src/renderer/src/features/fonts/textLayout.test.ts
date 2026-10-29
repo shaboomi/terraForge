@@ -54,7 +54,7 @@ describe("centre-line text layout", () => {
 
   it("stores editable text settings and unique path identities in ordinary vector artwork", () => {
     const item = createTextImport(font, settings, layoutText(font, settings), "text-1");
-    expect(item.textSource).toEqual({ fontId: font.id, fontName: font.name, ...settings });
+    expect(item.textSource).toEqual({ fontId: font.id, fontName: font.name, ...settings, mode: "centerline" });
     expect(item.paths.map((path) => path.id)).toEqual(["text-1-stroke-0", "text-1-stroke-1"]);
     expect(item.paths.every((path) => !!path.centerline && path.hasFill === false)).toBe(true);
     expect(item.hatchEnabled).toBe(false);
@@ -67,5 +67,19 @@ describe("centre-line text layout", () => {
     expect(() => layoutText(font, { ...settings, text: "A".repeat(2001) })).toThrow(/2000/);
     const corrupt: ProcessedFont = { ...font, glyphs: { A: { ...glyph, paths: [{ points: [{ x: 0, y: 0, width: -1 }, { x: 1, y: 1, width: 1 }] }] } } };
     expect(() => layoutText(corrupt, { ...settings, text: "A" })).toThrow(/invalid stroke/);
+  });
+
+  it("keeps measured width samples when disabled and saves brush lead-in when enabled", () => {
+    const geometry = layoutText(font, settings);
+    const fixed = createTextImport(font, settings, geometry, "fixed-text");
+    const brush = createTextImport(font, { ...settings, useStrokeWidths: true, brushLeadInMM: 2.5 }, geometry, "brush-text");
+    expect(fixed.useStrokeWidths).toBe(false);
+    expect(fixed.paths[0].centerline).toEqual(brush.paths[0].centerline);
+    expect(brush.useStrokeWidths).toBe(true);
+    expect(brush.brushLeadInMM).toBe(2.5);
+    expect(brush.textSource).toMatchObject({ useStrokeWidths: true, brushLeadInMM: 2.5 });
+    expect(() => layoutText(font, { ...settings, brushLeadInMM: 0 })).toThrow(/Brush lead-in/);
+    const { useStrokeWidths: _omitted, ...legacy } = settings;
+    expect(createTextImport(font, legacy, geometry, "legacy").useStrokeWidths).toBe(true);
   });
 });

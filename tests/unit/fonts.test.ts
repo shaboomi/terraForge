@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { Font, Glyph, Path, type PathCommand } from "opentype.js";
+import { Font, Glyph, Path, parse, type PathCommand } from "opentype.js";
 import { centerlineFromOutline, processFont, rasterizeContours } from "../../src/fonts/processor";
 import { distanceField, thinMask, traceSkeleton } from "../../src/fonts/skeleton";
 
@@ -50,6 +50,7 @@ describe("TTF and CFF/OTF processing",() => {
     const bytes = await readFile(resolve("node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf"));
     const font = processFont(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),identity);
     expect(font.name).toBe("Liberation Sans");
+    expect(font.mode).toBe("centerline");
     expect(font.glyphs[" "].advanceWidth).toBeGreaterThan(0);
     expect(font.glyphs[" "].paths).toEqual([]);
     expect(font.glyphs.O.paths).toHaveLength(1);
@@ -74,6 +75,37 @@ describe("TTF and CFF/OTF processing",() => {
   });
   it("rejects unsupported signatures before parsing",() => {
     expect(() => processFont(new ArrayBuffer(32),identity)).toThrow(/TTF or OTF/);
+  });
+  it("preserves TrueType quadratic outlines and counter contours without centreline conversion",async () => {
+    const bytes = await readFile(resolve("node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf"));
+    const buffer = bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+    const original = parse(buffer), font = processFont(buffer,{...identity,mode:"outline"});
+    expect(font.mode).toBe("outline");
+    expect(font.glyphs.O.paths).toEqual([]);
+    expect(font.glyphs.O.outline).toEqual(original.charToGlyph("O").path.commands);
+    expect(font.glyphs.O.outline?.filter((command) => command.type === "M")).toHaveLength(2);
+    expect(font.glyphs.O.outline?.filter((command) => command.type === "Z")).toHaveLength(2);
+    expect(font.glyphs.O.outline?.some((command) => command.type === "Q")).toBe(true);
+    expect(font.glyphs[" "].outline).toEqual([]);
+    expect(font.glyphs[" "].advanceWidth).toBeGreaterThan(0);
+    expect(font.kerning.AV).toBeLessThan(0);
+    expect(font.warnings.join(" ")).not.toMatch(/raster|192 pixels/);
+    expect(font.warnings.join(" ")).toContain("shaping");
+  },30_000);
+  it("preserves CFF/OTF cubic curves and hole winding exactly",() => {
+    const path = new Path();
+    path.moveTo(0,350);path.curveTo(0,0,600,0,600,350);path.curveTo(600,700,0,700,0,350);path.close();
+    path.moveTo(100,350);path.curveTo(100,600,500,600,500,350);path.curveTo(500,100,100,100,100,350);path.close();
+    const original = new Font({familyName:"Outline Test",styleName:"Regular",unitsPerEm:1000,ascender:800,descender:-200,glyphs:[
+      new Glyph({name:".notdef",advanceWidth:500,path:new Path()}),new Glyph({name:"O",unicode:79,advanceWidth:650,path}),
+    ]});
+    const buffer = original.toArrayBuffer(), parsed = parse(buffer);
+    const font = processFont(buffer,{...identity,mode:"outline"});
+    expect(font.glyphs.O.paths).toEqual([]);
+    expect(font.glyphs.O.outline).toEqual(parsed.charToGlyph("O").path.commands);
+    expect(font.glyphs.O.outline?.filter((command) => command.type === "C")).toHaveLength(4);
+    expect(font.glyphs.O.outline?.filter((command) => command.type === "Z")).toHaveLength(2);
+    expect(font.glyphs.O.advanceWidth).toBe(650);
   });
   it("supports non-Latin cmap entries and prioritizes requested symbols in large fonts",() => {
     const path = new Path(); path.moveTo(0,0);path.lineTo(100,0);path.lineTo(100,700);path.lineTo(0,700);path.close();

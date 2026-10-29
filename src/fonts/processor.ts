@@ -1,5 +1,5 @@
 import { parse, type PathCommand } from "opentype.js";
-import type { CenterlineGlyph, ProcessedFont } from "../types/fonts";
+import type { CenterlineGlyph, FontMode, FontOutlineCommand, ProcessedFont } from "../types/fonts";
 import { distanceField, simplifyStroke, thinMask, traceSkeleton } from "./skeleton";
 
 interface Point { x: number; y: number }
@@ -83,10 +83,26 @@ function supportedCodepoint(code: number): boolean {
   return code >= 0x20 && code <= 0x24f || code >= 0x2000 && code <= 0x206f || code >= 0x20a0 && code <= 0x20cf;
 }
 
-export interface FontIdentity { id: string; sourceName: string; createdAt?: string; characters?: string }
+export interface FontIdentity { id: string; sourceName: string; createdAt?: string; characters?: string; mode?: FontMode }
 
-/** TTF quadratic and OTF/CFF cubic outlines share the same centreline pipeline. */
+/** Copy native contours without flattening, rasterizing or changing their winding. */
+function copyOutline(commands: PathCommand[]): FontOutlineCommand[] {
+  if (commands.length > 50_000) throw new Error("Glyph outline exceeds the processing complexity limit.");
+  return commands.map((command) => {
+    switch (command.type) {
+      case "M": case "L": return { type:command.type,x:command.x,y:command.y };
+      case "Q": return { type:"Q",x1:command.x1,y1:command.y1,x:command.x,y:command.y };
+      case "C": return { type:"C",x1:command.x1,y1:command.y1,x2:command.x2,y2:command.y2,x:command.x,y:command.y };
+      case "Z": return { type:"Z" };
+      default: throw new Error("Font contains an unsupported outline command.");
+    }
+  });
+}
+
+/** Preserve TTF/OTF contours or convert them into centreline geometry. */
 export function processFont(bytes: ArrayBuffer, identity: FontIdentity): ProcessedFont {
+  const mode = identity.mode ?? "centerline";
+  if (mode !== "centerline" && mode !== "outline") throw new Error("Choose centreline or standard outline font mode.");
   if (bytes.byteLength > FONT_PROCESSING_LIMITS.fileBytes || bytes.byteLength < 12) throw new Error("Choose a nonempty TTF or OTF font smaller than 20 MiB.");
   const signature = new DataView(bytes).getUint32(0);
   if (signature !== 0x00010000 && signature !== 0x4f54544f && signature !== 0x74727565) throw new Error("This file is not a supported TTF or OTF font.");
@@ -103,16 +119,18 @@ export function processFont(bytes: ArrayBuffer, identity: FontIdentity): Process
   if (!codes.length) throw new Error("This font has no mapped printable glyphs.");
   const glyphs: ProcessedFont["glyphs"] = {}, kerning: Record<string,number> = {}, warnings: string[] = [];
   if (codes.length < available.length) warnings.push(`Processed ${codes.length} of ${available.length} mapped characters (768-character limit). Text entered before import takes priority, followed by Latin and punctuation. Reimport with the required text to include other characters.`);
-  warnings.push("Centreline and stroke widths are raster approximations at 192 pixels per em. Inspect fine details before plotting. Complex-script shaping, ligatures and variable-font axes are not applied.");
+  if (mode === "centerline") warnings.push("Centreline and stroke widths are raster approximations at 192 pixels per em. Inspect fine details before plotting.");
+  warnings.push("Complex-script shaping, ligatures and variable-font axes are not applied.");
   const cache = new Map<number,CenterlineGlyph>();
   let totalPoints = 0;
   for (const code of codes) {
     const character = String.fromCodePoint(code), glyph = font.charToGlyph(character);
     if (!cache.has(glyph.index)) {
-      const paths = centerlineFromOutline(glyph.path.commands,font.unitsPerEm);
-      totalPoints += paths.reduce((sum,path) => sum+path.points.length,0);
+      const outline = mode === "outline" ? copyOutline(glyph.path.commands) : undefined;
+      const paths = mode === "centerline" ? centerlineFromOutline(glyph.path.commands,font.unitsPerEm) : [];
+      totalPoints += outline?.length ?? paths.reduce((sum,path) => sum+path.points.length,0);
       if (totalPoints > FONT_PROCESSING_LIMITS.points) throw new Error("Processed font exceeds the geometry limit. Choose a less detailed font.");
-      cache.set(glyph.index,{ advanceWidth: glyph.advanceWidth ?? font.unitsPerEm/2,paths });
+      cache.set(glyph.index,{ advanceWidth: glyph.advanceWidth ?? font.unitsPerEm/2,paths,...(outline === undefined ? {} : {outline}) });
     }
     glyphs[character] = cache.get(glyph.index)!;
   }
@@ -125,7 +143,7 @@ export function processFont(bytes: ArrayBuffer, identity: FontIdentity): Process
   // The parser resolves the platform-specific OpenType name tables for us.
   const name = font.getEnglishName("fullName") || font.getEnglishName("fontFamily") || identity.sourceName;
   return {
-    version:1,id:identity.id,name:name.slice(0,200),sourceName:identity.sourceName.slice(0,255),createdAt:identity.createdAt ?? new Date().toISOString(),
+    version:1,mode,id:identity.id,name:name.slice(0,200),sourceName:identity.sourceName.slice(0,255),createdAt:identity.createdAt ?? new Date().toISOString(),
     unitsPerEm:font.unitsPerEm,ascender:font.ascender,descender:font.descender,lineGap:font.tables.hhea?.lineGap ?? 0,glyphs,kerning,warnings,
   };
 }

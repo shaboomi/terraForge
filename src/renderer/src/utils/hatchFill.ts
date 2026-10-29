@@ -197,6 +197,7 @@ export function generateHatchPaths(
   d: string,
   spacingUnits: number,
   angleDeg: number,
+  fillRule: "evenodd" | "nonzero" = "evenodd",
 ): string[] {
   try {
     const segs = flattenPathToSegments(d);
@@ -244,27 +245,41 @@ export function generateHatchPaths(
       scanY < maxY;
       scanY += spacingUnits
     ) {
-      const xs: number[] = [];
+      const intersections: { x: number; winding: number }[] = [];
       for (const s of rotSegs) {
         const { x1, y1, x2, y2 } = s;
         // Include lower endpoint, exclude upper to avoid double-counting shared
         // vertices between adjacent segments.
         if ((y1 <= scanY && scanY < y2) || (y2 <= scanY && scanY < y1)) {
           const t = (scanY - y1) / (y2 - y1);
-          xs.push(x1 + t * (x2 - x1));
+          intersections.push({ x: x1 + t * (x2 - x1), winding: y2 > y1 ? 1 : -1 });
         }
       }
-      if (xs.length < 2) continue;
+      if (intersections.length < 2) continue;
 
-      xs.sort((a, b) => a - b);
+      intersections.sort((a, b) => a.x - b.x);
 
-      // Even-odd fill rule: draw between pairs (0→1), (2→3), …
-      for (let i = 0; i + 1 < xs.length; i += 2) {
-        const p1 = rotPt(xs[i], scanY, cosP, sinP);
-        const p2 = rotPt(xs[i + 1], scanY, cosP, sinP);
+      const emitSpan = (from: number, to: number) => {
+        if (to - from < 1e-9) return;
+        const p1 = rotPt(from, scanY, cosP, sinP);
+        const p2 = rotPt(to, scanY, cosP, sinP);
         paths.push(
           `M${p1.x.toFixed(3)},${p1.y.toFixed(3)} L${p2.x.toFixed(3)},${p2.y.toFixed(3)}`,
         );
+      };
+      if (fillRule === "nonzero") {
+        // Continue the same stroke across overlapping/touching filled contours.
+        // Only an actual counter (winding zero) requires a lift.
+        let winding = 0, start = 0;
+        for (let i = 0; i < intersections.length;) {
+          const x = intersections[i].x, before = winding;
+          do { winding += intersections[i++].winding; }
+          while (i < intersections.length && Math.abs(intersections[i].x - x) < 1e-9);
+          if (before === 0 && winding !== 0) start = x;
+          if (before !== 0 && winding === 0) emitSpan(start, x);
+        }
+      } else {
+        for (let i = 0; i + 1 < intersections.length; i += 2) emitSpan(intersections[i].x, intersections[i + 1].x);
       }
     }
 

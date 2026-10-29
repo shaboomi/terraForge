@@ -2,7 +2,7 @@ import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } fro
 import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import type { ProcessedFont } from "../../types/fonts";
+import type { FontMode, ProcessedFont } from "../../types/fonts";
 import { FONT_PROCESSING_LIMITS, type FontIdentity } from "../../fonts/processor";
 import { readBoundedFile } from "../files/boundedFile";
 import { createFontLibrary, validateProcessedFont } from "./library";
@@ -35,18 +35,19 @@ export function registerFontHandlers(getMainWindow: () => BrowserWindow | null):
   };
   ipcMain.handle("fonts:list",async (event) => { assertSender(event); return library.list(); });
   ipcMain.handle("fonts:remove",async (event,id: unknown) => { assertSender(event); return library.remove(id); });
-  ipcMain.handle("fonts:import",async (event,characters: unknown) => {
+  ipcMain.handle("fonts:import",async (event,characters: unknown,mode: unknown) => {
     assertSender(event);
     if (characters !== undefined && (typeof characters !== "string" || characters.length > 4096)) throw new Error("Font character selection must contain at most 4096 characters.");
+    if (mode !== undefined && mode !== "centerline" && mode !== "outline") throw new Error("Choose centreline or standard outline font mode.");
     if (importing) throw new Error("A font is already being processed.");
     importing = true;
     try {
-      const result = await dialog.showOpenDialog(getMainWindow()!,{ title:"Process font to centrelines",filters:[{ name:"TrueType and OpenType fonts",extensions:["ttf","otf"] }],properties:["openFile"] });
+      const result = await dialog.showOpenDialog(getMainWindow()!,{ title:mode === "outline" ? "Import standard outline font" : "Process font to centrelines",filters:[{ name:"TrueType and OpenType fonts",extensions:["ttf","otf"] }],properties:["openFile"] });
       if (result.canceled || !result.filePaths[0]) return null;
       const file = result.filePaths[0];
       if (![".ttf",".otf"].includes(extname(file).toLowerCase())) throw new Error("Choose a TTF or OTF font.");
       const bytes = await readBoundedFile(file,FONT_PROCESSING_LIMITS.fileBytes,"Font");
-      const font = await runFontWorker(bytes,{ id:randomUUID(),sourceName:basename(file),characters:characters as string | undefined });
+      const font = await runFontWorker(bytes,{ id:randomUUID(),sourceName:basename(file),characters:characters as string | undefined,mode:mode as FontMode | undefined });
       await library.save(font);
       return font;
     } finally { importing = false; }

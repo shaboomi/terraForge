@@ -39,7 +39,7 @@ import {
 } from "./gcodeEngine/stages/pathOptimization";
 import { applyVinylCompensation } from "./gcodeEngine/stages/vinylCompensation";
 import { applyVinylWeedBorder } from "./gcodeEngine/stages/vinylWeedBorder";
-import { brushZ, penFeedrate, transformCenterline, validatePlotPen } from "./gcodeEngine/stages/penProfile";
+import { brushLeadInStart, brushZ, penFeedrate, transformCenterline, validatePlotPen } from "./gcodeEngine/stages/penProfile";
 import type { PenProfile } from "../types/pens";
 
 interface GenerateMessage {
@@ -72,6 +72,8 @@ function fmtSeconds(n: number): string {
 }
 
 interface TravelSubpath {
+  brushLeadInMM?: number;
+  useStrokeWidths?: boolean;
   penProfile?: PenProfile;
   plotOrder?: number;
   penId?: string;
@@ -81,6 +83,7 @@ interface TravelSubpath {
 }
 
 interface TravelPoint {
+  useStrokeWidths?: boolean;
   penProfile?: PenProfile;
   point: { x: number; y: number };
   layer?: string;
@@ -755,8 +758,9 @@ async function generate(msg: GenerateMessage): Promise<void> {
   }
 
   const visibleObjects = objects.filter((o) => o.visible);
-  for (const object of visibleObjects) validatePlotPen(object.penProfile, config);
-  if (options?.vinylCutting && visibleObjects.some(object => object.penProfile?.type === "brush")) {
+  const usesBrushHeight = (object: { penProfile?: PenProfile; useStrokeWidths?: boolean }) => object.penProfile?.type === "brush" && object.useStrokeWidths !== false;
+  for (const object of visibleObjects) validatePlotPen(object.penProfile, config, object.useStrokeWidths !== false);
+  if (options?.vinylCutting && visibleObjects.some(usesBrushHeight)) {
     throw new Error("Brush height control requires pen plotting mode. Disable vinyl cutting before exporting.");
   }
   if (orderedOutput && visibleObjects.some(object => object.pointTap)) {
@@ -840,6 +844,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
           color: pointTapObj.sourceColor,
           repeats: Math.max(1, pointTapObj.passCount ?? 1),
           penProfile: obj.penProfile,
+          useStrokeWidths: obj.useStrokeWidths,
         });
         break;
       }
@@ -915,11 +920,13 @@ async function generate(msg: GenerateMessage): Promise<void> {
       if (sp.length >= 2) {
         allSubpaths.push({
           points: sp,
+          brushLeadInMM: obj.brushLeadInMM,
           layer: obj.layer,
           color: obj.sourceColor,
           plotOrder: obj.plotOrder,
           penId: obj.penId,
           penProfile: obj.penProfile,
+          useStrokeWidths: obj.useStrokeWidths,
         });
       }
     }
@@ -960,8 +967,8 @@ async function generate(msg: GenerateMessage): Promise<void> {
       const batches = new Map<string, TravelSubpath[]>();
       for (const path of allSubpaths) {
         const key = path.plotOrder === undefined
-          ? (path.penProfile ? `pen:${path.penId}:${JSON.stringify(path.penProfile)}` : "legacy")
-          : `${path.plotOrder}:${path.penId ?? path.color}`;
+          ? (path.penProfile ? `pen:${path.penId}:${JSON.stringify(path.penProfile)}:${path.useStrokeWidths !== false}` : "legacy")
+          : `${path.plotOrder}:${path.penId ?? path.color}:${path.useStrokeWidths !== false}`;
         const batch = batches.get(key) ?? []; batch.push(path); batches.set(key, batch);
       }
       orderedSubpaths = [];
@@ -1080,7 +1087,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
     !!inkService &&
     inkTriggerBase > 0 &&
     inkService.stations.some(isEnabledStation);
-  if (canEmitInkService && visibleObjects.some(object => object.penProfile?.type === "brush")) {
+  if (canEmitInkService && visibleObjects.some(usesBrushHeight)) {
     throw new Error("Export brush height-controlled artwork with ink service disabled. Brush service requires a separately calibrated station height.");
   }
   const totalOperations = orderedSubpaths.length + allPoints.length;
@@ -1181,23 +1188,29 @@ async function generate(msg: GenerateMessage): Promise<void> {
 
     const first = subpath[0];
 
-    if (orderedSubpaths[i].penProfile?.type === "brush") lines.push("G90 ; Absolute brush coordinates");
-    lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)} ; Rapid travel`);
+    const heightControlled = usesBrushHeight(orderedSubpaths[i]);
+    const leadStart = heightControlled ? brushLeadInStart(subpath, config, orderedSubpaths[i].brushLeadInMM, options?.pageClip) : first;
+    if (heightControlled) {
+      lines.push("G90 ; Absolute brush coordinates");
+      lines.push(config.penUpCommand + " ; Brush lead-in clearance");
+    }
+    lines.push(`G0 X${fmt(leadStart.x)} Y${fmt(leadStart.y)} ; Rapid travel`);
     const drawSpeed = penFeedrate(
       typeof options?.drawSpeedOverride === "number"
         ? options.drawSpeedOverride
         : config.drawSpeed, orderedSubpaths[i].penProfile);
     lines.push(`F${drawSpeed}`);
     const profile = orderedSubpaths[i].penProfile;
-    const startZ = brushZ(profile, first.width);
-    lines.push(startZ === undefined ? config.penDownCommand + " ; Pen down" : `G1 Z${fmt(startZ)} ; Brush contact`);
-    if (penDownDelayMs > 0) {
+    const useStrokeWidths = orderedSubpaths[i].useStrokeWidths !== false;
+    const startZ = brushZ(profile, first.width, useStrokeWidths);
+    lines.push(startZ === undefined ? config.penDownCommand + " ; Pen down" : `G1 X${fmt(first.x)} Y${fmt(first.y)} Z${fmt(startZ)} ; Brush moving lead-in`);
+    if (penDownDelayMs > 0 && !heightControlled) {
       lines.push(`G4 P${fmtSeconds(penDownDelayMs / 1000)} ; Pen settle delay`);
     }
     let currentPoint = first;
     for (let s = 1; s < subpath.length; s++) {
       const targetPoint = subpath[s];
-      const targetZ = brushZ(profile, targetPoint.width);
+      const targetZ = brushZ(profile, targetPoint.width, useStrokeWidths);
       if (!canEmitInkService || !inkService) {
         lines.push(`G1 X${fmt(targetPoint.x)} Y${fmt(targetPoint.y)}${targetZ === undefined ? "" : ` Z${fmt(targetZ)}`}`);
         currentPoint = targetPoint;
@@ -1237,7 +1250,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
         emitTriggeredInkService(preferredDipStationId);
       }
     }
-    if (penUpDelayMs > 0) {
+    if (penUpDelayMs > 0 && !heightControlled) {
       lines.push(`G4 P${fmtSeconds(penUpDelayMs / 1000)} ; Pen lift delay`);
     }
     lines.push(config.penUpCommand + " ; Pen up");
@@ -1300,7 +1313,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
     for (let rep = 0; rep < tap.repeats; rep++) {
       lines.push(`G0 X${fmt(tap.point.x)} Y${fmt(tap.point.y)} ; Point rapid`);
       lines.push(`F${drawSpeed}`);
-      const tapZ = brushZ(tap.penProfile);
+      const tapZ = brushZ(tap.penProfile, undefined, tap.useStrokeWidths !== false);
       lines.push(tapZ === undefined ? config.penDownCommand + " ; Point tap" : `G1 Z${fmt(tapZ)} ; Brush contact`);
       if (penDownDelayMs > 0) {
         lines.push(

@@ -235,7 +235,7 @@ const plugins: TerraForgeAPI["plugins"] = {
 const api: TerraForgeAPI = {
   fonts: {
     list: () => invoke("fonts:list"),
-    importFont: (characters) => invoke("fonts:import", characters),
+    importFont: (characters, mode) => invoke("fonts:import", characters, mode),
     remove: (id) => invoke("fonts:remove", id),
   },
   plugins,

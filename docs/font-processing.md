@@ -1,12 +1,32 @@
 # Fonts, text and reusable pens
 
-Open **Plugins → Font Tools → Text generator** to import a local `.ttf` or `.otf` font. Terra Forge processes it into centre-line geometry, measures the stroke width along each line, and saves the result in the local font library. The original font is read without being changed. The processed library remains available when you close a layout or restart Terra Forge.
+Open **Plugins → Font Tools → Text generator** to import a local `.ttf` or `.otf` font. Choose **Centreline** or **Standard outline** in **Font mode** before importing. Centreline processing measures local stroke widths; Standard outline imports the original glyph contours without skeletonising them. The original font is read without being changed. Each version is saved separately in the local font library, and the font selector shows versions matching the current mode. The library remains available when you close a layout or restart Terra Forge.
 
-Choose the processed font, enter your text, and adjust the size, letter spacing, line spacing and alignment. Size is the font's em height in millimetres, so the visible capital height depends on the font. The preview shows the continuous vector lines and reports their size and stroke-width range. Unsupported characters are listed; adding text is disabled until every character is available.
+Choose the imported font, enter your text, and adjust the size, letter spacing, line spacing and alignment. Size is the font's em height in millimetres, so the visible capital height depends on the font. The preview shows the actual vector strokes that will be plotted. Unsupported characters are listed; adding text is disabled until every character is available.
 
 **Add text to canvas** creates ordinary vector artwork using the currently selected pen. Move, rotate or resize it with the existing canvas tools. Select generated text and reopen the Text generator to change its content or settings with **Update selected text**. Updating keeps the artwork's placement and pen assignment. Adding and updating both support Undo.
 
 Save the layout to keep its text settings, geometry and width samples. Existing text can still be plotted if its font is later deleted from the library. To regenerate or edit it, import that font again or choose another one.
+
+## Standard outlines and infill
+
+**Standard outline** keeps the font's native quadratic or cubic curves and all contours, including the holes in letters such as `O` and `B`. It uses the selected pen's normal drawing height. Choose an **Infill**:
+
+- **Outline** plots the glyph boundaries only.
+- **Solid** adds parallel drawing strokes clipped to the glyph interior. Set **Fill spacing** no greater than the physical pen tip width for full coverage. The default is 0.3 mm; adjust it for the actual pen and material.
+- **Sketch** adds two crossing sets of drawing strokes at twice the chosen spacing for a lighter finish.
+
+![Standard font with solid infill](images/fonts/solid-infill.png)
+
+![Standard font with sketch infill](images/fonts/sketch-infill.png)
+
+**Fill angle** rotates the fill strokes. The preview contains the generated strokes, and those same strokes are saved with the artwork and passed to G-code generation. Counters remain empty, and overlapping contours follow the font's nonzero winding rule. Filled text also includes its boundaries. Changing text size or fill settings in the generator rebuilds the strokes; ordinary canvas resizing scales existing strokes and their spacing together. Very large or dense fills are rejected before generation when they exceed the processing budget.
+
+## Centreline width control
+
+New centreline text draws at the pen's normal height by default. Enable **Use stroke width information** to vary a calibrated brush's height using the measured widths. A fixed pen tip keeps its normal height even with this option enabled. Turning the option off preserves all measured widths, allowing it to be enabled later without reprocessing the font.
+
+With width control enabled, **Brush lead-in** sets a moving approach before each brush stroke, from 0.1 to 20 mm (default 1 mm). The brush descends while travelling into the stroke, reaching the calibrated drawing height at its first point; it does not press down and dwell at a stationary starting point. Contact can begin during the approach and leave a short mark before the glyph, so keep space around the text. G-code generation reports an error if the lead-in would extend outside the printable area. Existing layouts without an explicit width-control setting continue to use their measured widths and now receive a moving brush approach.
 
 ![Centreline text generator](images/fonts/text-generator.png)
 
@@ -24,7 +44,7 @@ Open **Pens**, add or select a pen, and enter its type, colour, tip width and op
 
 For a brush, enter two measured stroke widths and the absolute work Z heights that produced them. The minimum-width height and maximum-width height may increase or decrease with pressure, depending on your machine setup. Widths must increase from minimum to maximum. Use the same work-coordinate reference as the machine's pen commands.
 
-For centre-line text on a **stepper Z** machine, G-code interpolates a Z height between these two measurements for every width sample. Requested widths outside the measured range clamp to the nearest calibrated endpoint. Drawing speed is capped at the pen's maximum speed. Configure the machine's pen-up command as an absolute work-coordinate `G0` or `G1` Z move above both contact heights; increasing Z must lift the brush. Brush height control cannot be combined with ink-service moves in this version. Fixed tips draw the centre line at their physical tip width; they cannot reproduce variable width from pressure.
+For centre-line text with **Use stroke width information** enabled on a **stepper Z** machine, G-code interpolates a Z height between these two measurements for every width sample. Requested widths outside the measured range clamp to the nearest calibrated endpoint. The brush lowers through its moving lead-in before each stroke. Drawing speed is capped at the pen's maximum speed. Configure the machine's pen-up command as an absolute work-coordinate `G0` or `G1` Z move above both contact heights; increasing Z must lift the brush. Brush height control cannot be combined with ink-service moves in this version. Fixed tips draw the centre line at their physical tip width; they cannot reproduce variable width from pressure.
 
 Choose and calibrate the pen before generating G-code. The generated text retains its width samples through layout saving, resizing, rotation, clipping and path ordering, allowing another calibrated brush to be selected later without reprocessing the font.
 
@@ -32,7 +52,14 @@ Choose and calibrate the pen before generating G-code. The generated text retain
 
 ## Verification
 
-Verified on Windows on 29 October 2026:
+Font modes, infill, optional width control and moving brush approaches verified on Windows on 30 October 2026:
+
+- Build and type checks passed. All **2,415 unit/component tests** passed with controlled parallelism and a 15-second per-test timeout.
+- All **13 selected desktop checks** passed across `font-library`, `font-brush-lead-in`, `pen-library`, `gcode-generation` and `white-pen`.
+- Real-font desktop exports verified changing brush Z with a 2 mm moving approach, capped drawing speed, switching back to fixed-height plotting, native outline import, Solid/Sketch plot geometry, saved settings and reopening.
+- Geometry tests verify counters and overlapping contours, continuous infill spans, native TTF/OTF curves, clipping, reversed strokes, lead-in bounds and no brush contact dwell.
+
+Initial font and pen-library implementation verified on Windows on 29 October 2026:
 
 - `npm run typecheck` and `npm run build` passed, including the packaged font-worker entry.
 - All 2,373 unit/component tests passed using `npx vitest run --maxWorkers=4 --testTimeout=15000`. Windows directory-link tests require permission to create junctions.

@@ -220,6 +220,10 @@ export interface PassConfig {
 // ─── Vector / Canvas Objects ─────────────────────────────────────────────────
 
 export interface VectorObject {
+  /** False uses the configured fixed pen-down command and ignores width-to-Z modulation. */
+  useStrokeWidths?: boolean;
+  /** Moving brush approach length in mm; defaults to 1 mm when width control is active. */
+  brushLeadInMM?: number;
   centerline?: CenterlineData;
   penProfile?: PenProfile;
   id: string;
@@ -351,7 +355,11 @@ export interface CanvasItemBase {
 
 /** One vector import. An absent kind remains valid for legacy layouts. */
 export interface SvgImport extends CanvasItemBase {
-  textSource?: { fontId: string; fontName: string; text: string; fontSizeMM: number; letterSpacingMM: number; lineSpacing: number; alignment: "left" | "center" | "right" };
+  /** Width samples are retained when disabled, allowing later brush use. */
+  useStrokeWidths?: boolean;
+  brushLeadInMM?: number;
+  textSource?: { fontId: string; fontName: string; text: string; fontSizeMM: number; letterSpacingMM: number; lineSpacing: number; alignment: "left" | "center" | "right";
+    mode?: "centerline" | "outline"; useStrokeWidths?: boolean; brushLeadInMM?: number; infill?: "outline" | "solid" | "sketch"; fillSpacingMM?: number; fillAngleDeg?: number };
   kind?: "vector";
   paths: SvgPath[];
   /** Per-import hatch fill settings (override the global GcodePrefs defaults).
