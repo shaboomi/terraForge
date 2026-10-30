@@ -18,7 +18,7 @@ import {
   shapeToPathD,
   type SvgStylesheet,
 } from "./svgImportHelpers";
-import { getAccumulatedTransform, applyMatrixToPathD, computePathsBounds } from "../../../utils/svgTransform";
+import { getAccumulatedTransform, applyMatrixToPathD, computeImportPathBounds } from "../../../utils/svgTransform";
 import { generateHatchPaths } from "../../../utils/hatchFill";
 import {
   type MachineConfig,
@@ -30,52 +30,6 @@ import {
 } from "../../../../../types";
 
 const SHAPES = "path, rect, circle, ellipse, line, polyline, polygon";
-
-/** Paths' bounds as the browser renders them, or null where it cannot
- * measure (no DOM, nothing measurable). */
-function computeRenderedPathBounds(pathDs: string[]) {
-  if (typeof document === "undefined" || pathDs.length === 0) return null;
-
-  const ns = "http://www.w3.org/2000/svg";
-  const probeSvg = document.createElementNS(ns, "svg");
-  probeSvg.setAttribute("width", "0");
-  probeSvg.setAttribute("height", "0");
-  probeSvg.style.position = "fixed";
-  probeSvg.style.left = "-10000px";
-  probeSvg.style.top = "-10000px";
-  probeSvg.style.pointerEvents = "none";
-
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  document.body.appendChild(probeSvg);
-  try {
-    for (const d of pathDs) {
-      if (!d) continue;
-      const p = document.createElementNS(ns, "path");
-      p.setAttribute("d", d);
-      probeSvg.appendChild(p);
-      try {
-        const b = p.getBBox();
-        if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
-        if (b.x < minX) minX = b.x;
-        if (b.y < minY) minY = b.y;
-        if (b.x + b.width > maxX) maxX = b.x + b.width;
-        if (b.y + b.height > maxY) maxY = b.y + b.height;
-      } catch {
-        // Ignore invalid individual paths; parser fallback covers full import.
-      }
-      p.remove();
-    }
-  } finally {
-    probeSvg.remove();
-  }
-
-  if (!Number.isFinite(minX)) return null;
-  return { minX, minY, maxX, maxY };
-}
 
 /** The viewBox (falling back to width/height), and mm per user unit from
  * the document's physical size — 96 DPI when it has none. */
@@ -215,7 +169,7 @@ export function buildSvgImport(raw: string, name: string, machine: MachineConfig
 
   // Normalise to the drawing's own bounds rather than the viewBox.
   const pathDs = paths.map((p) => p.d);
-  const bounds = computeRenderedPathBounds(pathDs) ?? computePathsBounds(pathDs);
+  const bounds = computeImportPathBounds(pathDs);
   const effW = bounds ? bounds.maxX - bounds.minX : frame.svgWidth;
   const effH = bounds ? bounds.maxY - bounds.minY : frame.svgHeight;
   const { x, y } = initialPosition(effW * frame.scale, effH * frame.scale, machine);
