@@ -1,5 +1,7 @@
 import { isVectorImport } from "../../../types";
 import { useState } from "react";
+import { CalibrationDialog } from "./CalibrationDialog";
+import { Button } from "./ui";
 import { PluginsMenu } from "../features/plugins/PluginsMenu";
 import { useShallow } from "zustand/react/shallow";
 import TerraForgeLogotype from "../assets/terraForgeLogotype.svg?react";
@@ -57,6 +59,7 @@ export function Toolbar({
   const [showGcodeDialog, setShowGcodeDialog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showCalibration, setShowCalibration] = useState(false);
 
   // ── Action hooks ──────────────────────────────────────────────────────────
   const { handleImport } = useImportActions();
@@ -136,6 +139,8 @@ export function Toolbar({
       </div>
 
       <PluginsMenu />
+      <Button variant="secondary" onClick={() => setShowCalibration(true)}>Calibrate</Button>
+      {showCalibration && <CalibrationDialog onClose={() => setShowCalibration(false)} />}
 
       <div className="h-4 w-px bg-border-ui" />
 
