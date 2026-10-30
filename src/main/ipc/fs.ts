@@ -1,6 +1,7 @@
 import { dialog, ipcMain, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "fs/promises";
 import type { MachineConfig } from "../../types";
+import { readCalibrationFont } from "../calibrationFont";
 
 const GCODE_EXTENSIONS = [
   "gcode",
@@ -50,6 +51,7 @@ export interface FsIpcOptions {
 
 export function registerFsIpcHandlers(options: FsIpcOptions): void {
   const { getMainWindow, loadConfigs, saveConfigs } = options;
+  ipcMain.handle("fs:getCalibrationFont", () => readCalibrationFont());
 
   ipcMain.handle("fs:openSvgDialog", async () => {
     const mainWindow = getMainWindow();

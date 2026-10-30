@@ -99,6 +99,7 @@ const serial: TerraForgeAPI["serial"] = {
 
 const fs: TerraForgeAPI["fs"] = {
   openSvgDialog: () => invoke<string | null>("fs:openSvgDialog"),
+  getCalibrationFont: () => invoke("fs:getCalibrationFont"),
   openPdfDialog: () => invoke<string | null>("fs:openPdfDialog"),
   openFileDialog: () => invoke<string | null>("fs:openFileDialog"),
   openGcodeDialog: () => invoke<string | null>("fs:openGcodeDialog"),

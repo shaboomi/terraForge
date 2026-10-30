@@ -1,19 +1,6 @@
 import type { CalibrationOptions } from "./calibration";
 import type { DrawCalibrationStroke } from "./calibrationGcode";
 
-// Segment templates use screen coordinates. Invert only their local Y for upright machine-Y-up digits.
-const segments = [ [[0,0],[2,0]], [[2,0],[2,2]], [[2,2],[2,4]],
-  [[0,4],[2,4]], [[0,2],[0,4]], [[0,0],[0,2]], [[0,2],[2,2]] ];
-const digits = ["012345", "12", "01643", "01236", "5612", "05623", "054236", "012", "0123456", "012356"];
-
-export function drawNumber(draw: DrawCalibrationStroke, row: number, y: number, o: CalibrationOptions) {
-  const feed = o.kind === "speed" ? Math.min(o.speed, o.start) : o.speed;
-  const z = o.kind === "brush" ? o.end : o.contactZ;
-  String(row).split("").forEach((digit, j) => {
-    for (const s of digits[Number(digit)]) draw(segments[Number(s)].map(p => [7 + j * 4 + p[0], y + 4 - p[1]]), row, feed, {z});
-  });
-}
-
 export const square = (x: number, y: number, size: number): number[][] =>
   [[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]];
 export const circle = (x: number, y: number, radius: number): number[][] =>

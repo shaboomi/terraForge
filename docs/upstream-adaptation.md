@@ -63,3 +63,9 @@ This branch starts from the developer's current code and adds the requested firs
 - No physical plotter test has been performed for this adaptation.
 
 The test configuration now resolves its setup file from the configuration directory, allowing the suite to run correctly from this nested worktree.
+
+## Calibration text enhancement
+
+Pen names now plot above the patterns, all row numbers use system-font outlines, and speed sheets include actual mm/min labels beside each row. Arial is preferred, with installed platform sans-serif fallbacks. Text paths are shared by the preview and G-code; long headings wrap within the checked sheet size. No system font files are committed or bundled.
+
+Validation after this enhancement: build and type checks pass; lint has only the existing function-length warning; both calibration app checks pass with the installed Arial font. The full suite passed 2,314 of 2,315 tests at its default five-second timeout. The sole failure was an unchanged cooperative path-sorting timing test; all ten tests in that file passed when rerun with a 30-second timeout (the slow test completed in about six seconds). No timing-related application or test code was changed.

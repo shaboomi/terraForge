@@ -1,6 +1,7 @@
 import type { MachineConfig } from "../../../../types";
 import { createCalibrationWriter, formatCalibrationNumber } from "./calibrationGcode";
-import { circle, drawCalibrationRow, drawNumber, square } from "./calibrationPatterns";
+import { circle, drawCalibrationRow, square } from "./calibrationPatterns";
+import { createCalibrationLabel, wrapCalibrationText, type CalibrationFont, type CalibrationLabel } from "./calibrationText";
 
 export type CalibrationKind = "speed" | "brush" | "lift" | "timing" | "geometry" | "repeatability" | "hatching";
 export interface CalibrationOptions {
@@ -16,7 +17,7 @@ export interface CalibrationOptions {
   zFeed: number; // mm/min
   timingMode?: "up" | "down";
 }
-export interface Stroke { points: number[][]; row: number }
+export interface Stroke { points: number[][]; row: number; label?: string }
 export interface CalibrationSheet {
   gcode: string;
   strokes: Stroke[];
@@ -25,6 +26,8 @@ export interface CalibrationSheet {
   width: number;
   height: number;
   record: string;
+  labels: CalibrationLabel[];
+  fontFamily: string;
 }
 const explicitZ = (o: CalibrationOptions) => o.kind === "brush" || o.kind === "lift";
 const squareTest = (o: CalibrationOptions) => o.kind === "geometry" || o.kind === "repeatability";
@@ -75,9 +78,10 @@ function describeRows(o: CalibrationOptions, values: number[]): string[] {
   });
 }
 
-function makeRecord(config: MachineConfig, o: CalibrationOptions, width: number, height: number, descriptions: string[]) {
+function makeRecord(config: MachineConfig, o: CalibrationOptions, width: number, height: number, descriptions: string[], family: string) {
   const z = explicitZ(o), n = formatCalibrationNumber;
   return [`TerraForge ${o.kind} calibration`, `Pen: ${o.pen}`, `Machine: ${config.name}`, `Sheet: ${width} x ${height} mm`,
+    `Text font: ${family} (plotted outlines)`,
     `Drawing / reference speed: ${o.speed} mm/min`,
     ...(z ? [`Z speed: ${o.zFeed} mm/min; safe lift: ${o.liftZ} mm; contact: ${o.contactZ} mm`] : []),
     `Pen up: ${z ? o.liftZ : config.penUpCommand}; pen down: ${z ? o.contactZ : config.penDownCommand}`,
@@ -91,18 +95,32 @@ function makeRecord(config: MachineConfig, o: CalibrationOptions, width: number,
   ].join("\n");
 }
 
-export function generateCalibration(config: MachineConfig, o: CalibrationOptions): CalibrationSheet {
+export function generateCalibration(config: MachineConfig, o: CalibrationOptions, font: CalibrationFont): CalibrationSheet {
   validateOptions(config, o);
+  const pen = o.pen.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+  if (Array.from(pen).length > 80) throw new Error("Use a pen name of up to 80 characters.");
+  o = { ...o, pen };
   const width = o.length + 70;
-  const height = squareTest(o) ? o.length + 40 : o.rows * (o.kind === "hatching" ? 38 : 24) + 20;
+  const title = pen ? wrapCalibrationText(font, `Pen: ${pen}`, 5, width - 14) : [];
+  const height = (squareTest(o) ? o.length + 40 : o.rows * (o.kind === "hatching" ? 38 : 24) + 20) + Math.max(0, title.length - 1) * 7;
   if (![config.bedWidth, config.bedHeight].every(v => Number.isFinite(v) && v > 0) || width > config.bedWidth || height > config.bedHeight)
     throw new Error(`This sheet needs ${width} × ${height} mm. Reduce rows or line length to fit the machine bed.`);
   const values = o.kind === "geometry" ? [o.length] : Array.from({length: o.rows}, (_, i) =>
     o.kind === "repeatability" ? i + 1 : o.start + (o.end - o.start) * i / (o.rows - 1));
   const rowDescriptions = describeRows(o, values);
   const writer = createCalibrationWriter(config, o, width, height);
+  const labels: CalibrationLabel[] = [];
+  const drawLabel = (text: string, row: number, x: number, y: number, size: number, maxWidth: number) => {
+    const label = createCalibrationLabel(font, text, row, x, y, size, maxWidth);
+    labels.push(label);
+    writer.comment(`Label: ${text}`);
+    const feed = o.kind === "speed" ? Math.min(o.speed, o.start) : o.speed;
+    for (const points of label.points) writer.draw(points, row, feed, { label: text, z: o.kind === "brush" ? o.end : o.contactZ });
+  };
+  writer.comment(`Text font: ${font.family} (plotted outlines)`);
+  title.forEach((text, i) => drawLabel(text, 0, 7, height - 9 - i * 7, 5, width - 14));
   if (squareTest(o)) {
-    drawNumber(writer.draw, 1, 12, o);
+    drawLabel("1", 1, 7, 12, 5, 11);
     values.forEach((_, i) => {
       writer.comment(rowDescriptions[i]);
       writer.draw(square(22, 12, o.length), i + 1, o.speed);
@@ -117,10 +135,11 @@ export function generateCalibration(config: MachineConfig, o: CalibrationOptions
     values.forEach((value, i) => {
       const y = 12 + i * (o.kind === "hatching" ? 38 : 24), row = i + 1;
       writer.comment(rowDescriptions[i]);
-      drawNumber(writer.draw, row, y, o);
+      drawLabel(String(row), row, 7, y, 5, 11);
+      if (o.kind === "speed") drawLabel(`${formatCalibrationNumber(value)} mm/min`, row, 66, y + 12, 4.5, o.length - 46);
       drawCalibrationRow(writer.draw, value, row, y, o);
     });
   }
   return {gcode: writer.finish(), strokes: writer.strokes, values, rowDescriptions, width, height,
-    record: makeRecord(config, o, width, height, rowDescriptions)};
+    record: makeRecord(config, o, width, height, rowDescriptions, font.family), labels, fontFamily: font.family};
 }

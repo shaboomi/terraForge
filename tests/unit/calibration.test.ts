@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { generateCalibration, type CalibrationOptions } from "../../src/renderer/src/features/calibration/calibration";
+import { generateCalibration as generateWithFont, type CalibrationOptions } from "../../src/renderer/src/features/calibration/calibration";
+import { calibrationFont } from "../helpers/calibrationFont";
 import type { MachineConfig } from "../../src/types";
+const generateCalibration = (config: MachineConfig, options: CalibrationOptions) => generateWithFont(config, options, calibrationFont);
 
 const config: MachineConfig = { id: "test", name: "TerraPen", bedWidth: 300, bedHeight: 300, origin: "bottom-left", penType: "stepper", penUpCommand: "G0 Z5", penDownCommand: "G0 Z0", penUpDelayMs: 100, penDownDelayMs: 200, jogSpeed: 1000, drawSpeed: 1200, connection: {type: "wifi"} };
 const options: CalibrationOptions = { kind: "speed", pen: "Felt tip", start: 600, end: 3600, rows: 6, speed: 1200, length: 100, liftZ: 5, contactZ: 0, zFeed: 120 };
@@ -22,16 +24,28 @@ describe("calibration G-code", () => {
     expect(sheet.record).not.toContain("mm/s");
     expect(sheet.rowDescriptions).toHaveLength(6);
   });
-  it("plots asymmetric digits upright in machine Y-up coordinates", () => {
+  it("plots pen name, row numbers and speed values as system-font outlines", () => {
     const sheet = generateCalibration(config, options);
-    const label = (row: number) => sheet.strokes.filter(s => s.row === row && s.points.every(p => p[0] < 20));
-    // A readable 2 has an upper-right and lower-left segment; reflecting Y makes it a 5.
-    expect(label(2).map(s => s.points)).toContainEqual([[9,40],[9,38]]);
-    expect(label(2).map(s => s.points)).toContainEqual([[7,38],[7,36]]);
-    expect(label(2).map(s => s.points)).not.toContainEqual([[9,38],[9,36]]);
-    // A readable 3 has both vertical segments on the right.
-    expect(label(3).filter(s => s.points.every(p => p[0] === 9))).toHaveLength(2);
-    expect(sheet.gcode).toContain("G1 X9 Y38 F600");
+    expect(sheet.labels.map(label => label.text)).toContain("Pen: Felt tip");
+    expect(sheet.labels.filter(label => label.text.endsWith("mm/min")).map(label => label.text))
+      .toEqual(["600 mm/min", "1200 mm/min", "1800 mm/min", "2400 mm/min", "3000 mm/min", "3600 mm/min"]);
+    for (const label of sheet.labels) {
+      expect(label.points.length).toBeGreaterThan(0);
+      for (const path of label.points) {
+        expect(path.at(-1)).toEqual(path[0]);
+        expect(path.length).toBeGreaterThan(4);
+      }
+    }
+    const digit = sheet.labels.find(label => label.text === "2")!;
+    expect(Math.min(...digit.points.flat().map(point => point[1]))).toBeCloseTo(36);
+    expect(Math.max(...digit.points.flat().map(point => point[1]))).toBeGreaterThan(39);
+    const labels = sheet.gcode.split("; Label:").slice(1);
+    for (const section of labels) {
+      const textMoves = section.split("; Row")[0].split("\n").filter(line => /^G1 X/.test(line));
+      // The speed-row pattern follows the final label; inspect the label's first move.
+      expect(textMoves[0]).toMatch(/F600$/);
+    }
+    expect(sheet.record).toContain("Text font: Test Sans");
   });
   it.each(["bottom-left", "bottom-right", "top-left", "top-right", "center"] as const)("keeps exported digit 2 upright on paper with a %s origin", origin => {
     const sheet = generateCalibration({...config, origin}, options);
@@ -50,12 +64,12 @@ describe("calibration G-code", () => {
       else current?.push([x,y]);
     }
     const numberPaths = paths.filter(path => path.every(p => p[0] < 20));
-    expect(numberPaths).toHaveLength(5);
-    // These are the independent seven-segment strokes for 2 in physical Y-up space.
-    expect(numberPaths).toEqual([
-      [[7,40],[9,40]], [[9,40],[9,38]], [[7,38],[9,38]],
-      [[7,38],[7,36]], [[7,36],[9,36]],
-    ]);
+    const digit = sheet.labels.find(label => label.text === "2")!;
+    expect(numberPaths).toHaveLength(digit.points.length);
+    for (const [index, path] of numberPaths.entries()) {
+      expect(path).toHaveLength(digit.points[index].length);
+      path.forEach((point, i) => point.forEach((value, axis) => expect(value).toBeCloseTo(digit.points[index][i][axis], 3)));
+    }
   });
   it("emits constant depths and coordinated thin/thick ramps and restores drawing feed after Z moves", () => {
     const sheet = generateCalibration(config, {...options, kind: "brush", start: -1, end: 0});
@@ -115,7 +129,7 @@ describe("calibration G-code", () => {
   });
   it("retraces exactly the same square for every repeatability pass", () => {
     const sheet = generateCalibration(config, {...options, kind: "repeatability", start: NaN, end: NaN, rows: 4});
-    const passes = sheet.strokes.filter(s => s.points.length === 5);
+    const passes = sheet.strokes.filter(s => !s.label && s.points.length === 5);
     expect(passes).toHaveLength(4);
     for (const pass of passes) expect(pass.points).toEqual([[22,12],[122,12],[122,112],[22,112],[22,12]]);
     expect(passes.map(s => s.row)).toEqual([1,2,3,4]);
@@ -175,5 +189,41 @@ describe("calibration G-code", () => {
   it("cannot inject G-code through the pen name", () => {
     const sheet = generateCalibration(config, {...options, pen: "test\nG0 Z-100"});
     expect(sheet.gcode).not.toContain("\nG0 Z-100");
+  });
+  it("omits the pen heading when the name is blank", () => {
+    const sheet = generateCalibration(config, { ...options, pen: "   " });
+    expect(sheet.labels.some(label => label.row === 0)).toBe(false);
+    expect(sheet.labels.filter(label => label.text.endsWith("mm/min"))).toHaveLength(6);
+  });
+  it("wraps long names above the patterns and checks the enlarged height against the bed", () => {
+    const pen = "Very long pen name ".repeat(4).trim();
+    const sheet = generateCalibration(config, { ...options, pen });
+    const heading = sheet.labels.filter(label => label.row === 0);
+    expect(heading.length).toBeGreaterThan(1);
+    expect(heading.map(label => label.text).join(" ")).toBe(`Pen: ${pen}`);
+    for (const points of heading.flatMap(label => label.points)) {
+      for (const [x, y] of points) {
+        expect(x).toBeGreaterThanOrEqual(7); expect(x).toBeLessThanOrEqual(sheet.width - 7);
+        expect(y).toBeGreaterThan(150); expect(y).toBeLessThan(sheet.height);
+      }
+    }
+    expect(() => generateCalibration({ ...config, bedHeight: 164 }, { ...options, pen })).toThrow(/fit/);
+  });
+  it("keeps speed labels clear of the zigzags, circles and long lines", () => {
+    const sheet = generateCalibration(config, { ...options, length: 80, start: 600.5, end: 1200.75 });
+    const labels = sheet.labels.filter(label => label.text.endsWith("mm/min"));
+    expect(labels[0].text).toBe("600.5 mm/min");
+    expect(labels.at(-1)!.text).toBe("1200.75 mm/min");
+    for (const label of labels) {
+      const y = 12 + (label.row - 1) * 24;
+      for (const points of label.points) for (const [x, yy] of points) {
+        expect(x).toBeGreaterThan(54); expect(x).toBeLessThan(112);
+        expect(yy).toBeGreaterThan(y + 5); expect(yy).toBeLessThan(y + 24);
+      }
+    }
+  });
+  it("rejects unsupported glyphs and excessively long names rather than exporting missing text", () => {
+    expect(() => generateCalibration(config, { ...options, pen: "Missing 中" })).toThrow(/cannot plot/);
+    expect(() => generateCalibration(config, { ...options, pen: "W".repeat(81) })).toThrow(/80 characters/);
   });
 });

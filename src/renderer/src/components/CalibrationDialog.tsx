@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMachineStore } from "../store/machineStore";
 import { Button } from "./ui";
 import { generateCalibration, type CalibrationKind } from "../features/calibration/calibration";
+import { parseCalibrationFont, type CalibrationFont } from "../features/calibration/calibrationText";
 
 const advice: Record<CalibrationKind, string> = {
   speed: "Compare the long lines in both directions, sharp turns and circles. Reject gaps, waviness, corner rounding, uneven ink or shifted endpoints. Repeat near the first failing speed, then verify the fastest passing row on real artwork. Short paths may never reach the requested speed because of acceleration limits.",
@@ -42,15 +43,25 @@ export function CalibrationDialog({ onClose }: { onClose: () => void }) {
   const [zFeed, setZFeed] = useState("120");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [font, setFont] = useState<CalibrationFont>();
+  const [fontError, setFontError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    window.terraForge.fs.getCalibrationFont().then(parseCalibrationFont).then(loaded => {
+      if (!cancelled) setFont(loaded);
+    }).catch(error => { if (!cancelled) setFontError(`Could not load calibration text: ${String(error)}`); });
+    return () => { cancelled = true; };
+  }, []);
   const explicitZ = kind === "brush" || kind === "lift";
   const squareTest = kind === "geometry" || kind === "repeatability";
   const result = useMemo(() => {
     if (!config) return { error: "Select a machine profile first." };
+    if (!font) return { error: fontError || "Loading system font for plotted labels…" };
     try {
       const number = (value: string) => value.trim() ? Number(value) : NaN;
-      return { sheet: generateCalibration(config, { kind, pen, start: number(start), end: number(end), rows: number(rows), speed: number(speed), length: number(length), liftZ: number(liftZ), contactZ: number(contactZ), zFeed: number(zFeed), timingMode }) };
+      return { sheet: generateCalibration(config, { kind, pen, start: number(start), end: number(end), rows: number(rows), speed: number(speed), length: number(length), liftZ: number(liftZ), contactZ: number(contactZ), zFeed: number(zFeed), timingMode }, font) };
     } catch (e) { return { error: (e as Error).message }; }
-  }, [config, kind, pen, start, end, rows, speed, length, liftZ, contactZ, zFeed, timingMode]);
+  }, [config, kind, pen, start, end, rows, speed, length, liftZ, contactZ, zFeed, timingMode, font, fontError]);
   const field = (label: string, value: string, setter: (v: string) => void) => <label className="flex flex-col gap-1 text-xs">{label}<input type="number" step="any" value={value} onChange={e => { setter(e.target.value); setMessage(""); }} className="bg-secondary border border-border-ui rounded px-2 py-1.5 text-content" /></label>;
   const save = async () => {
     if (!result.sheet) return;
@@ -72,9 +83,10 @@ export function CalibrationDialog({ onClose }: { onClose: () => void }) {
         <Dialog.Description className="text-sm text-content-muted">Create repeatable test sheets for each pen and paper combination. {config?.name}</Dialog.Description>
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-xs">Test<select aria-label="Test" value={kind} onChange={e => { const next = e.target.value as CalibrationKind; setKind(next); setStart(ranges[next][0]); setEnd(ranges[next][1]); setMessage(""); }} className="bg-secondary border border-border-ui rounded p-1.5"><option value="speed">Speed and line quality</option><option value="brush">Brush width and depth</option><option value="lift">Lift clearance</option><option value="timing">Pen timing</option><option value="geometry">Geometry</option><option value="repeatability">Repeatability</option><option value="hatching">Ink and hatching</option></select></label>
-          <label className="flex flex-col gap-1 text-xs">Pen name<input value={pen} onChange={e => {setPen(e.target.value); setMessage("");}} placeholder="e.g. black felt tip, 0.8 mm" className="bg-secondary border border-border-ui rounded p-1.5" /></label>
+          <label className="flex flex-col gap-1 text-xs">Pen name<input value={pen} maxLength={80} onChange={e => {setPen(e.target.value); setMessage("");}} placeholder="e.g. black felt tip, 0.8 mm" className="bg-secondary border border-border-ui rounded p-1.5" /></label>
         </div>
         <p className="text-sm text-content-muted">{advice[kind]}</p>
+        {font && <p className="text-xs text-content-muted">Sheet text: {font.family}. Pen names are plotted on the sheet. Speed tests also include each row’s speed.</p>}
         {explicitZ && <p className="text-sm">For stepper Z lifts with positive Z moving up. First jog to establish contact, check the entire test depth range and safe lift within the mechanism’s travel. Values below are absolute work Z in mm.</p>}
         {kind === "timing" && <div className="space-y-2">
           <label className="flex flex-col gap-1 text-xs">Delay to test<select aria-label="Delay to test" value={timingMode} onChange={e => { setTimingMode(e.target.value as "up" | "down"); setMessage(""); }} className="bg-secondary border border-border-ui rounded p-1.5"><option value="down">Pen-down delay</option><option value="up">Pen-up delay</option></select></label>
@@ -95,7 +107,7 @@ export function CalibrationDialog({ onClose }: { onClose: () => void }) {
         {result.sheet && <div className="grid grid-cols-2 gap-4">
           <svg viewBox={`0 0 ${result.sheet.width} ${result.sheet.height}`} className="w-full max-h-64 border border-border-ui bg-white" aria-label="Calibration pattern schematic; labels match the plotted orientation">
             <g transform={`translate(0 ${result.sheet.height}) scale(1 -1)`}>
-              {result.sheet.strokes.map((s,i) => <polyline key={i} points={s.points.map(p => `${p[0]},${p[1]}`).join(" ")} stroke="#222" strokeWidth="0.4" fill="none" />)}
+              {result.sheet.strokes.map((s,i) => <polyline key={i} data-label={s.label} data-row={s.row} points={s.points.map(p => `${p[0]},${p[1]}`).join(" ")} stroke="#222" strokeWidth={s.label ? "0.15" : "0.4"} fill="none" />)}
             </g>
           </svg>
           <div className="text-xs space-y-1"><p>{result.sheet.width} × {result.sheet.height} mm</p>{result.sheet.rowDescriptions.map((description,i) => <p key={i}>{description}</p>)}</div>

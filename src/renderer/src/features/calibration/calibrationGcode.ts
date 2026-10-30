@@ -10,6 +10,7 @@ export interface StrokeSettings {
   arrivalZ?: number;
   upDelay?: number;
   downDelay?: number;
+  label?: string;
 }
 export type DrawCalibrationStroke = (points: number[][], row: number, feed: number, settings?: StrokeSettings) => void;
 
@@ -46,7 +47,7 @@ export function createCalibrationWriter(config: MachineConfig, o: CalibrationOpt
     raised = false;
     dwell(downDelay);
     for (const p of points.slice(1)) lines.push(`G1 ${xy(p)}${p.length > 2 ? ` Z${n(p[2])}` : ""} F${n(feed)}`);
-    strokes.push({points, row});
+    strokes.push({points, row, ...(settings.label ? { label: settings.label } : {})});
     up(clearance, upDelay);
   };
   up();

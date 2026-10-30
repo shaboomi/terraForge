@@ -6,6 +6,14 @@ Use a fresh flat sheet, the same paper stock as your artwork and the same pen mo
 
 All speed fields, results sheets and G-code feeds use **mm/min**. Speed, timing, geometry, repeatability and ink/hatching tests use the machine profile's pen commands and work with stepper, servo and solenoid lifts. Brush depth and lift clearance require a stepper Z lift. Saving a test does not update machine settings; transfer a chosen setting to the appropriate profile or pen specification after inspecting the plotted sheet.
 
+## Text on the plotted sheet
+
+If you enter a pen name, it is plotted above the patterns as **Pen: …**. Leave the name blank to omit the heading. Names can contain up to 80 characters; long names wrap, and the sheet's bed-size check includes the extra heading space.
+
+All sheet text, including row numbers, uses an installed sans-serif font: Arial is preferred on Windows and macOS; Segoe UI, Liberation Sans or DejaVu Sans provide platform fallbacks. The dialog shows the selected font. Letter outlines are converted to G-code paths, so the actual plot and preview contain the same text; no font file is distributed with the sheet. Export is disabled if the font cannot load or the name contains a character it cannot draw.
+
+Speed sheets label every row with its actual feed, such as **1200 mm/min**, beside the zigzag pattern, clear of the long lines and circle. Text is drawn at the lower of the reference speed and the slowest test speed, so high-speed test failures do not make the labels unreadable. This label speed does not change the feed used by the test patterns themselves.
+
 ## Speed and line quality
 
 Start with a speed range you know is suitable for your machine, entered in **mm/min**. Each row has a long forward and reverse line, sharp direction changes and a circle at the same requested speed. Numbers use a slower reference speed.

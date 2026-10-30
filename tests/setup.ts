@@ -156,6 +156,7 @@ if (typeof window !== "undefined") {
       onData: vi.fn().mockReturnValue(() => {}),
     },
     fs: {
+      getCalibrationFont: vi.fn(async () => (await import("./helpers/calibrationFont")).calibrationFontData),
       openSvgDialog: vi.fn().mockResolvedValue(null),
       openPdfDialog: vi.fn().mockResolvedValue(null),
       openFileDialog: vi.fn().mockResolvedValue(null),

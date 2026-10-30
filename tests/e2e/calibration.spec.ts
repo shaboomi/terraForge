@@ -34,14 +34,20 @@ test("Settings calibration exports mm/min speeds and shows the plotted label ori
     await dialog.getByLabel("Pen name", { exact: true }).fill("Calibration test pen");
     const preview = dialog.locator("svg");
     await expect(preview.locator("g")).toHaveAttribute("transform", "translate(0 164) scale(1 -1)");
-    // Digit 1 is on the right with machine Y increasing upward.
-    await expect(preview.locator("polyline").first()).toHaveAttribute("points", "9,16 9,14");
+    await expect(dialog.getByText(/Sheet text: (Arial|Segoe UI|Liberation Sans|DejaVu Sans)/)).toBeVisible();
+    await expect(preview.locator('[data-label="Pen: Calibration test pen"]').first()).toBeVisible();
+    for (const speed of [600, 1200, 1800, 2400, 3000, 3600]) {
+      expect(await preview.locator(`[data-label="${speed} mm/min"]`).count()).toBeGreaterThan(0);
+    }
     await preview.screenshot({ path: "test-results/calibration-speed-preview.png" });
     const { gcode, record } = await saveSheet(app, dialog, "calibration-speed");
     expect(gcode).toContain("G1 X122 Y12 F600");
     expect(gcode).toContain("G1 X122 Y132 F3600");
     expect(gcode).not.toContain("F216000");
     expect(record).toContain("Row 6: 3600 mm/min");
+    expect(gcode).toContain("; Label: Pen: Calibration test pen\nG0 X");
+    expect(gcode).toContain("; Label: 3600 mm/min\nG0 X");
+    expect(record).toMatch(/Text font: (Arial|Segoe UI|Liberation Sans|DejaVu Sans)/);
     expect(await app.window.evaluate(() => window.terraForge.config.getMachineConfigs())).toEqual(profile);
   } finally {
     await closeApp(app.electronApp, app.userDataDir);
