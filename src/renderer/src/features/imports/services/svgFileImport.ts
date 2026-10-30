@@ -13,8 +13,8 @@ import {
   isDisplayNone,
   isLayerGroup,
   normalizeSvgColor,
-  parseSvgLengthMM,
   parseSvgStylesheet,
+  resolveSvgUserSpace,
   shapeToPathD,
   type SvgStylesheet,
 } from "./svgImportHelpers";
@@ -80,13 +80,8 @@ function computeRenderedPathBounds(pathDs: string[]) {
 /** The viewBox (falling back to width/height), and mm per user unit from
  * the document's physical size — 96 DPI when it has none. */
 function svgFrame(svgEl: Element | null) {
-  const vbParts = svgEl?.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
-  const svgWidth = vbParts?.[2] ?? +(svgEl?.getAttribute("width") ?? 100);
-  const svgHeight = vbParts?.[3] ?? +(svgEl?.getAttribute("height") ?? 100);
-  const physW = parseSvgLengthMM(svgEl?.getAttribute("width"));
-  const physH = parseSvgLengthMM(svgEl?.getAttribute("height"));
-  const scale = physW != null ? physW / svgWidth : physH != null ? physH / svgHeight : 25.4 / 96;
-  return { viewBoxX: vbParts?.[0] ?? 0, viewBoxY: vbParts?.[1] ?? 0, svgWidth, svgHeight, scale };
+  const { width, height, ...rest } = resolveSvgUserSpace(svgEl);
+  return { ...rest, svgWidth: width, svgHeight: height };
 }
 
 /** Layer groups (<g> with Inkscape or display markers), giving any without
