@@ -209,6 +209,7 @@ export interface PassConfig {
 // ─── Vector / Canvas Objects ─────────────────────────────────────────────────
 
 export interface VectorObject {
+  penProfile?: import("./pens").PenProfile;
   id: string;
   /** Original SVG source markup for this object */
   svgSource: string;
@@ -753,6 +754,7 @@ export interface CanvasLayout {
  * Each group can be exported as a separate G-code file via "Export per group".
  */
 export interface LayerGroup {
+  penProfile?: import("./pens").PenProfile;
   id: string;
   /** User-visible name — used as the G-code filename base */
   name: string;

@@ -71,11 +71,14 @@ export function remapLayerMetadata(
   if (previous.length === 0) {
     return nextPoints.map((points) => ({ points }));
   }
+  const used = new Set<TravelSubpath>();
   return nextPoints.map((points) => {
     const first = points[0];
     let best = previous[0];
     let bestScore = Number.POSITIVE_INFINITY;
     for (const candidate of previous) {
+      if (used.has(candidate)) continue;
+      if (candidate.points === points) { best = candidate; break; }
       const start = candidate.points[0];
       const end = candidate.points[candidate.points.length - 1];
       const startScore = distanceMM(first, start);
@@ -86,7 +89,8 @@ export function remapLayerMetadata(
         best = candidate;
       }
     }
-    return { points, layer: best.layer, color: best.color };
+    used.add(best);
+    return { points, layer: best.layer, color: best.color, ...(best.penProfile ? { penProfile: best.penProfile } : {}) };
   });
 }
 
@@ -303,7 +307,7 @@ export async function collectGeometry(
     const normalized = normalizeTopOriginAnchorObject(obj, config);
 
     const tap = placePointTap(obj, normalized, config, options?.pageClip);
-    if (tap) result.points.push(tap);
+    if (tap) result.points.push({ ...tap, ...(obj.penProfile ? { penProfile: obj.penProfile } : {}) });
 
     if (obj.sourceColor !== lastColor && i > 0) {
       lines.push(colorBatchComment(lastColor, colorObjectCount));
@@ -316,7 +320,8 @@ export async function collectGeometry(
     if (!validGeometry) result.skippedObjects++;
 
     for (const sp of applyPassesToSubpaths(clipped, obj.passCount ?? 1, obj.passMode ?? "repeat")) {
-      if (sp.length >= 2) result.subpaths.push({ points: sp, layer: obj.layer, color: obj.sourceColor });
+      if (sp.length >= 2) result.subpaths.push({ points: sp, layer: obj.layer, color: obj.sourceColor,
+        ...(obj.penProfile ? { penProfile: obj.penProfile } : {}) });
     }
     await hooks.afterEach(i + 1, sorted.length);
   }

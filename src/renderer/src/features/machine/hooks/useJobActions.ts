@@ -218,7 +218,7 @@ export function useJobActions() {
     );
 
   const handleGenerateGcodePerLayer = (prefs: GcodePrefs, cfg: ReturnType<typeof activeConfig>) =>
-    generateSplit(prefs, cfg, () => layerFiles(useCanvasStore.getState().imports, prefs.optimise));
+    generateSplit(prefs, cfg, () => layerFiles(useCanvasStore.getState().imports, prefs.optimise, useCanvasStore.getState().layerGroups));
 
   const handleGenerateGcodePerColor = (prefs: GcodePrefs, cfg: ReturnType<typeof activeConfig>) =>
     generateSplit(

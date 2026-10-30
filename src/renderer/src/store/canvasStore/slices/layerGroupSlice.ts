@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { parsePenProfile } from "../../../../../types/pens";
 import {
   vectorObjectsForGroup,
   vectorObjectsUngrouped,
@@ -28,6 +29,8 @@ export const createLayerGroupSlice: CanvasStateCreator<LayerGroupSlice> = (
       if (!group) return;
       if (patch.name !== undefined) group.name = patch.name;
       if (patch.color !== undefined) group.color = patch.color;
+      const profile = patch.penProfile ?? group.penProfile;
+      if (profile) group.penProfile = parsePenProfile({ ...profile, name: group.name, color: group.color });
     }),
 
   assignImportToGroup: (importId, groupId) =>

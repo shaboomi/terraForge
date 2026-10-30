@@ -19,12 +19,14 @@ export function fmtSeconds(n: number): string {
 }
 
 export interface TravelSubpath {
+  penProfile?: import("../../types/pens").PenProfile;
   points: Subpath;
   layer?: string;
   color?: string;
 }
 
 export interface TravelPoint {
+  penProfile?: import("../../types/pens").PenProfile;
   point: { x: number; y: number };
   layer?: string;
   color?: string;

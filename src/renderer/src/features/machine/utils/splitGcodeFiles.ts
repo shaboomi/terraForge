@@ -4,7 +4,7 @@
  * its own worker, then saved to a folder and/or uploaded to the SD card.
  */
 import { v4 as uuid } from "uuid";
-import type { GcodeOptions, MachineConfig, SvgImport, VectorObject } from "../../../../../types";
+import type { GcodeOptions, MachineConfig, SvgImport, VectorObject, LayerGroup } from "../../../../../types";
 import type { BackgroundTask } from "../../../../../types";
 import { normalizeSvgColor } from "../../imports/services/svgImportHelpers";
 import { vectorObjectsForImportLayer } from "../../../store/canvasStore/services/vectorObjects";
@@ -69,14 +69,14 @@ function safeFilenameBase(...parts: Array<string | undefined>): string {
 }
 
 /** One file per source SVG layer of each import, sorted by import then layer. */
-export function layerFiles(imports: SvgImport[], optimise: boolean): SplitFile[] {
+export function layerFiles(imports: SvgImport[], optimise: boolean, layerGroups: LayerGroup[] = []): SplitFile[] {
   return imports
     .flatMap((imp) => {
       const layerIds = new Set(imp.paths.map((path) => path.layer).filter((layer): layer is string => !!layer));
       return Array.from(layerIds).map((layerId) => ({
         importName: imp.name,
         layerName: imp.layers?.find((layer) => layer.id === layerId)?.name ?? layerId,
-        objects: vectorObjectsForImportLayer(imp, layerId),
+        objects: vectorObjectsForImportLayer(imp, layerId, layerGroups),
       }));
     })
     .filter((entry) => entry.objects.length > 0)

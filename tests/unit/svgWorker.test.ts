@@ -129,6 +129,34 @@ function makeConfig(
 
 // ── G-code header format ─────────────────────────────────────────────────────
 
+describe("calibrated pen output", () => {
+  const pen = { id: "pen", name: "Fine black", color: "#000000", type: "fineliner" as const, tipWidthMM: 0.5, maxDrawSpeedMMMin: 900 };
+  it("preserves distinct speed caps through optimisation and refuses to join pens", async () => {
+    dispatch({ type: "generate", taskId: "calibrated-feeds", config: makeConfig(),
+      objects: [createVectorObject({ path: "M10 10 L20 10", penProfile: pen }),
+        createVectorObject({ path: "M20 10 L30 10", penProfile: { ...pen, id: "slow", maxDrawSpeedMMMin: 300 } })],
+      options: createGcodeOptions({ optimisePaths: true, joinPaths: true }) });
+    const { gcode } = await waitForMsg("complete");
+    expect(gcode).toContain("F900"); expect(gcode).toContain("F300");
+    expect(gcode).toContain("; Joined   : no");
+    expect(gcode).toContain("2 subpaths");
+  });
+  it("uses calibrated brush Z and restores capped XY feed after lowering", async () => {
+    dispatch({ type: "generate", taskId: "calibrated-brush", config: makeConfig({ penType: "stepper", penUpCommand: "G0 Z5" }),
+      objects: [createVectorObject({ penProfile: { ...pen, type: "brush", tipWidthMM: 1, brush: { minWidthMM: 0.5, maxWidthMM: 1.5, minZ: 0, maxZ: -2 } } })],
+      options: createGcodeOptions() });
+    const { gcode } = await waitForMsg("complete");
+    expect(gcode).toContain("G1 Z-1.000 F120 ; Calibrated brush contact\nF900");
+  });
+  it("rejects malformed profiles before producing G-code", async () => {
+    dispatch({ type: "generate", taskId: "invalid-calibrated-pen", config: makeConfig(),
+      objects: [createVectorObject({ penProfile: { ...pen, maxDrawSpeedMMMin: -1 } })], options: createGcodeOptions() });
+    const { error } = await waitForMsg("error");
+    expect(error).toContain("Maximum drawing speed");
+    expect(postSpy.mock.calls.some(([message]) => message.type === "complete")).toBe(false);
+  });
+});
+
 describe("svgWorker — G-code header", () => {
   it("emits a complete message with G-code that contains the standard header", async () => {
     const taskId = "worker-header-test";

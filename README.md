@@ -13,6 +13,9 @@ Import SVG and PDF artwork, position it on the machine bed, generate optimised G
 - [User Guide](docs/terraForge-user-guide.md) — full feature walkthrough with screenshots
 - [Spec](docs/terraForge-spec.md) — architecture and IPC API reference
 - [Feature Status](docs/terraForge-features.md) — implemented / in-progress / planned
+- [Pen calibration](docs/pen-calibration.md) — test sheets in Settings → Pens
+- [Pen library](docs/pen-library.md) — reusable physical pens, measured speeds and brush heights
+- [Adaptation guide](docs/upstream-adaptation.md) — reference branch, latest-main workspace and remaining features
 
 ---
 

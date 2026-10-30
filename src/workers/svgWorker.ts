@@ -25,6 +25,7 @@ import type { GcodeGenerationStage, TravelSubpath } from "./generation/output";
 import { collectGeometry, remapLayerMetadata } from "./generation/collect";
 import { emitFooter, emitHeader, resolveGenerationSettings, type GenerationSettings } from "./generation/document";
 import { JobWriter } from "./generation/jobWriter";
+import { penFeedrate, validatePlotPen } from "./generation/penProfile";
 
 interface GenerateMessage {
   type: "generate";
@@ -169,6 +170,14 @@ async function generate(msg: GenerateMessage): Promise<void> {
   const lines: string[] = [];
   const postProgress = progressReporter(taskId);
   const settings = resolveGenerationSettings(config, options);
+  const visible = objects.filter(object => object.visible);
+  for (const object of visible) validatePlotPen(object.penProfile, config);
+  const profiles = visible.filter(object => object.penProfile);
+  if (profiles.length) settings.join = false;
+  if (profiles.length && options?.vinylCutting) throw new Error("Remove pen assignments before generating vinyl cutting output.");
+  if (visible.some(object => object.penProfile?.type === "brush") && settings.inkService)
+    throw new Error("Disable ink service before exporting calibrated brush heights.");
+  const serviceConfig = profiles.length ? { ...config, drawSpeed: profiles.reduce((speed, object) => penFeedrate(speed, object.penProfile), settings.drawSpeed) } : config;
   emitHeader(lines, config, options, settings);
 
   // ── Collect: flatten, clip and multi-pass every visible object (0–40%)
@@ -197,7 +206,7 @@ async function generate(msg: GenerateMessage): Promise<void> {
   if (points.length > 0) lines.push(`; -- Point taps (${points.length} points) ---------------------`);
   if (skippedObjects > 0) lines.push(`; NOTE: skipped ${skippedObjects} invalid path object(s)`);
 
-  const writer = new JobWriter(lines, config, settings);
+  const writer = new JobWriter(lines, serviceConfig, settings);
   const totalOperations = ordered.length + points.length;
   const hasPreEmitProcessing =
     settings.optimise || settings.join || !!options?.vinylCutting || !!options?.vinylWeedBorder;

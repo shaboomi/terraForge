@@ -17,10 +17,12 @@ import {
   resolvePreferredDipStation,
 } from "./inkService";
 import { emitTfMarker, fmtSeconds, metadataKey, type TravelPoint, type TravelSubpath } from "./output";
+import { brushZ, penFeedrate } from "./penProfile";
 
 type Point = { x: number; y: number };
 
 export class JobWriter {
+  private itemFeed = 0;
   private lastMarkerKey: string | null = null;
   private readonly canService: boolean;
   private readonly triggerBase: number;
@@ -54,13 +56,17 @@ export class JobWriter {
     this.service(dip);
   }
 
-  writeSubpath({ points, color, layer }: TravelSubpath): void {
+  writeSubpath({ points, color, layer, penProfile }: TravelSubpath): void {
+    this.itemFeed = penFeedrate(this.settings.drawSpeed, penProfile);
     const dip = this.beginItem(color, layer);
     const { lines, config, settings } = this;
     const first = points[0];
+    if (penProfile?.type === "brush") lines.push("G90 ; Absolute brush coordinates");
     lines.push(`G0 X${fmt(first.x)} Y${fmt(first.y)} ; Rapid travel`);
-    lines.push(`F${settings.drawSpeed}`);
-    lines.push(config.penDownCommand + " ; Pen down");
+    lines.push(`F${this.itemFeed}`);
+    const z = brushZ(penProfile);
+    lines.push(z === undefined ? config.penDownCommand + " ; Pen down" : `G90\nG1 Z${fmt(z)} F120 ; Calibrated brush contact\nF${this.itemFeed}`);
+    if (penProfile) lines.push(`F${this.itemFeed}`);
     if (settings.penDownDelayMs > 0) lines.push(`G4 P${fmtSeconds(settings.penDownDelayMs / 1000)} ; Pen settle delay`);
     let current = first;
     for (let s = 1; s < points.length; s++) current = this.drawTo(current, points[s], dip);
@@ -70,12 +76,16 @@ export class JobWriter {
   }
 
   writePointTap(tap: TravelPoint): void {
+    this.itemFeed = penFeedrate(this.settings.drawSpeed, tap.penProfile);
     this.beginItem(tap.color, tap.layer);
     const { lines, config, settings } = this;
     for (let rep = 0; rep < tap.repeats; rep++) {
+      if (tap.penProfile?.type === "brush") lines.push("G90 ; Absolute brush coordinates");
       lines.push(`G0 X${fmt(tap.point.x)} Y${fmt(tap.point.y)} ; Point rapid`);
-      lines.push(`F${settings.drawSpeed}`);
-      lines.push(config.penDownCommand + " ; Point tap");
+      lines.push(`F${this.itemFeed}`);
+      const z = brushZ(tap.penProfile);
+      lines.push(z === undefined ? config.penDownCommand + " ; Point tap" : `G90\nG1 Z${fmt(z)} F120 ; Calibrated brush contact\nF${this.itemFeed}`);
+      if (tap.penProfile) lines.push(`F${this.itemFeed}`);
       if (settings.penDownDelayMs > 0) lines.push(`G4 P${fmtSeconds(settings.penDownDelayMs / 1000)} ; Pen settle delay`);
       if (settings.penUpDelayMs > 0) lines.push(`G4 P${fmtSeconds(settings.penUpDelayMs / 1000)} ; Pen lift delay`);
       lines.push(config.penUpCommand + " ; Pen up");
@@ -121,7 +131,8 @@ export class JobWriter {
   private service(dip?: string): void {
     const ink = this.settings.inkService;
     if (!this.canService || !ink) return;
-    emitInkServiceMove(this.lines, this.config, ink, this.dipCursor, this.dipsSinceWash, this.currentDip, dip);
+    emitInkServiceMove(this.lines, { ...this.config, drawSpeed: this.itemFeed || this.settings.drawSpeed }, ink, this.dipCursor, this.dipsSinceWash, this.currentDip, dip);
+    if (this.itemFeed) this.lines.push(`F${this.itemFeed}`);
     // Restart the travel count whether or not a move was made, so drawing
     // always moves on rather than retrying at the same point forever.
     this.travelSinceService = 0;

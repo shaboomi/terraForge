@@ -9,6 +9,7 @@ import {
 } from "../services/hatching";
 import { refitImportToPaths } from "../services/importBounds";
 import { vectorObjectsForImports } from "../services/vectorObjects";
+import { parsePenProfile } from "../../../../../types/pens";
 import type { CanvasStateCreator, ImportSlice } from "../types";
 
 function withDefaultHatchSettings(imp: SvgImport): SvgImport {
@@ -132,6 +133,8 @@ export function createImportSlice(
     },
 
     loadLayout: (imports, layerGroups, pageTemplate) => {
+      const validatedGroups = layerGroups?.map(group => group.penProfile
+        ? { ...group, penProfile: parsePenProfile(group.penProfile) } : group);
       pushUndo();
       set((state) => {
         state.imports = imports.map(withDefaultHatchSettings);
@@ -139,7 +142,7 @@ export function createImportSlice(
         state.selectedPathId = null;
         state.allImportsSelected = false;
         state.selectedGroupId = null;
-        state.layerGroups = layerGroups ?? [];
+        state.layerGroups = validatedGroups ?? [];
         state.pageTemplate = pageTemplate ?? null;
       });
     },
@@ -149,7 +152,7 @@ export function createImportSlice(
       return imports.find((item) => item.id === selectedImportId);
     },
 
-    toVectorObjects: () => vectorObjectsForImports(get().imports),
+    toVectorObjects: () => vectorObjectsForImports(get().imports, get().layerGroups),
 
     applyHatch: (importId, spacingMM, angleDeg, enabled) =>
       set((state) => {

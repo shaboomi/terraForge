@@ -16,12 +16,13 @@ import {
 } from "./components";
 import { useMachineConfigDialogController } from "./hooks/useMachineConfigDialogController";
 import type { MachineConfigDialogController } from "./hooks/useMachineConfigDialogController";
+import { PenSettingsTab } from "./components/PenSettingsTab";
 
 interface Props {
   onClose: () => void;
 }
 
-type ConfigTab = "machines" | "application";
+type ConfigTab = "machines" | "application" | "pens";
 
 export function MachineConfigDialog({ onClose }: Props) {
   const [activeTab, setActiveTab] = useState<ConfigTab>("machines");
@@ -50,6 +51,7 @@ export function MachineConfigDialog({ onClose }: Props) {
                 tabs={[
                   { id: "machines", label: "Machines" },
                   { id: "application", label: "Application" },
+                  { id: "pens", label: "Pens" },
                 ]}
                 className="border-b-0"
               />
@@ -66,6 +68,8 @@ export function MachineConfigDialog({ onClose }: Props) {
 
           {activeTab === "machines" ? (
             <MachineConfigurationsTab controller={controller} />
+          ) : activeTab === "pens" ? (
+            <PenSettingsTab />
           ) : (
             <ApplicationConfigurationTab controller={controller} />
           )}

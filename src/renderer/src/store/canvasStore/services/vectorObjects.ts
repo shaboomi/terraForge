@@ -136,6 +136,7 @@ export function vectorObjectsForImport(imp: SvgImport): VectorObject[] {
 export function vectorObjectsForImportLayer(
   imp: SvgImport,
   layerId: string,
+  layerGroups: LayerGroup[] = [],
 ): VectorObject[] {
   if (!imp.visible) return [];
   const hiddenLayerIds = imp.layers
@@ -151,11 +152,20 @@ export function vectorObjectsForImportLayer(
         path.layer === layerId &&
         isLayerVisible(path, hiddenLayerIds),
     )
-    .flatMap((path) => projectPathToVectorObjects(imp, path));
+    .flatMap((path) => projectPathToVectorObjects(imp, path))
+    .map(object => {
+      const group = layerGroups.find(entry => entry.importIds.includes(imp.id));
+      return group?.penProfile ? { ...object, penProfile: group.penProfile, sourceColor: group.color, colorName: group.name } : object;
+    });
 }
 
-export function vectorObjectsForImports(imports: SvgImport[]): VectorObject[] {
-  return imports.flatMap((imp) => vectorObjectsForImport(imp));
+export function vectorObjectsForImports(imports: SvgImport[], layerGroups: LayerGroup[] = []): VectorObject[] {
+  return imports.flatMap((imp) => {
+    const group = layerGroups.find(entry => entry.importIds.includes(imp.id));
+    return vectorObjectsForImport(imp).map(object => group?.penProfile
+      ? { ...object, penProfile: group.penProfile, sourceColor: group.color, colorName: group.name }
+      : object);
+  });
 }
 
 export function vectorObjectsForGroup(
@@ -168,7 +178,7 @@ export function vectorObjectsForGroup(
   const groupImportIds = new Set(group.importIds);
   return imports
     .filter((imp) => groupImportIds.has(imp.id))
-    .flatMap((imp) => vectorObjectsForImport(imp));
+    .flatMap((imp) => vectorObjectsForImports([imp], [group]));
 }
 
 export function vectorObjectsUngrouped(
